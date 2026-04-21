@@ -1,0 +1,9 @@
+title: ''
+bibliography:
+  - '`r system.file("extdata", "library.bib", package = "union.publish")`'
+  - library.bib
+csl: '`r system.file("extdata", "nature.csl", package = "union.publish")`'
+reference-section-title: "Reference"
+output:
+  custom_docx_document2:
+    reference_docx: '`r system.file("extdata", "complex.docx", package = "union.publish")`'
