@@ -18,9 +18,19 @@
     analysis = "Super-PRED 药物靶点预测"
     ))
 
-job_superpred <- function(smiles)
+setClassUnion("job_PRED", c("job_superpred", "job_swiss"))
+
+job_superpred <- function(smiles, ref = NULL)
 {
-  .job_superpred(object = smiles)
+  x <- .job_superpred(object = smiles)
+  x <- methodAdd(x, "基于 SuperPred (<https://prediction.charite.de/>) 平台进一步预测化合物的潜在靶点及药物功能类别。该平台结合机器学习模型、化学指纹特征及已知药物数据库信息，对化合物可能作用的蛋白靶点及 ATC 分类进行综合预测，可用于补充验证候选靶点并评估其潜在药理学属性")
+  if (!is.null(ref)) {
+    if (is.null(names(smiles))) {
+      stop('is.null(names(smiles)), but ref is not NULL')
+    }
+    x$.feature_compound <- as_feature(names(smiles), ref, nature = "compound")
+  }
+  return(x)
 }
 
 setMethod("step0", signature = c(x = "job_superpred"),
@@ -91,14 +101,60 @@ setMethod("step1", signature = c(x = "job_superpred"),
       end_drive()
     }
     targets <- dplyr::filter(as_tibble(db@db), .id %in% object(x))
-    symbols <- e(UniProt.ws::mapUniProt(
-        from = "UniProtKB_AC-ID", to = "Gene_Name",
-        columns = c("accession", "id"),
-        query = list(ids = unique(targets[[ 'UniProt ID' ]]))
-        ))
+    fun_uniport <- function(ids) {
+      e(UniProt.ws::mapUniProt(
+          from = "UniProtKB_AC-ID", to = "Gene_Name",
+          columns = c("accession", "id"),
+          query = list(ids = ids)
+          ))
+    }
+    symbols <- expect_local_data(
+      "tmp", "UniProtWs", fun_uniport, list(ids = unique(targets[[ 'UniProt ID' ]]))
+    )
     targets <- map(targets, "UniProt ID", symbols, "From", "To", col = "symbols")
-    targets <- .set_lab(targets, sig(x), "targets predicted by Super-Pred")
-    x@tables[[ 1 ]] <- namel(targets)
+    if (!is.null(names(object(x)))) {
+      targets <- dplyr::mutate(
+        targets, Name = dplyr::recode(
+          .id, !!!setNames(names(object(x)), as.character(object(x)))
+          ), .before = 1
+      )
+    }
+    targets <- dplyr::mutate(
+      targets, Probability_ = as.double(strx(Probability, "[0-9.]+")) / 100
+    )
+    targets <- set_lab_legend(
+      targets,
+      glue::glue("{x@sig} targets predicted by Super-Pred"),
+      glue::glue("Super-Pred 预测的化合物靶点。")
+    )
+    x <- tablesAdd(x, targets = targets)
+    colnames(targets) <- formal_name(colnames(targets))
+    x$data_target <- targets
+    return(x)
+  })
+
+setMethod("step2", signature = c(x = "job_superpred"),
+  function(x, cut.p = .5)
+  {
+    step_message("Filter data")
+    if (is.null(names(object(x))) || is.null(x$data_target$Name)) {
+      stop('names(object(x)) || is.null(x$data_target$Name).')
+    }
+    fea <- feature(x, "compound")
+    data <- x$data_target
+    x$.feature_all <- as_feature(
+      lapply(split(data$symbols, data$Name), unique),
+      "以 Super-PRED 预测的活性成分的靶点"
+    )
+    data <- dplyr::filter(data, Probability_ > cut.p)
+    x$data_filter <- data
+    x$.feature_target <- as_feature(
+      split(data$symbols, data$Name), "以 Super-PRED 预测的活性成分的靶点"
+    )
+    targets <- unique(data$symbols)
+    x <- snapAdd(
+      x, "本研究中，以 Super-PRED 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p * 100}%。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
+    )
     return(x)
   })
 

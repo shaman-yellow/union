@@ -209,7 +209,7 @@ setMethod("step2", signature = c(x = "job_cellchat"),
     t.lr_comm_bubble <- .get_ggplot_content(lr_comm_bubble)
     t.lr_comm_bubble <- set_lab_legend(
       tibble::as_tibble(t.lr_comm_bubble),
-      glue::glue("{x@sig} ligand receptor interactions bubble plot"),
+      glue::glue("{x@sig} data within ligand receptor interactions bubble plot"),
       glue::glue("配体-受体相互作用气泡图。")
     )
     x <- tablesAdd(x, t.lr_comm_bubble)

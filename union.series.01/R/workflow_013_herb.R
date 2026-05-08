@@ -495,6 +495,13 @@ new_link <- function(port = 4444L, browser = c("firefox", "chrome"), addr = "loc
         )
       )
     }
+    prof <- c(
+      prof,
+      list(
+        'acceptInsecureCerts' = TRUE,
+        'acceptUntrustedCerts' = TRUE
+      )
+    )
     link <- RSelenium::remoteDriver(
       remoteServerAddr = addr, port = port,
       browserName = browser,

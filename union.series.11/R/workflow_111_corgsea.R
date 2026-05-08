@@ -125,10 +125,12 @@ setMethod("step1", signature = c(x = "job_corgsea"),
     if (length(all.gsea) < 6) {
       snaps <- vapply(table_gsea, FUN.VALUE = character(1),
         function(data) {
-          .stat_table_by_pvalue(data, n = 10, use.p = "p.adjust")
+          .stat_table_by_pvalue(
+            data, n = 10, use.p = "p.adjust", enumeration = FALSE
+          )
         })
-      snaps <- glue::glue("基因 {names(table_gsea)} 相关富集一共富集到 {snaps}")
-      x <- snapAdd(x, "{bind(snaps, co = '\n\n')}")
+      snaps <- glue::glue("{names(table_gsea)} 富集到 {snaps}")
+      x <- snapAdd(x, "基因 {bind(snaps, co = '')}")
     }
     res.gsea <- lapply(all.gsea, function(x) x$res.gsea)
     x <- methodAdd(x, "使用 {mode} 数据集, 以 R 包 `clusterProfiler` ⟦pkgInfo('clusterProfiler')⟧ 对基因列表富集分析。富集设定阈值 ⟦mark$blue('adjust P value (FDR) &lt; {cutoff}，|NES| &gt; {cutoff.nes}')⟧。")
@@ -143,15 +145,6 @@ setMethod("step1", signature = c(x = "job_corgsea"),
 setMethod("step2", signature = c(x = "job_corgsea"),
   function(x, top = 10, intersect = TRUE){
     step_message("Select and Visualization")
-    ins <- lapply(x@tables$step1$table_gsea,
-      function(data) {
-        head(data$ID, n = top)
-      })
-    ins <- ins(lst = ins)
-    if (!length(ins)) {
-      stop('!length(ins), no intersect found.')
-    }
-    insName <- dplyr::filter(x@tables$step1$table_gsea[[1]], ID %in% !!ins)$Description
     x$.feature <- list()
     p.codes <- sapply(names(x$res.gsea), simplify = FALSE, 
       function(name) {
@@ -167,8 +160,16 @@ setMethod("step2", signature = c(x = "job_corgsea"),
       })
     alls <- names(x$res.gsea)
     x <- snapAdd(x, "选取 {bind(alls)} 的 Top {top} 富集通路{aref(p.codes)}。")
-    x <- snapAdd(x, "对 {bind(alls)} 的 Top {top} 通路取交集，得到 {length(ins)} 个通路：{bind(insName)}。")
     x <- plotsAdd(x, p.codes)
+    ins <- lapply(x@tables$step1$table_gsea,
+      function(data) {
+        head(data$ID, n = top)
+      })
+    ins <- ins(lst = ins)
+    if (length(ins)) {
+      insName <- dplyr::filter(x@tables$step1$table_gsea[[1]], ID %in% !!ins)$Description
+      x <- snapAdd(x, "对 {bind(alls)} 的 Top {top} 通路取交集，得到 {length(ins)} 个通路：{bind(insName)}。")
+    }
     return(x)
   })
 
@@ -248,24 +249,4 @@ setMethod("vis", signature = c(x = "job_gseaSet"),
     p.code
   })
 
-
-.set_msig_db <- function(x, mode, sub = NULL) {
-  if (packageVersion("msigdbr") < "10.0.0") {
-    db_anno <- e(msigdbr::msigdbr(species = "Homo sapiens", category = mode))
-  } else {
-    db_anno <- e(msigdbr::msigdbr(species = "Homo sapiens", collection = mode))
-  }
-  x <- methodAdd(
-    x, "以 R 包 `msigdbr` ⟦pkgInfo('msigdbr')⟧ 获取 MSigDB 数据库 {mode} 基因集。"
-  )
-  if (!is.null(sub)) {
-    select <- c("CP:REACTOME", "CP:KEGG", "CP:WIKIPATHWAYS")
-    db_anno <- dplyr::filter(db_anno, gs_subcat %in% !!select)
-    x <- methodAdd(x, "该基因集包含多个子集：{try_snap(db_anno, 'gs_subcat', 'gs_name')}。")
-    x <- methodAdd(x, "选取 {bind(select)} 子集用于后续分析。")
-  }
-  x$db_anno <- db_anno
-  x$msig_db <- dplyr::select(db_anno, gs_id, symbol = gene_symbol)
-  return(x)
-}
 

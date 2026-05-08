@@ -24,10 +24,23 @@ setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
       stop('!requireNamespace("monocle").')
     }
     metadata <- object(x)@meta.data
-    object(x) <- e(Seurat::FindVariableFeatures(
-      object(x), nfeatures = nfeatures
-    ))
-    VariableFeatures <- e(Seurat::VariableFeatures(object(x)))
+    if (SeuratObject::DefaultAssay(object(x)) == "SCT") {
+      message(
+        glue::glue(
+          "Default Assay is SCT, to found variables, use data in assay 'RNA'"
+        )
+      )
+      object <- object(x)
+      SeuratObject::DefaultAssay(object) <- "RNA"
+      object <- e(Seurat::NormalizeData(object))
+      object <- e(Seurat::FindVariableFeatures(object))
+      VariableFeatures <- e(Seurat::VariableFeatures(object))
+    } else {
+      object(x) <- e(Seurat::FindVariableFeatures(
+        object(x), nfeatures = nfeatures
+      ))
+      VariableFeatures <- e(Seurat::VariableFeatures(object(x)))
+    }
     if (!length(VariableFeatures)) {
       stop('!length(VariableFeatures).')
     }
@@ -153,6 +166,7 @@ setMethod("step3", signature = c(x = "job_monocle2"),
           p + guides(color = guide_legend(nrow = 2))
         } else p
       })
+    message(glue::glue("Finished plot cell trajectory."))
     p.traj <- smart_wrap(lst, 5, max_ratio = 2)
     snaps <- c(
       Pseudotime = "细胞发育时间的细胞轨迹图，不同颜色代表分化的早晚；",
@@ -160,8 +174,9 @@ setMethod("step3", signature = c(x = "job_monocle2"),
       cell = "不同细胞类型的细胞轨迹图，不同颜色代表细胞属于不同细胞类型；",
       group = "不同分组的细胞轨迹图，不同颜色代表细胞属于不同样本分组。"
     )
+    snaps <- snaps[ seq_along(use) ]
     snaps <- setNames(
-      snaps, c("Pseudotime", "State", x$group.by, "group")
+      snaps, c("Pseudotime", "State", x$group.by, extra)
     )
     snaps <- bind(snaps[match(use, names(snaps))], co = "")
     p.traj <- set_lab_legend(
@@ -182,7 +197,6 @@ setMethod("step4", signature = c(x = "job_monocle2"),
   {
     step_message("Plot genes in pseudotime.")
     set.seed(x$seed)
-    require(monocle)
     if (!is(ref, "feature")) {
       stop('!is(ref, "feature").')
     }
@@ -218,14 +232,19 @@ setMethod("step4", signature = c(x = "job_monocle2"),
     }
     object <- object(x)[regenes, ]
     cli::cli_alert_info("monocle::plot_genes_in_pseudotime")
+    plot_pseudotime <- function(object, color_by, ...) {
+      suppressMessages(require(monocle))
+      monocle::plot_genes_in_pseudotime(object, color_by = color_by, ...)
+    }
     p.geneInPseudo <- pbapply::pbsapply(use,
       function(type) {
-        p <- monocle::plot_genes_in_pseudotime(object, color_by = type, ...)
+        args <- list(object = object, color_by = type, ...)
+        p <- callr::r(plot_pseudotime, args, libpath = .libPaths(), show = TRUE)
         if (!is.null(recode)) {
           p <- .set_ggplot_content(p, fun_recode)
           p <- .set_ggplot_content(p, fun_recode_layer, "layers")
         }
-        wrap(p, 5, 2 * length(regenes))
+        wrap(p, 5, 1.5 * length(regenes))
       }, simplify = FALSE)
     p.geneInPseudo <- set_lab_legend(
       p.geneInPseudo,
@@ -241,24 +260,38 @@ setMethod("step5", signature = c(x = "job_monocle2"),
   function(x, maxShow = 50, workers = 1, rerun = FALSE)
   {
     step_message("differentialGeneTest (Pseudotime)")
-    fun_test <- function(...) {
-      genes <- x$VariableFeatures
+    run_diff <- function(cds, cores) {
+      require(monocle)
       require(VGAM)
-      e(monocle::differentialGeneTest(cds = object(x)[genes, ], cores = workers))
+      monocle::differentialGeneTest(cds = cds, cores = cores)
+    }
+    fun_cache <- function(...) {
+      genes <- x$VariableFeatures
+      callr::r(
+        run_diff, list(cds = object(x)[genes, ], cores = workers),
+        libpath = .libPaths(), show = FALSE
+      )
     }
     args <- x$.args[ names(x$.args) %in% paste0("step", 1:4) ]
     diff_test_pseudotime <- expect_local_data(
-      "tmp", "monocle_diff", fun_test, list(args), rerun = rerun
+      "tmp", "monocle_diff", fun_cache, list(args), rerun = rerun
     )
     x <- methodAdd(x, "以 `monocle::differentialGeneTest` 根据 Pseudotime 鉴定高变基因中 (n = {length(x$VariableFeatures)}) 随拟时间动态变化且相关的基因。")
     diff_test_pseudotime <- tibble::as_tibble(diff_test_pseudotime)
     x$diff_test_pseudotime <- diff_test_pseudotime <- dplyr::arrange(diff_test_pseudotime, qval)
     data <- dplyr::filter(diff_test_pseudotime, qval < .05)
     genes <- head(data$gene_short_name, n = maxShow)
-    p.hp <- e(monocle::plot_pseudotime_heatmap(
-      object(x)[genes, ], num_clusters = 4,
-      show_rownames = TRUE, return_heatmap = TRUE
-    ))
+    fun_heatmap <- function(cds) {
+      require(monocle)
+      monocle::plot_pseudotime_heatmap(
+        cds, num_clusters = 4,
+        show_rownames = TRUE, return_heatmap = TRUE
+      )
+    }
+    p.hp <- callr::r(
+      fun_heatmap, list(cds = object(x)[genes, ]),
+      libpath = .libPaths(), show = TRUE
+    )
     p.hp <- set_lab_legend(
       wrap(p.hp$gtable, 5, 8),
       glue::glue("{x@sig} pseudotime significant genes in heatmap"),

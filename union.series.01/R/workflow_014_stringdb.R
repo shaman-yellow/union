@@ -67,6 +67,7 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     filter.exp = 0, filter.text = 0, MCC = TRUE)
   {
     step_message("Create PPI network.")
+    require(ggraph)
     x$network_type <- network_type <- match.arg(network_type, c("physical", "full"))
     if (!dir.exists(input_directory)) {
       dir.create(input_directory)

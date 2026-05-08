@@ -3,8 +3,9 @@
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 detail <- function(label) {
-  switch(
+  res <- switch(
     label,
+    P.Value = "P value",
     p.value = "P value",
     pvalue = "P value",
     padj = "Adjust P value",
@@ -16,6 +17,10 @@ detail <- function(label) {
     note_roc = "纵轴为灵敏度，横轴为特异度，虚线为基准线（最低标准），曲线为对应指标的 ROC 曲线。其中 ROC 曲线距离基准线越远，则说明该模型的预测效果越好。ROC 曲线接近左上角，说明模型预测准确率很高。",
     fp.test = "Fligner-Policello 检验"
   )
+  if (is.null(res)) {
+    rlang::abort('is.null(res), `detail` error, no type of "{label}".')
+  }
+  return(res)
 }
 
 .get_des <- function(ref) {

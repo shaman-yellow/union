@@ -240,10 +240,12 @@ setMethod("step5", signature = c(x = "job_regNet"),
     graph <- igraph::graph_from_data_frame(
       edges, directed = TRUE, vertices = nodes
     )
+    set.seed(x$seed)
     layout <- ggraph::create_layout(graph, layout = layout)
+    require(ggraph)
     p.regNet <- ggraph(layout) + 
-      geom_edge_fan(
-        edge_width = .5, color = "black", show.legend = FALSE,
+      geom_edge_link(
+        edge_width = .5, color = "grey80", show.legend = FALSE,
         end_cap = ggraph::circle(7, 'mm'),
         arrow = arrow(length = unit(1, 'mm'))) + 
       geom_node_point(aes(color = type, size = type, shape = type)) + 
@@ -269,6 +271,62 @@ setMethod("step5", signature = c(x = "job_regNet"),
     return(x)
   })
 
+setMethod("step6", signature = c(x = "job_regNet"),
+  function(x, trrust = TRUE, layout = "fr")
+  {
+    targets <- object(x)
+    if (trrust) {
+      trrust <- ftibble(get_url_data(
+          "trrust_rawdata.human.tsv",
+          "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv",
+          "trrust", fun_decompress = NULL
+          ))
+      trrust <- dplyr::rename(
+        trrust, TF = V1, Target = V2, Regulation = V3, PMID = V4
+      )
+      trrust <- dplyr::filter(trrust, Target %in% !!targets)
+      which_not_in_data(trrust, "Target", targets)
+      x$all_tf$trrust <- trrust
+      x <- methodAdd(x, "基于 TRRUST 数据库获取转录因子（TF）与靶基因之间的调控关系，用于构建转录调控网络并筛选关键调控因子。TRRUST 收录了经文献证据支持的人类和小鼠转录调控关系，包含转录因子、靶基因及其激活或抑制作用等信息。通过将基因映射至该数据库，可识别其上游调控转录因子，并进一步构建 TF–target 调控网络，挖掘核心转录因子及潜在调控轴，为解析基因表达调控机制提供依据。")
+    }
+    data <- .merge_list_by_cols(x$all_tf, by = c("TF", "Target"))
+    nodes <- list(
+      TF = data$TF, mRNA = data$Target
+    )
+    nodes <- as_df.lst(lapply(nodes, unique), "type", "name")[, 2:1]
+    graph <- igraph::graph_from_data_frame(
+      data, directed = TRUE, vertices = nodes
+    )
+    set.seed(x$seed)
+    require(ggraph)
+    layout <- ggraph::create_layout(graph, layout = layout)
+    p.regTF <- ggraph(layout) +
+      geom_edge_link(
+        edge_width = .5, color = "grey80", show.legend = FALSE,
+        end_cap = ggraph::circle(7, 'mm'),
+        arrow = arrow(length = unit(1, 'mm'))) + 
+      geom_node_point(aes(color = type, size = type, shape = type)) + 
+      ggrepel::geom_label_repel(aes(x = x, y = y, label = name), size = 3) +
+      guides(
+        size = "none", shape = "none",
+        color = guide_legend(override.aes = list(size = 4))
+      ) +
+      scale_size_manual(values = c(mRNA = 10, TF = 6)) +
+      scale_shape_manual(
+        values = c(mRNA = 16, TF = 17)
+      ) +
+      labs(color = "Type") +
+      theme_void()
+    p.regTF <- set_lab_legend(
+      p.regTF,
+      glue::glue("{x@sig} TF regulation networking"),
+      glue::glue("TF-mRNA 表达调控网络分析|||图中的节点表示对应 mRNA 或 TF，边代表相互作用。")
+    )
+    x <- snapAdd(x, "以 TF、mRNA 构建 TF-mRNA 表达调控网络{aref(p.regTF)}，如图所示，共 {nrow(nodes)} 个节点，{nrow(data)} 个边。")
+    x <- plotsAdd(x, p.regTF)
+    return(x)
+  })
+
 .merge_list_by_cols <- function(sets, by, keep = seq_along(by)) {
   if (length(sets) > 1) {
     ins <- sets[[1]][, keep]
@@ -276,7 +334,7 @@ setMethod("step5", signature = c(x = "job_regNet"),
       ins <- merge(ins, sets[[ i ]][, keep], by = by)
     }
   } else {
-    ins <- sets
+    ins <- sets[[1]][, keep]
   }
   ins
 }
@@ -330,7 +388,8 @@ get_url_data <- function(expect_filename, url,
   normalizePath(expect_file)
 }
 
-which_not_in_data <- function(data, col, items, prefix = NULL) {
+which_not_in_data <- function(data, col, items, prefix = NULL, stop = FALSE)
+{
   name <- rlang::expr_text(substitute(data))
   whichNot <- !items %in% data[[ col ]]
   if (any(whichNot)) {
@@ -338,6 +397,9 @@ which_not_in_data <- function(data, col, items, prefix = NULL) {
       message(glue::glue("{prefix} {name} not got: {bind(items[ whichNot ])}"))
     } else {
       message(glue::glue("{name} not got: {bind(items[ whichNot ])}"))
+    }
+    if (stop) {
+      stop("See above.")
     }
   }
   return(whichNot)

@@ -17,40 +17,25 @@ setGeneric("asjob_aucell",
    function(x, ...) standardGeneric("asjob_aucell"))
 
 setMethod("asjob_aucell", signature = c(x = "job_seurat"),
-  function(x, sets = "H", pattern = NULL, name = pattern, gather = TRUE,
-    assay = SeuratObject::DefaultAssay(object(x)), ...)
+  function(x, sets, name = names(sets)[1], join = TRUE,
+    sets_feature = NULL, assay = SeuratObject::DefaultAssay(object(x)), ...)
   {
     mtx <- Seurat::GetAssayData(object(x), assay = assay, layer = "data")
     if (is.null(mtx) || is.null(rownames(mtx))) {
       stop('is.null(mtx) || is.null(rownames(mtx)).')
     }
-    if (!is(sets, "feature") && is.character(sets) && length(sets) == 1) {
-      j <- .set_msig_db(.job(), sets)
-      mode <- sets
-      sets <- as_feature(
-        lapply(split(j$db_anno$gene_symbol, j$db_anno$gs_name), unique),
-        glue::glue("MSigDB {mode} 基因集")
-      )
-      methodAdd_onExit("x", meth(j)$step0)
-      if (!is.null(pattern)) {
-        sets <- sets[ grp(names(sets), pattern, TRUE) ]
-        methodAdd_onExit("x", "在 {mode} 基因集中获取与 {pattern} 相关的基因。")
-        if (gather) {
-          genes <- unique(resolve_feature(sets))
-          sets <- as_feature(setNames(list(genes), name), glue::glue("{name} 相关基因集"))
-          methodAdd_onExit("x", "对其去重、合并，作为 {name} 基因集用于 AUCell 评分分析。{name} 相关基因集共包含 {length(genes)} 个基因。")
-        } else {
-          methodAdd_onExit("x", "将 {name} 基因集用于 AUCell 评分分析。该基因集共包含 {length(sets)} 个子集，各子集包含基因统计为：{try_snap(sets)}。")
-          snap(sets) <- glue::glue("{name} 相关基因集")
-        }
-      }
-    } else {
-      methodAdd_onExit("x", "使用{snap(sets)}作为 AUCell 输入。")
-    }
     if (!is(sets, "feature")) {
       stop('!is(sets, "feature").')
     }
+    if (missing(name)) {
+      message(glue::glue("Missing `name`, will use: {name}"))
+    }
+    snap <- stat_features(sets, name, join, "sets")
+    methodAdd_onExit("x", "{snap}以该基因集作为 AUCell 输入。")
     pr <- params(x)
+    if (is.null(pr$metadata)) {
+      stop('is.null(pr$metadata).')
+    }
     x <- job_aucell(mtx, sets, ...)
     x@params <- append(x@params, pr)
     x$.feature_genesSets <- sets
@@ -123,13 +108,15 @@ setMethod("step1", signature = c(x = "job_aucell"),
           metadata[, group.by, drop = FALSE],
           as.data.frame(auc)
         )
-        require(data.table)
+        # dplyr::summarise(
+        #   dplyr::group_by(data, !!sym(group.by)),
+        #   dplyr::across(dplyr::where(is.numeric), mean),
+        #   .groups = "drop"
+        # )
         data <- as.data.table(data)
-        data <- data[ ,
-          lapply(.SD, mean),
-          by = group.by,
-          .SDcols = setdiff(names(data), group.by)
-          ]
+        data <- data.table:::`[.data.table`(
+          data, , lapply(.SD, mean), by = group.by, .SDcols = setdiff(names(data), group.by)
+        )
         tibble::as_tibble(data)
       }
       data <- expect_local_data(
@@ -199,7 +186,7 @@ setMethod("quantile", signature = c(x = "job_aucell"),
         lapply(celltypes, as.character), snap, nature = "cell"
       )
     } else if (gather == "merge") {
-      snap <- glue::glue("{name} 各基因集的平均 AUCell 活性为 Top {(1 - cut) * 100}% 合并后的细胞类型")
+      snap <- glue::glue("{name} 基因集的平均 AUCell 活性为 Top {(1 - cut) * 100}% 合并后的细胞类型")
       celltypes <- unique(as.character(unlist(celltypes)))
       as_feature(setNames(list(celltypes), name), snap, nature = "cell")
     }
@@ -210,7 +197,6 @@ setMethod("step2", signature = c(x = "job_aucell"),
   {
     step_message("Annotate for clusters.")
     auc <- .get_auc_from_job_aucell(x)
-    require(data.table)
     dt <- as.data.table(auc)
     dt$cluster <- x$metadata[[ group.by ]]
     if (is.null(dt$cluster)) {

@@ -149,12 +149,15 @@ setMethod("refine", signature = c(x = "job_seurat"),
     raw <- meta <- object(x)@meta.data
     meta$purity <- meta$tmp_pos1 - meta$tmp_neg1
     meta <- data.table::as.data.table(meta)
-    stat <- meta[ , .(
-      tmp_pos1 = mean(tmp_pos1, na.rm = TRUE),
-      tmp_neg1 = mean(tmp_neg1, na.rm = TRUE),
-      purity = mean(purity, na.rm = TRUE),
-      n_cells = .N), by = group.by
-      ]
+    stat <- data.table:::`[.data.table`(
+      meta, , list(
+        tmp_pos1 = mean(tmp_pos1, na.rm = TRUE),
+        tmp_neg1 = mean(tmp_neg1, na.rm = TRUE),
+        purity   = mean(purity, na.rm = TRUE),
+        n_cells  = .N
+        ),
+      by = group.by
+    )
     stat <- tibble::as_tibble(stat)
     cells <- split(rownames(raw), raw[[ group.by ]])
     stat$cells <- lapply(stat[[ group.by ]],

@@ -238,9 +238,11 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
       x <- callNextMethod(
         x, dims, resolution, reduction = use, ...
       )
-      x <- methodAdd(x, "结果显示{aref(x@plots$step2$p.pca_rank)}，前 {max(dims)} 个 PCs 以后方差增量减缓逐渐趋于稳定，选择前 {max(dims)} 个 PCs 进行后续聚类分析。")
       x <- methodAdd(
-        x, "以 `Seurat::IntegrateLayers` 集成数据，去除批次效应 (使用 {use} 方法)。", add = FALSE
+        x, "结果显示{aref(x@plots$step2$p.pca_rank)}，前 {max(dims)} 个 PCs 以后方差增量减缓逐渐趋于稳定，选择前 {max(dims)} 个 PCs 进行后续聚类分析。", add = FALSE
+      )
+      x <- methodAdd(
+        x, "以 `Seurat::IntegrateLayers` 集成数据，去除批次效应 (使用 {use} 方法)。"
       )
     }
     p.umapInt <-  e(Seurat::DimPlot(object(x),

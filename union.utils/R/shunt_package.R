@@ -46,7 +46,7 @@ new_package <- function(path, imports = NULL, depends = NULL, extdata = NULL,
   }
   cat("Now:", getwd(), "\n")
   if (!is.null(depends)) {
-    lapply(depends, usethis::use_package, type = "depends")
+    lapply(depends, usethis::use_package, type = "Depends")
   }
   if (!is.null(imports)) {
     lapply(imports, usethis::use_package)

@@ -14,4 +14,4 @@
   --save_dir graphBan_res_bindingdb.csv \
   --test_path graphBan_input.csv
 
-gzip graphBan_res_*
+gzip graphBan_res_*.csv

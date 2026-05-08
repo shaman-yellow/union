@@ -211,7 +211,7 @@ setMethod("step3", signature = c(x = "job_scissor"),
     )
     snap_p <- if (x$res_test$p < .05) "结果显著 (⟦mark$blue('p < 0.05')⟧)，表明表型与单细胞亚群的关联是可靠的" else ""
     x <- snapAdd(
-      x, "以 `Scissor:reliability.test` 对所选 α 对应的细胞选择数进行显著性检验，设置 nfold (number of cross-validation fold) 为 {nfold}，n (Permutation times) 为 {n}。显著性统计结果，Test statistic = {fmt(x$res_test$statistic)}, p = {fmt(x$res_test$p)} {snap_p}。"
+      x, "以 `Scissor::reliability.test` 对所选 α 对应的细胞选择数进行显著性检验，设置 nfold (number of cross-validation fold) 为 {nfold}，n (Permutation times) 为 {n}。显著性统计结果，Test statistic = {fmt(x$res_test$statistic)}, p = {fmt(x$res_test$p)} {snap_p}。"
     )
     return(x)
   })

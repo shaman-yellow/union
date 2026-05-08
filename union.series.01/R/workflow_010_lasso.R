@@ -350,12 +350,15 @@ plot_roc <- function(roc, from = .05, to = .2, x = .5, cols = ggsci::pal_npg()(9
       )
       roc <- sort_by(roc, names(roc))
     }
+    .round <- function(x) {
+      sprintf("%.3f", floor(x * 1000) / 1000)
+    }
     expr <- expression({
       lapply(seq_along(roc), 
         function(n) {
           plot(roc[[n]], col = cols[n], add = n > 1)
           graphics::text(
-            x, pos[n], paste0(names(roc)[n], " AUC: ", signif(roc[[n]]$auc[[1]], 2)),
+            x, pos[n], paste0(names(roc)[n], " AUC: ", .round(roc[[n]]$auc[[1]])),
             cex = .9, col = cols[n], adj = c(0, 0)
           )
         })
@@ -363,7 +366,7 @@ plot_roc <- function(roc, from = .05, to = .2, x = .5, cols = ggsci::pal_npg()(9
   } else {
     expr <- expression({
       plot(roc)
-      text(.1, .1, paste0("AUC: ", round(roc$auc[[1]], 2)), cex = .9)
+      text(.1, .1, paste0("AUC: ", .round(roc$auc[[1]])), cex = .9)
     })
   }
   wrap(as_grob(expr, environment()), 8, 6)

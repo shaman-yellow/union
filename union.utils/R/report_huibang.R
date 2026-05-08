@@ -9,7 +9,7 @@ create_remote_project.hb <- function(project = guess_project(), ws = getRemoteWs
   cdRun("ssh ", remote, " '", cmd, "'")
 }
 
-setup.sshfs <- function(sync = TRUE, project = guess_project(), ws = getRemoteWs(), 
+setup.sshfs <- function(sync = FALSE, project = guess_project(), ws = getRemoteWs(), 
   remote = "remote", path = "remote", mirror = "scripts_mirror")
 {
   if (!dir.exists(mirror)) {
@@ -18,12 +18,15 @@ setup.sshfs <- function(sync = TRUE, project = guess_project(), ws = getRemoteWs
   if (!dir.exists(path)) {
    stop('!dir.exists("path").')
   }
-  file_sync <- file.path(.expath, "scripts", "sync.sh")
-  cmd <- glue::glue("sh -c 'nohup bash {file_sync} {mirror} {remote}:{ws}/{project} > sync.log 2>&1 &'")
   if (sync) {
+    file_sync <- file.path(.expath, "scripts", "sync.sh")
+    cmd <- glue::glue("sh -c 'nohup bash {file_sync} {mirror} {remote}:{ws}/{project} > sync.log 2>&1 &'")
     system(cmd, wait = FALSE)
   }
   # system2("bash", c("-c", cmd), wait = FALSE)
+  if (!is_sshfs_mount(glue::glue("../{path}"))) {
+    cdRun(glue::glue("nohup sshfs {remote}:{ws} ../{path} >/dev/null 2>&1 &"))
+  }
   if (is_sshfs_mount(path)) {
     return(message("The directory has been mount."))
   }
@@ -31,7 +34,6 @@ setup.sshfs <- function(sync = TRUE, project = guess_project(), ws = getRemoteWs
     stop('length(list.files(path, all.files = TRUE, include.dirs = TRUE)).')
   }
   # umount remote
-  # cdRun(glue::glue("nohup sshfs {remote}:{ws} ../{path} >/dev/null 2>&1 &"))
   cdRun(glue::glue("nohup sshfs {remote}:{ws}/{project} {path} >/dev/null 2>&1 &"))
   repeat {
     Sys.sleep(1)
@@ -365,6 +367,15 @@ push_overture_as_output.hb <- function(pull = FALSE, push = FALSE,
     })
 }
 
+push_mirror_to_remote.hb <- function(dir_scripts = "scripts_mirror", path = "remote")
+{
+  if (!is_sshfs_mount(path)) {
+    stop('!is_sshfs_mount(path).')
+  }
+  files <- list.files(dir_scripts, full.names = TRUE)
+  file.copy(files, path, TRUE)
+}
+
 push_checkout_after_output.hb <- function(test = TRUE, 
   path = "scripts_mirror", dir_check = "scripts_checkout")
 {
@@ -377,6 +388,7 @@ push_checkout_after_output.hb <- function(test = TRUE,
   lapply(files, 
     function(file) {
       n <<- n + 1L
+      message(glue::glue("Processing File: {file}"))
       lines <- readLines(file)
       pattern_field_checkout <- "^# FIELD: checkout"
       text_note <- c("", "", .note_for_reviewer.hb, "", "")
@@ -395,9 +407,10 @@ push_checkout_after_output.hb <- function(test = TRUE,
       mainCodes <- parse(text = mainCodes)
       defines <- lapply(mainCodes,
         function(lang) {
-          codes <- .get_method_defination_in_package(
+          resolve <- .get_method_defination_in_package(
             lang, env_class, pkgs = basename(list_unions())
           )
+          codes <- resolve$text
           if (is.null(codes)) {
             return()
           }
@@ -502,11 +515,12 @@ methodDefinition_as_setMethod_call <- function(m) {
     }
     mcall <- methodDefinition_as_setMethod_call(f)
     text <- deparse(mcall)
+    return(list(text = text, lang = mcall))
   } else {
     text <- deparse(fun)
     text[1] <- paste0(fun_name, " <- ", text[1])
+    return(list(text = text, lang = fun))
   }
-  return(text)
 }
 
 .guess_class_from_lang <- function(lang, pattern = "job_[a-zA-Z0-9_]+", env_class = NULL)
@@ -531,6 +545,13 @@ methodDefinition_as_setMethod_call <- function(m) {
       } else {
         NULL
       }
+    } else if (grpl(nameCall <- rlang::expr_text(lang[[1]]), "^do_")) {
+      class <- glue::glue("job_{s(nameCall, 'do_', '')}")
+      if (isClass(class)) {
+        class
+      } else {
+        rlang::abort(glue::glue("Guess class by `do_*` failed: {class}"))
+      }
     } else if (grpl(code, "dplyr::")) {
       if (grpl(code, "^dplyr::recode")) {
         "character"
@@ -542,6 +563,15 @@ methodDefinition_as_setMethod_call <- function(m) {
     } else if (grpl(code, "qs::qread.*rds_jobSave")) {
       fun_matchClass(code, "qs")
     } else {
+      toolSub <- c("getsub")
+      for (i in toolSub) {
+        if (grpl(code, i) && identical(lang[[1]], as.name(i))) {
+          fromJob <- rlang::expr_text(lang[[2]])
+          if (!is.null(env_class[[fromJob]])) {
+            return(env_class[[ fromJob ]])
+          }
+        }
+      }
       NULL
     }
   }
@@ -590,6 +620,16 @@ output_with_counting_number <- function(plots, envir = .GlobalEnv,
       message(glue::glue("Save as: {outputName}"))
       fun_save <- select_savefun(object)
       fun_save(object, name = outputName, mkdir = output)
+      expect_file <- file.path(output, outputName)
+      if (file.exists(file_pdf <- paste0(expect_file, ".pdf"))) {
+        res <- try(
+          pdf_convert(file_pdf, filenames = paste0(expect_file, ".png"), dpi = 300, pages = 1)
+        )
+        if (inherits(res, "try-error")) {
+          sink()
+          message(glue::glue("Failed to convert file: {file}"))
+        }
+      }
       num <<- num + 1L
     })
 }
@@ -784,8 +824,19 @@ clear_feature <- function(x, name = "key.rds", dir = ".",
   saveRDS(x, file)
 }
 
-load_feature <- function(name = "key.rds", dir = ".", file = file.path(dir, name)) {
-  readRDS(file)
+load_feature <- function(
+  name = "key.rds", dir = ".", 
+  file = file.path(dir, name), 
+  job_otherwise = file.path("rds_jobSave", "ven.marker.0.rds"), remote = NULL)
+{
+  if (file.exists(file)) {
+    readRDS(file)
+  } else {
+    if (!is.null(remote)) {
+      job_otherwise <- file.path(remote, job_otherwise)
+    }
+    feature(readRDS(job_otherwise))
+  }
 }
 
 save_small.huibang <- function(name, cutoff = 50, dir = "rdata_smallObject")
@@ -796,6 +847,16 @@ save_small.huibang <- function(name, cutoff = 50, dir = "rdata_smallObject")
   save_small(cutoff = cutoff, file = file)
 }
 
+.set_gwas_token <- function() {
+  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc3Mjc0OTIyLCJleHAiOjE3Nzg0ODQ1MjJ9.e3RIs5GquY6d7HbiB0SrpWQtCG0CKMlzT4CHQvK-ZXSjUZPPs4m5g1MXR-AE5FhPXi-3ZbB5kh53_P0vU7okt28eG7dVXu7yGdE2bcEElNrUTkN_xgXpoVqjORK4sWBMucAVy7M0JH9DOw8wVPmkUVjaW3zXahvqN-zZhZLY_qHAaNVWKxeR9JRYNqxdf0p9IWdTbt46mCS2RdQg5ab1F4U18iUwgvMiHwCPvSv3yI_Z2d34PkQ3d0vpM5QHlKBImRtECDICL5XIBaHQfLX70Xc5KXH5hk3ors5pen90V5tnmCeiXQOMEr2xiJ9JhX0Kec-E09JYoCFNv8nh4eiWQg"
+  expire <- as.Date("2026-05-11")
+  if (Sys.Date() >= expire) {
+    message(glue::glue("GWAS API token expired."))
+    NULL
+  } else {
+    token
+  }
+}
 
 setup.huibang <- function() {
   options(
@@ -814,7 +875,12 @@ setup.huibang <- function() {
     op_prefix = "/data/nas1/huanglichuang_OD/project/",
     file_batman_compounds_info = "/data/nas2/database/graphban/db/BATMAN_TCM/cids_result.csv",
     path_jobLoadFrom = list(remote = "./rds_jobSave/", local = "./rds_jobSave/lite/"),
+    gwas_token = .set_gwas_token(),
     pg_local_recode = list(
+      file_mbg = "/data/nas2/database/MR/MBG.allHits.p1e4.txt",
+      dir_eqtl = "/data/nas2/database/MR/eQTL_vcf",
+      plink_bfile = "/data/nas2/database/MR/g1000_eur/g1000_eur",
+      db_drugbank = "/data/nas2/database/graphban/db/Grugbank/id2smiles.csv",
       db_scenic = "/data/nas1/huanglichuang_OD/project/SCENIC",
       # db_scenic = "/data/nas2/database/SCENIC",
       pyscenic = "conda run -n pyscenic pyscenic",
@@ -830,6 +896,16 @@ setup.huibang <- function() {
     )
   )
   options("download.file.method" = "wget", "download.file.extra" = "--no-check-certificate")
+}
+
+send_job_to_remote <- function(path, to = "rds_jobSave", remote = "remote") {
+  if (!is_sshfs_mount(remote)) {
+    stop('!is_sshfs_mount(remote).')
+  }
+  if (!file.exists(path)) {
+    stop('!file.exists(path).')
+  }
+  file.copy(path, file.path(remote, to), TRUE)
 }
 
 run_in_project_nohup <- function(script, ...) {
@@ -885,6 +961,11 @@ name.hb$check <- function() {
   glue::glue("{s(guess_project(), '[0-9]+_', '')}_关键节点核对_{date}")
 }
 
+name.hb$sc <- function() {
+  date <- format(Sys.Date(), "%m%d")
+  glue::glue("{s(guess_project(), '[0-9]+_', '')}_singleCell_{date}")
+}
+
 name.hb$report <- function() {
   date <- format(Sys.Date(), "%m%d")
   path <- glue::glue("/data/nas1/huanglichuang_OD/project/{guess_project()}")
@@ -906,7 +987,7 @@ get_file_with_format_name <- function(file, name) {
 }
 
 gett_file <- function(url) {
-  url <- normalizePath(url)
+  url <- glue::glue("file:/{normalizePath(url)}")
   if (nchar(Sys.which("wl-copy"))) {
     system(glue::glue("echo -n {url} | wl-copy -t text/uri-list"))
   } else {
@@ -934,9 +1015,10 @@ get_contents_refered_from_fields <- function(
       indices <- unlist(res$mapping$indices)
       res$reference <- res$reference[ res$reference != "" ]
       if (!all(indices %in% seq_along(res$reference))) {
+        # Terror <<- namel(indices, res)
         stop('!all(indices %in% seq_along(res$reference)), not match reference.')
       }
-      pmids <- strx(res$reference, "(?<=PMID: )[0-9]+")
+      pmids <- strx(res$reference, "(?<=PMID:[\\s\n\\d])[0-9]+")
       if (any(is.na(pmids))) {
         stop('any(is.na(pmids)), some reference do not have pmid, please check manualy')
       }
@@ -957,9 +1039,156 @@ get_contents_refered_from_fields <- function(
 }
 
 .note_for_reviewer.hb <- c(
-  "# NOTE: 下方代码是以上分析代码中自动解析出来的",
+  "# NOTE: 下方代码是以上分析代码中解析出来的，目前只解析一层，没有递归解析",
+  "# 递归的话代码会变得非常多，而且会很乱。目前应该够了，method 内部大多都是普通 function",
+  "# 查看起来比较方便，可以在加载了我的 R 包后直接输入后查看本体。",
   "# ",
   "# 下方的代码，我在定义的上方写明了在上方哪个分析代码用到了这个本体，",
   "# 希望对您有所帮助"
 )
+
+.clHbFo <- list()
+
+.clHbFo$clean_basic <- function(txt_input) {
+  # remove {.mark} etc
+  # txt_out <- stringr::str_replace_all(txt_input, "\\{\\.[^}]+\\}", "")
+  # remove backslash
+  txt_out <- stringr::str_replace_all(txt_input, "\\\\", "")
+  # normalize spaces
+  txt_out <- stringr::str_replace_all(txt_out, "[ \t]+", " ")
+  # remove CR
+  txt_out <- stringr::str_replace_all(txt_out, "\r", "")
+  # replace >
+  txt_out <- stringr::str_replace_all(txt_out, "^> ", "- ")
+  txt_out <- stringr::str_replace_all(txt_out, "^>$", "")
+  txt_out <- stringr::str_trim(txt_out)
+  return(txt_out)
+}
+
+.clHbFo$normalize_headers <- function(txt_input) {
+  vec_lines <- unlist(stringr::str_split(txt_input, "\n"))
+  vec_out <- sapply(vec_lines, function(x_line) {
+    # detect **header**
+    if (stringr::str_detect(x_line, "^\\*\\*.*\\*\\*$")) {
+      x_line2 <- stringr::str_replace_all(x_line, "\\*\\*", "")
+      x_line2 <- stringr::str_trim(x_line2)
+      return(paste0("## ", x_line2))
+    }
+    # detect markdown header
+    if (stringr::str_detect(x_line, "^#+")) {
+      str_hash <- stringr::str_extract(x_line, "^#+")
+      n_lvl <- nchar(str_hash)
+      n_lvl <- min(n_lvl, 3L)
+      x_line2 <- stringr::str_replace(x_line, "^#+", "")
+      x_line2 <- stringr::str_trim(x_line2)
+      return(paste0(strrep("#", n_lvl), " ", x_line2))
+    }
+    return(x_line)
+  }, USE.NAMES = FALSE)
+  txt_out <- paste(vec_out, collapse = "\n")
+  return(txt_out)
+}
+
+.clHbFo$normalize_lists <- function(txt_input) {
+  vec_lines <- unlist(stringr::str_split(txt_input, "\n"))
+  n_idx_lvl1 <- 0L
+  vec_out <- sapply(vec_lines, function(x_line) {
+    x_trim <- stringr::str_trim(x_line)
+
+    # detect hierarchical numbering like 1.2.3） or 1.2）
+    str_match <- stringr::str_match(
+      x_trim,
+      "^([0-9]+(\\.[0-9]+)+)([）\\).])"
+    )
+
+    if (!is.na(str_match[1])) {
+      str_full <- str_match[2]
+      n_level <- length(unlist(stringr::str_split(str_full, "\\.")))
+      x_new <- stringr::str_replace(
+        x_trim,
+        "^([0-9]+(\\.[0-9]+)+)([）\\).])",
+        ""
+      )
+      str_indent <- paste(rep(" ", (n_level - 1L) * 4L), collapse = "")
+      return(paste0(str_indent, "- ", stringr::str_trim(x_new)))
+    }
+
+    # detect simple numbering: （1） or 1） or 1.
+    if (stringr::str_detect(x_trim, "^[（(]?[0-9]+[）\\).]")) {
+      n_idx_lvl1 <<- n_idx_lvl1 + 1L
+      x_new <- stringr::str_replace(
+        x_trim,
+        "^[（(]?[0-9]+[）\\).]",
+        ""
+      )
+      return(paste0(n_idx_lvl1, ". ", stringr::str_trim(x_new)))
+    }
+
+    return(x_line)
+
+  }, USE.NAMES = FALSE)
+
+  txt_out <- paste(vec_out, collapse = "\n")
+  return(txt_out)
+}
+
+.clHbFo$fix_paragraphs <- function(txt_input) {
+  # merge broken lines (not header or list)
+  # txt_out <- stringr::str_replace_all(
+  #   txt_input,
+  #   "([^\\n])\\n([^\\n#\\-])",
+  #   "\\1 \\2"
+  # )
+  # remove excessive blank lines
+  txt_out <- stringr::str_replace_all(txt_input, "\n{3,}", "\n\n")
+  return(txt_out)
+}
+
+.clHbFo$reindex_lists <- function(txt_input) {
+  vec_lines <- unlist(stringr::str_split(txt_input, "\n"))
+  n_idx <- 1L
+  vec_out <- sapply(vec_lines, function(x_line) {
+    if (stringr::str_detect(x_line, "^- ")) {
+      x_new <- stringr::str_replace(x_line, "^- ", "")
+      x_out <- paste0(n_idx, ". ", x_new)
+      n_idx <<- n_idx + 1L
+      return(x_out)
+    }
+    n_idx <<- 1L
+    return(x_line)
+  }, USE.NAMES = FALSE)
+  txt_out <- paste(vec_out, collapse = "\n")
+  return(txt_out)
+}
+
+.clHbFo$split_sections <- function(txt_input) {
+  lst_sections <- stringr::str_split(txt_input, "\n(?=#)")[[1]]
+  return(lst_sections)
+}
+
+.clHbFo$run_clean_md_list <- function(
+  txt_input,
+  flag_ordered = FALSE
+) {
+  if (!is.character(txt_input)) {
+    message(glue::glue("Input is not character, coercing..."))
+    txt_input <- as.character(txt_input)
+  }
+  txt_step <- .clHbFo$clean_basic(txt_input)
+  txt_step <- .clHbFo$normalize_headers(txt_step)
+  txt_step <- .clHbFo$split_sections(txt_step)
+  txt_step <- unlist(lapply(txt_step, .clHbFo$normalize_lists))
+  txt_step <- .clHbFo$fix_paragraphs(txt_step)
+  if (flag_ordered) {
+    txt_step <- .clHbFo$reindex_lists(txt_step)
+    message(glue::glue("List reindexing applied."))
+  }
+  return(txt_step)
+}
+
+.clHbFo$format_file <- function(file, ...) {
+  lines <- readLines(file)
+  lines <- .clHbFo$run_clean_md_list(lines)
+  writeLines(lines, file)
+}
 

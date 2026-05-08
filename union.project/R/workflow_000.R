@@ -268,10 +268,55 @@ setMethod("join", signature = c(x = "feature_list", ref = "character"),
     if (length(ref) != 1) {
       stop('length(ref) != 1.')
     }
-    x@.Data <- list(unlist(x@.Data))
+    x@.Data <- list(unique(unlist(x@.Data)))
     names(x) <- ref
+    snap(x) <- glue::glue("合并后的 {ref} 相关{x@nature}")
     return(x)
   })
+
+setMethod("+", signature = c(e1 = "feature_list", e2 = "feature_list"),
+  function(e1, e2){
+    fun_mutate <- function(x) {
+      if (is(x, "feature_join")) {
+        setNames(x@.Data, names(x))
+      } else if (length(x) > 1L) {
+        list(setNames(x@.Data, names(x)))
+      } else {
+        x
+      }
+    }
+    feas <- c(fun_mutate(e1), fun_mutate(e2))
+    feas <- as_feature(feas, glue::glue("{e1@nature}集合"), nature = e1@nature)
+    fun_names <- function(x) {
+      if (is(x, "feature_join")) {
+        names(x)
+      } else {
+        x@snap
+      }
+    }
+    names(feas) <- c(fun_names(e1), fun_names(e2))
+    as(feas, "feature_join")
+  })
+
+stat_features <- function(features, name, join = TRUE,
+  assign = rlang::expr_text(substitute(features)), 
+  envir = parent.frame(1))
+{
+  assign <- eval(assign)
+  if (join) {
+    nature <- function(x) s(x@nature, "集$", "")
+    snap_pre <- snap(features)
+    features <- join(features, name)
+    snap <- glue::glue("对{snap_pre}去重、合并。该{nature(features)}集共包含 {lengths(features)} 个{nature(features)}。")
+  } else {
+    snap <- glue::glue("{name}相关{nature(features)}集共包含 {length(features)} 个子集，各子集包含{nature(features)}统计为：{try_snap(features)}。")
+    snap(features) <- glue::glue("{name} 相关{nature(features)}")
+  }
+  if (!is.null(assign)) {
+    assign(assign, features, envir = envir)
+  }
+  return(snap)
+}
 
 setMethod("join", signature = c(x = "feature_char", ref = "character"),
   function(x, ref){
@@ -387,8 +432,8 @@ setGeneric("as_feature",
   function(x, ref, ...) standardGeneric("as_feature"))
 
 .nature_feature <- function() {
-  c("genes" = "基因集", "compounds" = "化合物", 
-    "feature" = "特征集", "flux" = "代谢通量", "cells" = "细胞",
+  c("genes" = "基因", "compounds" = "化合物", 
+    "feature" = "特征", "flux" = "代谢通量", "cells" = "细胞",
     "pathways" = "通路")
 }
 
@@ -487,8 +532,9 @@ setReplaceMethod("snap", signature = c(x = "ANY"),
       rlang::abort("`snap(x) <- `: `value` should be a length 1 character.")
     }
     if (is.character(value)) {
-      attr(x, ".SNAP") <- glue::glue(value, ..., .envir = parent.frame(2))
-    } else if (is(value, "snap")) {
+      # attr(x, ".SNAP") <- glue::glue(value, ..., .envir = parent.frame(2))
+      attr(x, ".SNAP") <- value
+    } else if (is(value, "snap") || is(value, "NULL")) {
       attr(x, ".SNAP") <- value
     } else {
       stop("Don't know how to deal with `value`.")
@@ -514,7 +560,7 @@ setMethod("snap", signature = c(x = "feature", ref = "missing"),
 
 setMethod("snap", signature = c(x = "feature", ref = "logical"),
   function(x, ref = FALSE, limit = 50, num = 10, simple = TRUE, 
-    enumerate = TRUE, unlist = FALSE)
+    enumerate = TRUE, unlist = is(x, "feature_list") && length(x) == 1)
   {
     if (ref) {
       if (is(x, "feature_list")) {
@@ -527,9 +573,15 @@ setMethod("snap", signature = c(x = "feature", ref = "logical"),
     } else {
       if (is(x, "feature_list")) {
         if (unlist) {
-          str <- unique(unlist(x))
+          if (is(x, "feature_join")) {
+            str <- names(x)
+          } else {
+            str <- unique(unlist(x))
+          }
+          ex <- "经去重复、合并后"
         } else {
           str <- names(x)
+          ex <- ""
         }
         if (is.null(str)) {
           str <- ""
@@ -556,15 +608,31 @@ setMethod("snap", signature = c(x = "feature", ref = "logical"),
         str <- bind(str)
       }
       sep <- if (nchar(str)) ", " else ""
+      if (grpl(x@nature, "集$")) {
+        nature <- glue::glue("{x@nature}")
+      } else {
+        nature <- glue::glue("{x@nature}集")
+      }
       if (simple) {
-        if (n < num && enumerate) {
-          glue::glue("**{{{x@nature}}}** ({{{str}}}, {{{x@snap}}})", .open = "{{{", .close = "}}}")
+        if (n < num && enumerate && !is(x, "feature_join")) {
+          glue::glue(
+            "**{{{nature}}}** ({{{x@snap}}}: {{{str}}})", .open = "{{{", .close = "}}}"
+          )
         } else {
-          glue::glue("**{{{x@nature}}}** (n = {{{n}}}, {{{x@snap}}})", .open = "{{{", .close = "}}}")
+          if (is(x, "feature_join")) {
+            n <- length(unique(unlist(x)))
+            glue::glue(
+              "**{{{nature}}}** ({{{x@snap}}}: {{{str}}}，{{{ex}}} n = {{{n}}})", .open = "{{{", .close = "}}}"
+            )
+          } else {
+            glue::glue(
+              "**{{{nature}}}** ({{{x@snap}}}: n = {{{n}}})", .open = "{{{", .close = "}}}"
+            )
+          }
         }
       } else {
         glue::glue(
-          "**{{{x@nature}}}** ({{{str}}}{{{sep}}}{{{x@snap}}}) ", .open = "{{{", .close = "}}}"
+          "**{{{nature}}}** ({{{str}}}{{{sep}}}{{{x@snap}}}) ", .open = "{{{", .close = "}}}"
         )
       }
     }
@@ -604,7 +672,7 @@ setMethod("snap", signature = c(x = "job", ref = "numeric_or_character_or_logica
       ref <- ref[ ref != ".order" ]
       res <- unlist(lapply(ref, fun, fun_extract = get_fun("meth")))
       meths <- paste0(res[ res != "" ], collapse = "")
-      meths <- gs(meths, "\n[#]* [^\n]+\n", "")
+      meths <- gs(meths, "\n[#]+ [^\n]+\n", "")
       snaps <- paste0(fun(start), meths, "\n\n", snaps)
     }
     paste0(snaps, "\n\n")
@@ -1076,7 +1144,7 @@ expect_local_data <- function(dir, name, fun, args,
     dir, paste0(name, "_", hash, ".", ext)
   )
   if (!rerun && file.exists(file)) {
-    message(glue::glue('file.exists(file): {file}'))
+    message(glue::glue('Cache file exists, loading: {file}'))
     obj <- fun_read(file)
   } else {
     obj <- do.call(fun, args)
@@ -2000,7 +2068,7 @@ setMethod("methodAdd", signature = c(x = "job", from = "character"),
       meth(x)[[ paste0("step", x@step) ]] <- fun_paste(former, from)
     } else {
       meth(x)[[ paste0("step", x@step) ]] <- fun_paste(
-        former, glue::glue(from, .envir = env)
+        former, glue::glue(from, .envir = env, .trim = FALSE)
       )
     }
     return(x)
@@ -2065,7 +2133,7 @@ setMethod("snapAdd", signature = c(x = "job", from = "character"),
     if (is.null(env)) {
       snap(x)[[ paste0("step", step) ]] <- fun_paste(former, from)
     } else {
-      mapped <- glue::glue(from, .envir = env)
+      mapped <- glue::glue(from, .envir = env, .trim = FALSE)
       if (length(from) != length(mapped)) {
         rlang::abort(
           glue::glue(
@@ -2108,9 +2176,9 @@ resolve_feature_snapAdd_onExit <- function(x, feature, funName = "snapAdd",
     generator <- .test_job_generator(fun_generator)
     snap <- transmute(feature, generator())
     snapAdd_onExit(x, snap, funName, saveStatic, env)
-    return(feature@.Data)  
+    return(unique(unlist(feature@.Data)))
   } else {
-    feature
+    unique(unlist(feature))
   }
 }
 
@@ -2121,7 +2189,7 @@ resolve_feature <- function(feature, unlist = TRUE,
     snap <- snap(feature)
     feature <- feature@.Data
     if (unlist) {
-      feature <- unlist(feature, use.names = use.names, recursive = recursive)
+      feature <- unique(unlist(feature, use.names = use.names, recursive = recursive))
     }
     snap(feature) <- snap
   } 
@@ -3039,6 +3107,7 @@ setMethod("clear", signature = c(x = "job"),
     name = rlang::expr_text(substitute(x, parent.frame(1))),
     path_jobSave = getOption("path_jobSave", "."), 
     path_lite = file.path(path_jobSave, "lite"), 
+    expr_lite = NULL,
     allow_qs = TRUE, nthreads = 5)
   {
     dir.create(path_jobSave, FALSE)
@@ -3057,6 +3126,12 @@ setMethod("clear", signature = c(x = "job"),
     }
     object(x) <- NULL
     dir.create(path_lite, FALSE)
+    if (!is.null(expr_lite)) {
+      if (!is.expression(expr_lite)) {
+        stop('!is.expression(expr_lite).')
+      }
+      eval(expr_lite)
+    }
     if (lite) {
       file <- file.path(path_lite, filename)
       message("Save RDS: ", file)
@@ -3109,7 +3184,7 @@ setGeneric("map",
           )
         }
       }
-      stepPostModify(x, formal = FALSE)
+      x <- stepPostModify(x, formal = FALSE)
       if (interactive()) {
         x$.map_heading <- NULL
         x$.map_snap <- NULL
@@ -3489,23 +3564,35 @@ copy_job <- function(x) {
   return(object)
 }
 
+.rapp_find_call_and_args <- function(x, fun_name = NULL, 
+  path = integer(), all = FALSE)
+{
 
-.rapp_find_call_and_args <- function(x, fun_name = NULL) {
   if (is(x, "{")) {
-    .rapp_find_call_and_args(x[[2]], fun_name)
-  } else if (is(x, "<-")) {
-    .rapp_find_call_and_args(x[[3]], fun_name)
+    res <- lapply(seq_along(x)[-1], function(i) {
+      try(.rapp_find_call_and_args(x[[i]], fun_name, c(path, i)), TRUE)
+    })
+    res <- res[!vapply(res, function(x) inherits(x, "try-error"), logical(1L))]
+    if (length(res)) {
+      if (all) {
+        return(res)
+      } else {
+        return(res[[1]])
+      }
+    } else {
+      stop("length(res) == 0L")
+    }
+
+  } else if (is(x, "<-") || is(x, "if") || is(x, "for") || is(x, "while")) {
+    return(.rapp_find_call_and_args(x[[3]], fun_name, c(path, 3)))
+
   } else if (is(x, "pairlist")) {
-    alls <- lapply(x,
-      function(call) {
-        res <- try(.rapp_find_call_and_args(call, fun_name), TRUE)
-        if (inherits(res, "try-error")) {
-          NULL
-        } else {
-          res
-        }
-      })
-    alls <- alls[ !vapply(alls, is.null, logical(1)) ]
+    alls <- lapply(seq_along(x), function(i) {
+      call <- x[[i]]
+      res <- try(.rapp_find_call_and_args(call, fun_name, c(path, i)), TRUE)
+      if (inherits(res, "try-error")) NULL else res
+    })
+    alls <- alls[!vapply(alls, is.null, logical(1))]
     if (length(alls)) {
       if (length(alls) > 1) {
         message("Found multiple target, use first.")
@@ -3514,31 +3601,59 @@ copy_job <- function(x) {
     } else {
       stop(glue::glue("Can not found any `{fun_name}` in 'pairlist'."))
     }
+
   } else if (is(x, "call")) {
+
     callname <- x[[1]]
     callforMatch <- x
+
     if (!is.null(fun_name) && is.character(fun_name)) {
       if (length(callname) == 3) {
         callname <- callname[[3]]
       }
       callNameText <- rlang::expr_text(callname)
+
       if (callNameText != fun_name) {
-        res <- .rapp_find_call_and_args(x[[2]], fun_name)
-        return(res)
+        return(.rapp_find_call_and_args(x[[2]], fun_name, c(path, 2)))
       }
     }
+
     fun <- match.fun(callname)
+
     for (i in seq_along(callforMatch)[-1]) {
       if (rlang::expr_text(callforMatch[[i]]) == "...") {
-        callforMatch <- callforMatch[ -i ]
+        callforMatch <- callforMatch[-i]
         break
       }
     }
+
     call <- match.call(fun, callforMatch)
-    list(callname = callname, args = as.list(call)[-1], fun = fun)
+
+    return(list(
+      callname = callname,
+      args = as.list(call)[-1],
+      fun = fun,
+      path = path
+    ))
+
   } else {
     stop("The finally of the 'substitute' is: ", class(x))
   }
+}
+
+.set_call_by_path <- function(expr, path, value) {
+  if (!is.language(expr)) {
+    stop('!is.language(expr).')
+  }
+  set_call <- function(expr, path, value) {
+    if (length(path) == 1) {
+      expr[[path]] <- value
+      return(expr)
+    }
+    expr[[path[1]]] <- set_call(expr[[path[1]]], path[-1], value)
+    expr
+  }
+  set_call(expr, path, value)
 }
 
 .expr_resolve_S4 <- function(expr, fun_name = NULL, envir = .GlobalEnv, 
@@ -3870,7 +3985,16 @@ upd_all_job_comments <- function(path_comments = "R_jobsComments", envir = .Glob
     fun_load(file_jobs)
   } else {
     if (remote) {
-      message(glue::glue("Searching in {path}\nNo RDS file of Job: {name}."))
+      message(
+        glue::glue("Searching in {path}\nNo RDS file of Job: {name}, try local mode.")
+      )
+      path <- paths[[ "local" ]]
+      file_jobs <- list.files(
+        path, pattern = pattern_file, full.names = TRUE
+      )
+      if (length(file_jobs)) {
+        fun_load(file_jobs)
+      }
     } else {
       message(glue::glue("Local loading no RDS file of Job: {name}, try found in workspace."))
       path <- getOption("path_jobSave")

@@ -522,7 +522,9 @@ setMethod("step7", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-.stat_ggcor_table_list <- function(object, label.x, label.y, show = 3) {
+.stat_ggcor_table_list <- function(object, label.x, 
+  label.y, show = 3, identical = FALSE, cut.r = NULL)
+{
   if (!is(object, "list") && is(object, "cor_tbl")) {
     lst <- list(object)
     leader <- ""
@@ -534,6 +536,9 @@ setMethod("step7", signature = c(x = "job_hdwgcna"),
     function(data) {
       leader <- ""
       data <- dplyr::filter(data, .row.names != .col.names)
+      if (!is.null(cut.r)) {
+        data <- dplyr::filter(data, abs(r) > !!cut.r)
+      }
       data <- dedup_rows_by_unordered_cols(
         data, c(".row.names", ".col.names")
       )
@@ -555,7 +560,16 @@ setMethod("step7", signature = c(x = "job_hdwgcna"),
       )
       glue::glue("{leader}{bind(snap)}")
     })
-  bind(glue::glue("{leader}{label.x} 与 {label.y} 关联分析结果，{snaps}。"), co = "\n\n")
+  if (!is.null(cut.r)) {
+    snap_cut <- glue::glue("⟦mark$blue('p &lt; 0.05, |cor| &gt; {cut.r}')⟧")
+  } else {
+    snap_cut <- "⟦mark$blue('p &lt; 0.05')⟧"
+  }
+  if (identical) {
+    bind(glue::glue("{leader}{label.x}之间关联分析结果 ({snap_cut})，{snaps}。"), co = "\n\n")
+  } else {
+    bind(glue::glue("{leader}{label.x} 与 {label.y} 关联分析结果 ({snap_cut})，{snaps}。"), co = "\n\n")
+  }
 }
 
 safe_fortify_cor <- function(x, y, cor.test = TRUE, ...) {

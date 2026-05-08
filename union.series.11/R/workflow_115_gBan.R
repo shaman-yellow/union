@@ -36,13 +36,13 @@ setMethod("step0", signature = c(x = "job_gBan"),
 
 setMethod("step1", signature = c(x = "job_gBan"),
   function(x, dir_save = paste0("GraphBAN_", x@sig),
-    db = c("batman", "zinc", "cmnpd"),
-    batman = FALSE, zinc = FALSE, cmnpd = FALSE,
+    db = c("batman", "zinc", "cmnpd", "dgidb", "drugbank"),
+    batman = FALSE, zinc = FALSE, cmnpd = FALSE, dgidb = FALSE, 
+    drugbank = FALSE, file_dgidb = NULL,
     file_batman_compounds_info = getOption("file_batman_compounds_info"), recode = NULL)
   {
     step_message("Got amino acid sequence and drug smiles.")
     x$dir_save <- dir_save
-    x$mart <- new_biomart("hsa")
     genes <- object(x)
     if (!is.null(recode)) {
       if (!all(names(recode) %in% genes)) {
@@ -50,7 +50,13 @@ setMethod("step1", signature = c(x = "job_gBan"),
       }
       genes <- dplyr::recode(genes, !!!recode)
     }
-    x$seqs <- get_seq.pro(genes, x$mart)
+    fun_getseq <- function(...) {
+      mart <- new_biomart("hsa")
+      get_seq.pro(genes, mart)
+    }
+    x$seqs <- expect_local_data(
+      "tmp", "seq", fun_getseq, list(genes)
+    )
     if (!is.null(recode)) {
       recode <- setNames(names(recode), unname(recode))
       if (!all(names(recode) %in% x$seqs$data$hgnc_symbol)) {
@@ -60,7 +66,7 @@ setMethod("step1", signature = c(x = "job_gBan"),
         x$seqs$data, hgnc_symbol = dplyr::recode(hgnc_symbol, !!!recode)
       )
     }
-    x$file_seqs <- write(
+    x$file_seqs <- union.publish:::write(
       x$seqs$fasta, name = "peptide", dir = dir_save, max = NULL
     )
     x <- methodAdd(x, "以 `biomaRt` ⟦pkgInfo('biomaRt')⟧ 获取多肽序列 (先以 Symbol 获取 'ensembl_peptide_id' 以及 'transcript_is_canonical'，从而选择经典转录本的 'ensembl_peptide_id' 获取多肽序列) 。")
@@ -102,6 +108,52 @@ setMethod("step1", signature = c(x = "job_gBan"),
       x$smiles_compounds$data_cmnpd <- dplyr::distinct(data_cmnpd, smiles = SMILES)
       x <- methodAdd(x, "获取 CMNPD 数据库 (<https://www.cmnpd.org>) 的化合物 SMILES 结构式。")
     }
+    if (drugbank) {
+      data_drugbank <- ftibble(pg("db_drugbank"))
+      x$smiles_compounds$data_drugbank <- dplyr::distinct(data_drugbank, smiles = SMILES)
+      x <- methodAdd(x, "获取 Drugbank 数据库 (<https://go.drugbank.com/>) 的化合物 SMILES 结构式。")
+    }
+    if (dgidb) {
+      if (!is.null(file_dgidb)) {
+        data_dgidb <- ftibble(file_dgidb)
+        data_dgidb <- dplyr::select(data_dgidb, gene, drug)
+      } else {
+        data_dgidb <- ftibble(get_url_data(
+            "interactions.tsv",
+            "https://dgidb.org/data/2024-Dec/interactions.tsv",
+            "dgidb", fun_decompress = NULL
+            ))
+        data_dgidb <- dplyr::select(
+          data_dgidb, gene = gene_claim_name, drug = drug_claim_name
+        )
+      }
+      expect_package("PubChemR", "3.0.0")
+      drugs <- s(unique(data_dgidb$drug), "^CHEMBL:", "")
+      ndrugs <- length(unique(drugs))
+      cli::cli_alert_info("PubChemR::get_cids")
+      cids <- expect_local_data(
+        "tmp", "pubchemr_cids", PubChemR::get_cids, list(
+          identifier = drugs,
+          namespace = "name"
+        )
+      )
+      cids <- PubChemR::CIDs(cids)
+      data_dgidb <- map(
+        data_dgidb, "drug", cids, "Name", "CID", col = "CID"
+      )
+      data_dgidb <- dplyr::filter(data_dgidb, !is.na(data_dgidb$CID))
+      smiles <- get_smiles_batch(unique(data_dgidb$CID))
+      data_dgidb <- map(
+        data_dgidb, "CID", smiles, "CID", "SMILES", col = "SMILES"
+      )
+      x$data_dgidb <- data_dgidb
+      x$smiles_compounds$data_dgidb <- dplyr::distinct(
+        data_dgidb, smiles = SMILES
+      )
+      x <- methodAdd(
+        x, "以 DGIdb 数据库 (<https://www.cmnpd.org>) 初步预测与输入基因存在相互作用的候选药物化合物。共计得到 {nrow(ndrugs)} 条记录。剔除无法从 PubChemR 搜索到对应化合物信息记录的条目。余下 {nrow(data_dgidb)} 条记录，按各基因统计为: {try_snap(data_dgidb, 'gene', 'drug')}。"
+      )
+    }
     return(x)
   })
 
@@ -141,6 +193,13 @@ setMethod("step2", signature = c(x = "job_gBan"),
     combn <- dplyr::relocate(
       combn, hgnc_symbol, id, SMILES = smiles, Protein = peptide, Y
     )
+    if (!is.null(x$data_dgidb)) {
+      layout <- dplyr::select(x$data_dgidb, gene, SMILES)
+      combn <- merge(
+        combn, layout, by.x = c("hgnc_symbol", "SMILES"), 
+        by.y = c("gene", "SMILES")
+      )
+    }
     x$file_combn <- file.path(
       x$dir_save, "graphBan_input.csv"
     )
@@ -169,7 +228,9 @@ setMethod("step4", signature = c(x = "job_gBan"),
     res <- pbapply::pblapply(files_res, 
       function(file) {
         res <- expect_local_data(
-          "tmp", "gbanResRead", ftibble, list(files = file, select = "pred"), rerun = reRead
+          "tmp", "gbanResRead", ftibble, list(
+            files = file, select = "pred", fill = TRUE
+          ), rerun = reRead
         )
         if (nrow(res) != nrow(x$combn)) {
           stop('nrow(res) != nrow(x$combn).')
@@ -196,15 +257,18 @@ setMethod("step4", signature = c(x = "job_gBan"),
     )
     snap_each <- bind(snap_each, co = "")
     x <- snapAdd(x, "经 GraphBAN (BindingDB, BioSNAP, KIBA 模型) 预测，筛选药物与靶点互作概率大于 {cutoff} 的化合物，{snap_each}")
+    p.common <- new_venn(lst = lapply(split_by_genes, function(x) x$SMILES))
+    p.common <- set_lab_legend(
+      p.common,
+      glue::glue("{x@sig} intersection of drugs for gene predicted by graphBan"),
+      glue::glue("各基因 graphBan 预测的候选药物交集|||不同颜色圆圈代表不同数据集，中间重叠部分表示同时存在多个集合中。")
+    )
+    x <- plotsAdd(x, p.common)
+    ins <- p.common$ins
+    if (!length(ins)) {
+      message(glue::glue("No common target drugs"))
+    }
     if (method_keep == "all") {
-      p.common <- new_venn(lst = lapply(split_by_genes, function(x) x$SMILES))
-      p.common <- set_lab_legend(
-        p.common,
-        glue::glue("{x@sig} intersection of drugs for gene predicted by graphBan"),
-        glue::glue("各基因 graphBan 预测的候选药物交集|||不同颜色圆圈代表不同数据集，中间重叠部分表示同时存在多个集合中。")
-      )
-      x <- plotsAdd(x, p.common)
-      ins <- p.common$ins
       x$smiles_keep <- ins
       x$split_by_genes <- lapply(
         split_by_genes, function(x) x[x$SMILES %in% ins, ]
@@ -214,7 +278,11 @@ setMethod("step4", signature = c(x = "job_gBan"),
         x, "{s.ins}。以这 {length(ins)} 个化合物用于后续评估。"
       )
     } else if (method_keep == "respective") {
+      if (!length(ins)) {
+        x <- snapAdd(x, "未发现能够共同作用于所有靶点的化合物。")
+      }
       x$smiles_keep <- unique(res$SMILES)
+      x <- snapAdd(x, "将这总共 {length(x$smiles_keep)} 个化合物用于后续评估。")
       s.ins <- ""
       x$split_by_genes <- split_by_genes
     }
@@ -223,30 +291,6 @@ setMethod("step4", signature = c(x = "job_gBan"),
     writeLines(x$smiles_keep, x$file_smiles_for_admet)
     return(x)
   })
-
-.stat_rapp_table_by_fun <- function(data, levels, cover = "得到", fun = function(x) length(unique(x)))
-{
-  # n <- 0L
-  # cols <- names(levels)
-  # des <- unname(levels)
-  # if (length(cols) != length(des)) {
-  #   stop('length(cols) != length(des).')
-  # }
-  # rapp <- function(data, name) {
-  #   if (n + 1 > length(cols)) {
-  #     return("")
-  #   }
-  #   lst <- split(data, data[[cols[n + 1]]])
-  #   n <<- n + 1L
-  #   snap <- vapply(names(lst), FUN.VALUE = character(1), 
-  #     function(name) {
-  #       rapp(lst[[name]], name)
-  #     })
-  #   n <<- n - 1L
-  #   glue::glue("{des[n + 1]}{name}{cover}{fun(data[[ cols[ n + 2 ] ]])}个唯一{des[ n + 2 ]}。")
-  # }
-  # rapp(data, "")
-}
 
 setMethod("step5", signature = c(x = "job_gBan"),
   function(x, file_admet = NULL, cutoff = .7, skip = FALSE)
@@ -400,17 +444,6 @@ setMethod("step7", signature = c(x = "job_gBan"),
     return(x)
   })
 
-# <https://admetlab3.scbdd.com/explanation/#/>
-# 
-# Ames, f30, hia (intestine), BBB, Drug-induced liver injury (DILI)
-# 0-0.3: excellent (green); 0.3-0.7: medium (yellow); 0.7-1.0: poor (red)
-# Caco-2
-# > -5.15: excellent (green); otherwise: poor (red)
-# PPB
-# ≤ 90%: excellent (green); otherwise: poor (red)
-# "CYP1A2-inh"  "CYP2C19-inh" "CYP2C9-inh"  "CYP2D6-inh"  "CYP3A4-inh"  "CYP2B6-inh"  "CYP2C8-inh"
-# Category 0: Non-substrate / Non-inhibitor; Category 1: substrate / inhibitor. 
-
 
 setMethod("asjob_vina", signature = c(x = "job_gBan"),
   function(x){
@@ -425,6 +458,42 @@ setMethod("asjob_vina", signature = c(x = "job_gBan"),
     x <- snapAdd(x, "对候选药物与对应靶点进行 AutoDock vina 分子对接。")
     return(x)
   })
+
+.stat_rapp_table_by_fun <- function(data, levels, cover = "得到", fun = function(x) length(unique(x)))
+{
+  # n <- 0L
+  # cols <- names(levels)
+  # des <- unname(levels)
+  # if (length(cols) != length(des)) {
+  #   stop('length(cols) != length(des).')
+  # }
+  # rapp <- function(data, name) {
+  #   if (n + 1 > length(cols)) {
+  #     return("")
+  #   }
+  #   lst <- split(data, data[[cols[n + 1]]])
+  #   n <<- n + 1L
+  #   snap <- vapply(names(lst), FUN.VALUE = character(1), 
+  #     function(name) {
+  #       rapp(lst[[name]], name)
+  #     })
+  #   n <<- n - 1L
+  #   glue::glue("{des[n + 1]}{name}{cover}{fun(data[[ cols[ n + 2 ] ]])}个唯一{des[ n + 2 ]}。")
+  # }
+  # rapp(data, "")
+}
+
+# <https://admetlab3.scbdd.com/explanation/#/>
+# 
+# Ames, f30, hia (intestine), BBB, Drug-induced liver injury (DILI)
+# 0-0.3: excellent (green); 0.3-0.7: medium (yellow); 0.7-1.0: poor (red)
+# Caco-2
+# > -5.15: excellent (green); otherwise: poor (red)
+# PPB
+# ≤ 90%: excellent (green); otherwise: poor (red)
+# "CYP1A2-inh"  "CYP2C19-inh" "CYP2C9-inh"  "CYP2D6-inh"  "CYP3A4-inh"  "CYP2B6-inh"  "CYP2C8-inh"
+# Category 0: Non-substrate / Non-inhibitor; Category 1: substrate / inhibitor. 
+
 
 get_remote_graphBan.huibang <- function(x, pattern = "graphBan_res_*",
   remote = "graphBan", remote_to = "remote", expect = 3L)

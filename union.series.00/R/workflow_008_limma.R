@@ -471,7 +471,9 @@ setMethod("step2", signature = c(x = "job_limma"),
         glue::glue("{x@sig} {names(topsSig)} limma DEGs data"),
         glue::glue("{names(topsSig)} 差异分析统计表格。")
       )
-      feature(x) <- as_feature(res$sets, "DEGs")
+      feature(x) <- as_feature(
+        res$sets, glue::glue("DEGs ({x$project}, {bind(names(res$sets))})")
+      )
       # .collate_snap_and_features_by_logfc()
       x <- tablesAdd(x, tops = topsSig)
       if (length(topsSig) >= 2) {
@@ -641,9 +643,11 @@ plot_genes_heatmap <- function(data, metadata) {
 }
 
 setMethod("clear", signature = c(x = "job_limma"),
-  function(x, save = TRUE, suffix = NULL, name = substitute(x, parent.frame(1))){
+  function(x, save = TRUE, lite = TRUE, suffix = NULL, name = substitute(x, parent.frame(1))){
     eval(name)
-    callNextMethod(x, save = save, suffix = suffix, name = name)
+    callNextMethod(
+      x, save = save, lite = lite, suffix = suffix, name = name
+    )
     object(x) <- NULL
     x@params$normed_data <- NULL
     return(x)
@@ -667,13 +671,13 @@ setMethod("focus", signature = c(x = "job_limma"),
     if (is(ref, "feature")) {
       x <- snapAdd(
         x,
-        "聚焦于{snap(ref)}的差异表达。", 
+        "在 {x$project} 数据集中，聚焦于{snap(ref)}的差异表达。", 
         add = FALSE, step = if (is.null(.name)) "m" else .name
       )
       ref <- resolve_feature(ref)
     } else {
       x <- snapAdd(
-        x, "聚焦于{less(ref)}的差异表达。", 
+        x, "在 {x$project} 数据集中，聚焦于{less(ref)}的差异表达。", 
         add = FALSE, step = if (is.null(.name)) "m" else .name
       )
     }
@@ -712,6 +716,15 @@ setMethod("focus", signature = c(x = "job_limma"),
       lst <- namel(p.BoxPlotOfDEGs = x@plots$step2$p.BoxPlotOfDEGs, data = data)
     }
     pvalue <- lst$p.BoxPlotOfDEGs$pvalue
+    summary <- lapply(lst$p.BoxPlotOfDEGs$compare, stack)
+    summary <- dplyr::bind_rows(summary, .id = "gene")
+    summary <- dplyr::select(
+      summary, gene, group = values, trend = ind
+    )
+    # 'control' and 'model'
+    summary <- dplyr::mutate(
+      summary, group = factor(group, levels = rev(levels))
+    )
     # don't use the `use`!!!
     snap <- glue::glue("{names(pvalue)} (P = {pvalue})")
     x <- snapAdd(x,
@@ -727,6 +740,10 @@ setMethod("focus", signature = c(x = "job_limma"),
             elist$E, elist$targets, gene, control = levels[2], sig = sig(x)
           )
         })
+      allAuc <- lapply(roc, function(x) as.double(x$roc$auc))
+      summary <- dplyr::mutate(
+        summary, auc = dplyr::recode(gene, !!!allAuc)
+      )
       if (length(ref) > 1) {
         lst$p.rocs <- plot_roc(lapply(roc, function(x) x$roc))
         lst$p.rocs <- set_lab_legend(
@@ -735,11 +752,10 @@ setMethod("focus", signature = c(x = "job_limma"),
           glue::glue("ROC 曲线|||{detail('note_roc')}")
         )
       }
-      snaps <- bind(
-        paste0(vapply(roc, function(x) x$snap[1], character(1)), "\n"), co = "\n"
-      )
+      snaps <- bind(vapply(roc, function(x) x$snap[1], character(1)), co = "\n")
       x <- snapAdd(x, "\n{snaps}", step = .name)
     }
+    lst$summary <- summary
     if (!is.null(.name)) {
       x[[ paste0("focusedDegs_", .name) ]] <- lst
     } else {
@@ -747,6 +763,56 @@ setMethod("focus", signature = c(x = "job_limma"),
     }
     return(x)
   })
+
+.evaluate_by_ROC <- function(data, metadata, gene, 
+  control = "control", sig, roc_detail = FALSE)
+{
+  if (length(gene) > 1) {
+    stop('length(gene) > 1.')
+  }
+  expr <- data[rownames(data) == gene, ]
+  data <- data.frame(
+    expression = expr, group = metadata$group[match(colnames(data), metadata$sample)]
+  )
+  data$group <- ifelse(data$group == control, 0L, 1L)
+  roc <- e(pROC::roc(data$group, data$expression))
+  auc <- pROC::auc(roc)
+  ci <- pROC::ci.auc(roc)
+  best_coords <- pROC::coords(roc, "best", best.method = "youden",
+    ret = c("threshold", "sensitivity", "specificity", "ppv", "npv", "accuracy"))
+  p.roc <- wrap(as_grob(expression(pROC::plot.roc(roc,
+    main = "ROC Curve",
+    print.auc = TRUE, print.auc.pattern = "AUC: %.3f",
+    auc.polygon = TRUE, auc.polygon.col = "#90EE9020",
+    print.auc.x = ifelse(roc$percent, 30, .3),
+    print.auc.y = ifelse(roc$percent, 10, .1),
+    grid = c(0.1, 0.1), legacy.axes = TRUE
+  ))))
+  p.roc <- set_lab_legend(
+    wrap(p.roc, 6, 4.5),
+    glue::glue("{sig} ROC plot of {gene}"),
+    glue::glue("{gene} ROC 曲线|||{detail('note_roc')}")
+  )
+  .round <- function(x) {
+    sprintf("%.3f", floor(x * 1000) / 1000)
+  }
+  if (roc_detail) {
+    snap <- glue::glue(
+      paste0(
+        "{gene} 的 ROC 分析结果{aref(p.roc)}，AUC = {.round(auc)}，AUC 的 95% 置信区间 = [{round(ci[1], 3)}, {round(ci[3], 3)}]；",
+        "最佳诊断临界值（基于约登指数），临界值 (threshold) = {round(best_coords$threshold, 2)}，敏感度 (Sensitivity) = {round(best_coords$sensitivity, 3)}，特异度 (Specificity) = {round(best_coords$specificity, 3)}。"
+      )
+    )
+  } else {
+    snap <- glue::glue("{gene} 的 ROC 分析结果{aref(p.roc)}，AUC = {.round(auc)}。")
+  }
+  t.best_coords <- best_coords
+  t.best_coords <- .set_lab(
+    t.best_coords, sig, "best coords of", gene
+  )
+  t.best_coords <- setLegend(t.best_coords, "{gene}的最佳临界值诊断结果表格。")
+  namel(p.roc, t.best_coords, auc, ci, roc, snap)
+}
 
 setMethod("map", signature = c(x = "job_limma"),
   function(x, ref, ref.use = .guess_symbol(x),
@@ -807,6 +873,10 @@ setMethod("map", signature = c(x = "job_limma"),
     data <- tibble::as_tibble(t(object$E))
     data$group <- object$targets$group
     data <- tidyr::gather(data, var, value, -group)
+    Terror <<- notGot <- ref[ !ref %in% data$var ]
+    if (length(notGot)) {
+      warning(glue::glue(crayon::red("Not got: {notGot}")))
+    }
     if (!is.null(group)) {
       data <- dplyr::mutate(data, group = factor(group, levels = !!group))
     }
@@ -817,7 +887,7 @@ setMethod("map", signature = c(x = "job_limma"),
     compare <- attr(p, "compare")
     pvalue <- attr(p, "pvalue")
     if (is.null(which)) {
-      legend <- "以 {detail(test)} 检验基因 ({bind(ref)}) 的表达|||不同颜色的箱体表示不同分组，图中标注{detail(test)}的显著性 P 值。"
+      legend <- "{x$project}: 以 {detail(test)} 检验基因 ({bind(ref)}) 的表达|||不同颜色的箱体表示不同分组，图中标注{detail(test)}的显著性 P 值。"
     } else {
       use <- match.arg(use)
       p <- .set_significant_mapping(p, top, ref.use, use)
@@ -1051,83 +1121,276 @@ dedup_by_rank.job_limma <- function(x, ref.use = .guess_symbol(x),
   return(c(height3, text_adj))
 }
 
-plot_volcano <- function(top_table, label = "hgnc_symbol", use = "adj.P.Val",
-  fc = .3, cut.p = .05, seed = 2, HLs = NULL, use.fc = "logFC", label.fc = "log2(FC)",
-  label.p = paste0("-log10(", use, ")"), 
-  keep_cols = FALSE, pal = NULL, circle = FALSE, mode_fc = 0L, 
-  f.nudge = .5, show_legend = TRUE)
+plot_volcano <- function(top_table,
+  label = "hgnc_symbol",
+  use = "adj.P.Val",
+  fc = .3,
+  cut.p = .05,
+  seed = 2L,
+  HLs = NULL,
+  use.fc = "logFC",
+  label.fc = "log2(FC)",
+  label.p = paste0("-log10(", use, ")"),
+  keep_cols = FALSE,
+  pal = NULL,
+  circle = FALSE,
+  mode_fc = 0L,
+  f.nudge = .5,
+  show_legend = TRUE,
+  use_break = FALSE,
+  break_prop = 0.98,
+  break_gap = 3,
+  break_scales = .6
+)
 {
   set.seed(seed)
+
   if (!any(label == colnames(top_table))) {
-    if (any("rownames" == colnames(top_table)))
+    if (any("rownames" == colnames(top_table))) {
       label <- "rownames"
+    }
   }
+
   if (!keep_cols) {
     data <- dplyr::select(
-      top_table, !!rlang::sym(label), !!rlang::sym(use.fc), !!rlang::sym(use)
+      top_table,
+      !!rlang::sym(label),
+      !!rlang::sym(use.fc),
+      !!rlang::sym(use)
     )
   } else {
     data <- top_table
   }
+
   data <- dplyr::filter(data, !is.na(!!rlang::sym(use)))
-  data <- dplyr::mutate(data,
-    change = ifelse(!!rlang::sym(use.fc) > abs(fc), "up",
-      ifelse(!!rlang::sym(use.fc) < -abs(fc), "down", "stable")),
-    change = ifelse(!!rlang::sym(use) < !!cut.p, change, "stable")
+
+  data <- dplyr::mutate(
+    data,
+    change = ifelse(
+      !!rlang::sym(use.fc) > abs(fc),
+      "up",
+      ifelse(
+        !!rlang::sym(use.fc) < -abs(fc),
+        "down",
+        "stable"
+      )
+    ),
+    change = ifelse(
+      !!rlang::sym(use) < cut.p,
+      change,
+      "stable"
+    )
   )
+
   if (is.null(pal)) {
     pal <- c("#053061FF", "#67001FFF")
   }
-  if (!mode_fc) {
+
+  if (mode_fc == 0L) {
     xintercept <- c(-abs(fc), abs(fc))
-  } else if (mode_fc == 1) {
+  } else if (mode_fc == 1L) {
     xintercept <- abs(fc)
-  } else if (mode_fc == -1) {
+  } else {
     xintercept <- -abs(fc)
   }
-  p <- ggplot(data, aes(x = !!rlang::sym(use.fc), y = -log10(!!rlang::sym(use)), color = change)) + 
-    geom_point(alpha = 0.8, stroke = 0, size = 1.5) + 
-    scale_color_manual(values = c("down" = pal[1], "stable" = "grey90", "up" = pal[2])) +
-    geom_hline(yintercept = -log10(cut.p), linetype = 4, size = 0.8) +
-    geom_vline(xintercept = xintercept, linetype = 4, size = 0.8) + 
-    labs(x = label.fc, y = label.p) + 
+
+  p <- ggplot(
+    data,
+    aes(
+      x = !!rlang::sym(use.fc),
+      y = -log10(!!rlang::sym(use)),
+      color = change
+    )
+  ) +
+    geom_point(alpha = .8, stroke = 0, size = 1.5) +
+    scale_color_manual(
+      values = c(
+        down = pal[1L],
+        stable = "grey90",
+        up = pal[2L]
+      )
+    ) +
+    geom_hline(
+      yintercept = -log10(cut.p),
+      linetype = 4L,
+      size = .8
+    ) +
+    geom_vline(
+      xintercept = xintercept,
+      linetype = 4L,
+      size = .8
+    ) +
+    labs(
+      x = label.fc,
+      y = label.p
+    ) +
     rstyle("theme") +
     geom_blank()
+
   if (!is.null(HLs)) {
-    data <- dplyr::filter(data, !!rlang::sym(label) %in% HLs)
-    data <- dplyr::mutate(
-      data, x = !!rlang::sym(use.fc),
+
+    data_lab <- dplyr::filter(
+      data,
+      !!rlang::sym(label) %in% HLs
+    )
+
+    data_lab <- dplyr::mutate(
+      data_lab,
+      x = !!rlang::sym(use.fc),
       y = !!rlang::sym(use),
-      x = median(abs(x)) * sign(x) * f.nudge
+      x = stats::median(abs(x)) * sign(x) * f.nudge
     )
-    data <- dplyr::arrange(data, -log10(y))
-    ymax <- median(-log10(data$y))
-    data <- dplyr::mutate(
-      dplyr::group_by(data, up_or_down = x > 0),
+
+    data_lab <- dplyr::arrange(
+      data_lab,
+      -log10(y)
+    )
+
+    data_lab <- dplyr::group_by(
+      data_lab,
+      up_or_down = x > 0
+    )
+
+    data_lab <- dplyr::mutate(
+      data_lab,
       y = -log10(!!rlang::sym(use))
-      # y = seq(0, !!ymax, length.out = length(y))
     )
-    data <- dplyr::ungroup(data)
+
+    data_lab <- dplyr::ungroup(data_lab)
+
     p <- p + ggrepel::geom_label_repel(
-      data = data, nudge_x = data$x, nudge_y = NULL, 
+      data = data_lab,
+      nudge_x = data_lab$x,
+      nudge_y = NULL,
       show.legend = FALSE,
-      aes(x = !!rlang::sym(use.fc), y = -log10(!!rlang::sym(use)), label = !!rlang::sym(label))
+      aes(
+        x = !!rlang::sym(use.fc),
+        y = -log10(!!rlang::sym(use)),
+        label = !!rlang::sym(label)
+      )
     )
+
     if (circle) {
-      p <- geom_point(data = data, aes(x = x, y = -log10(y)),
-        color = "darkred", shape = 21, fill = "transparent", size = 3, stroke = .5)
+      p <- p + geom_point(
+        data = data_lab,
+        aes(x = x, y = -log10(y)),
+        color = "darkred",
+        shape = 21L,
+        fill = "transparent",
+        size = 3,
+        stroke = .5
+      )
     }
+
   } else {
+
+    data_lab <- dplyr::distinct(
+      rbind(
+        dplyr::slice_min(
+          data,
+          !!rlang::sym(use),
+          n = 10L
+        ),
+        dplyr::slice_max(
+          data,
+          abs(!!rlang::sym(use.fc)),
+          n = 20L
+        )
+      )
+    )
+
     p <- p + ggrepel::geom_text_repel(
-      data = dplyr::distinct(rbind(
-          dplyr::slice_min(data, !!rlang::sym(use), n = 10),
-          dplyr::slice_max(data, abs(!!rlang::sym(use.fc)), n = 20)
-          )), 
-      aes(label = !!rlang::sym(label)), size = 3)
+      data = data_lab,
+      aes(label = !!rlang::sym(label)),
+      size = 3
+    )
   }
+
   if (!show_legend) {
     p <- p + theme(legend.position = "none")
   }
+
+  # Auto y-axis break
+  # Smart y-axis enhancement for volcano plot
+  # Priority:
+  # 1. Single extreme outlier    -> cap + zoom facet
+  # 2. Two-layer distribution   -> break axis
+  # 3. Dense lower cluster      -> zoom panel
+  # 4. Otherwise keep original
+
+  if (isTRUE(use_break)) {
+
+    yv <- -log10(data[[use]])
+    yv <- yv[is.finite(yv)]
+
+    if (length(yv) >= 10L) {
+
+      yv <- sort(unique(yv))
+      dv <- diff(yv)
+
+      ymax <- max(yv, na.rm = TRUE)
+      q90 <- stats::quantile(yv, probs = .90, na.rm = TRUE)
+      q95 <- stats::quantile(yv, probs = .95, na.rm = TRUE)
+      q98 <- stats::quantile(yv, probs = .98, na.rm = TRUE)
+
+      ratio_top <- ymax / q95
+
+      # Case 1: one extreme top point
+      if (ratio_top >= 3) {
+
+        cut_y <- q95
+
+        p <- p +
+          ggforce::facet_zoom(
+            ylim = c(0, cut_y),
+            zoom.size = 1
+          )
+
+      } else if (length(dv) >= 1L) {
+
+        # Ignore very last tail point when searching split
+        n <- length(yv)
+        keep_n <- max(5L, floor(n * .95))
+        dv2 <- diff(yv[seq_len(keep_n)])
+
+        id <- which.max(dv2)
+        gap_max <- dv2[id]
+
+        # Case 2: clear layered structure
+        if (gap_max >= break_gap) {
+
+          lower <- yv[id]
+          upper <- yv[id + 1L]
+
+          p <- p +
+            ggbreak::scale_y_break(
+              c(lower, upper),
+              scales = break_scales
+            )
+
+        } else {
+
+          # Case 3: no gap, but lower region crowded
+          p <- p +
+            ggforce::facet_zoom(
+              ylim = c(0, q90),
+              zoom.size = 1
+            )
+        }
+
+      } else {
+
+        message("Use `ggforce::facet_zoom` for break.")
+        # fallback
+        p <- p +
+          ggforce::facet_zoom(
+            ylim = c(0, q90),
+            zoom.size = 1
+          )
+      }
+    }
+  }
+
   p
 }
 
@@ -1250,8 +1513,8 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "job_limma"),
 
 setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
   function(x, y, from, to, names = NULL, use = .guess_symbol(x),
-    theme = NULL, HLs = NULL, mode = c("heatmap", "linear"), 
-    cut.cor = .3, cut.p = .05, gname = TRUE, group = NULL)
+    theme = NULL, HLs = NULL, mode = c("ggcor", "heatmap", "linear"), 
+    cut.cor = .3, cut.p = .05, gname = TRUE, group = NULL, cut.r = cut.cor)
   {
     mode <- match.arg(mode)
     data <- x@params$normed_data$E
@@ -1266,13 +1529,18 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
     }
     data <- as_tibble(data)
     anno <- as_tibble(x@params$normed_data$genes)
+    snapAdd_onExit("x", "通过关联分析可以了解基因彼此之间的联系。在 {bind(x$project)} 数据集中，")
     if (is(from, "feature") && is(to, "feature")) {
-      snapAdd_onExit("x", "将 ({snap(from)}) 与 ({snap(to)}) 关联分析。")
+      if (identical(from, to)) {
+        snapAdd_onExit("x", "将 {snap(from)} 彼此关联分析。")
+      } else {
+        snapAdd_onExit("x", "将 {snap(from)} 与 {snap(to)} 关联分析。")
+      }
     } else {
       if (identical(from, to)) {
-        snapAdd_onExit("x", "将基因集 ({less(from)}) 相互关联分析。")
+        snapAdd_onExit("x", "将基因集 {less(from)} 相互关联分析。")
       } else {
-        snapAdd_onExit("x", "将基因 ({less(from)} -> {less(to)}) 关联分析。")
+        snapAdd_onExit("x", "将基因 {less(from)} -> {less(to)} 关联分析。")
       }
     }
     from <- resolve_feature(from)
@@ -1287,12 +1555,28 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
         }
       }
     }
-    if (mode == "heatmap") {
-      cli::cli_alert_info(".cal_corp.elist")
-      lst <- .cal_corp.elist(
+    if (mode == "ggcor") {
+      corp <- .cal_corp.elist(
         data, anno, use, unique(from), 
-        unique(to), names, HLs = HLs, fast = TRUE, gname = gname
+        unique(to), names, gname = gname, use_ggcor = TRUE
       )
+      p.cor <- .ggcor_add_general_style(ggcor::quickcor(corp))
+      p.cor <- set_lab_legend(
+        wrap_scale_heatmap(p.cor, to, from),
+        glue::glue("{x@sig} gene n{length(unique(from))} with n{length(unique(to))} correlation heatmap"),
+        glue::glue("基因间相关性热图|||热图中颜色表示相关系数的大小，颜色越深表示相关系数越高。P 值以 * 标注 ({.md_p_significant})。")
+      )
+      x <- .job(
+        params = list(res = corp, p.cor = p.cor), 
+        analysis = "关联分析", sig = x@sig
+      )
+      snap <- .stat_ggcor_table_list(
+        corp, "基因", "基因", identical = TRUE, cut.r = cut.r
+      )
+      snapAdd_onExit("x", "如图{aref(p.cor)}{snap}")
+      return(x)
+    } else if (mode == "heatmap") {
+      cli::cli_alert_info(".cal_corp.elist")
       # message("Correlation finished.")
       if (length(unique(from)) >= 1 && length(unique(to)) >= 1) {
         lst$hp <- .set_lab(wrap(lst$hp), sig(x), theme, "correlation heatmap")
@@ -1331,13 +1615,15 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
       params = list(res = lst), 
       analysis = "关联分析", sig = x@sig
     )
-    x$.feature <- list(from = x$res$sig.corp[[1]], to = x$res$sig.corp[[2]])
+    if (!is.null(x$res$sig.corp)) {
+      x$.feature <- list(from = x$res$sig.corp[[1]], to = x$res$sig.corp[[2]])
+    }
     # message("return 'job'.")
     return(x)
   })
 
 .cal_corp.elist <- function(data, anno, use, from, 
-  to, names, HLs = NULL, fast = TRUE, gname = TRUE)
+  to, names, HLs = NULL, fast = TRUE, gname = TRUE, use_ggcor = FALSE)
 {
   if (is.null(data$rownames)) {
     data <- as_tibble(data)
@@ -1361,6 +1647,14 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
       data <- dplyr::filter(data, symbol %in% dplyr::all_of(set))
       dplyr::distinct(data, symbol, .keep_all = TRUE)
     })
+  if (use_ggcor) {
+    fun_format <- function(data) {
+      symbols <- data[[1]]
+      setNames(data.frame(t(data[, -1, drop = FALSE])), symbols)
+    }
+    corp <- safe_fortify_cor(fun_format(lst[[1]]), fun_format(lst[[2]]), TRUE)
+    return(corp)
+  }
   # heatmap
   if (is.null(names)) {
     corp <- cal_corp(lst[[1]], lst[[2]], "From", "To", trans = TRUE, fast = fast)

@@ -40,7 +40,11 @@ setMethod("step1", signature = c(x = "job_genemania"),
       x$url_home <- "https://genemania.org/search"
       gett(object(x))
       x$link$navigate(x$url_home)
+    } else {
+      message("Please navigate to: https://genemania.org/search")
+      gett(bind(object(x), co = "\n"))
     }
+    x$file_used <- c("genemania-functions.txt", "genemania-report.pdf")
     x <- methodAdd(x, "使用 GeneMANIA（https://genemania.org/）进行检索和创建功能相关的基因列表，并构建交互式网络，进行可视化 GeneMANIA 相互作用网络。")
     return(x)
   })
@@ -82,7 +86,9 @@ setMethod("step3", signature = c(x = "job_genemania"),
       legends <- split_image_by_click(figure_and_legends[[2]])[[1]]
       message("Click to split Legends.")
       legends <- split_image_by_click(legends)
-      legend <- bind_image_add_spacer(legends[[1]], legends[[2]], stack = TRUE)
+      legend <- bind_image_add_spacer(
+        legends[[1]], legends[[2]], stack = FALSE
+      )
       p.network <- bind_image_add_spacer(figure, legend)
       grid::rasterGrob(as.raster(p.network))
     }

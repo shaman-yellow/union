@@ -18,12 +18,20 @@
     analysis = "SwissTargetPrediction 药物靶点预测"
     ))
 
-job_swiss <- function(smiles)
+job_swiss <- function(smiles, ref = NULL)
 {
   if (any(nchar(smiles) > 200)) {
     stop("any(nchar(smiles) > 200)")
   }
-  .job_swiss(object = smiles)
+  x <- .job_swiss(object = smiles)
+  x <- methodAdd(x, "基于 **SwissTargetPrediction** (<http://www.swisstargetprediction.ch/>) 平台对小分子化合物的潜在作用靶点进行预测分析。该平台基于化学结构相似性及已知配体–靶点信息，推测目标化合物可能结合的蛋白靶点，并提供相应的概率评分及靶点类别信息。")
+  if (!is.null(ref)) {
+    if (is.null(names(smiles))) {
+      stop('is.null(names(smiles)), but ref is not NULL')
+    }
+    x$.feature_compound <- as_feature(names(smiles), ref, nature = "compound")
+  }
+  return(x)
 }
 
 setGeneric("asjob_swiss",
@@ -104,7 +112,40 @@ setMethod("step1", signature = c(x = "job_swiss"),
           data.frame(x, symbols = symbols, check.names = FALSE)
         } else x
       })
-    x@tables[[ 1 ]] <- namel(targets)
+    if (!is.null(names(object(x)))) {
+      targets <- dplyr::mutate(
+        targets, Name = dplyr::recode(
+          smiles, !!!setNames(names(object(x)), as.character(object(x)))
+        ), .before = 1
+      )
+    }
+    x <- tablesAdd(x, targets = targets)
+    colnames(targets) <- formal_name(colnames(targets))
+    x$data_target <- targets
+    return(x)
+  })
+
+setMethod("step2", signature = c(x = "job_swiss"),
+  function(x, cut.p = .1){
+    step_message("Filter data")
+    if (is.null(names(object(x))) || is.null(x$data_target$Name)) {
+      stop('names(object(x)) || is.null(x$data_target$Name).')
+    }
+    fea <- feature(x, "compound")
+    data <- x$data_target
+    x$.feature_all <- as_feature(
+      lapply(split(data$symbols, data$Name), unique),
+      "以 swissTargetPrediction 预测的活性成分的靶点"
+    )
+    data <- dplyr::filter(data, Probability_ > cut.p)
+    x$data_filter <- data
+    x$.feature_target <- as_feature(
+      split(data$symbols, data$Name), "以 swissTargetPrediction 预测的活性成分的靶点"
+    )
+    targets <- unique(data$symbols)
+    x <- snapAdd(
+      x, "本研究中，以 swissTargetPrediction 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p}。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
+    )
     return(x)
   })
 

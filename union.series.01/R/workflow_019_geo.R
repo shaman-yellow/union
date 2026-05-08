@@ -200,8 +200,10 @@ setMethod("map", signature = c(x = "job_limma", ref = "job_geo"),
   })
 
 setMethod("asjob_limma", signature = c(x = "job_geo"),
-  function(x, metadata, rna = NULL, use = 1L, normed = "guess", 
-    use.col = NULL, use_as_id = TRUE, split = "\\s*///\\s*|,\\s*")
+  function(x, metadata, rna = NULL, use = 1L, normed = "guess",
+    use.col = NULL, use_as_id = TRUE, split = "\\s*///\\s*|,\\s*",
+    filter_split_symbol = c("---")
+  )
   {
     if (is.null(rna)) {
       rna <- x$rna
@@ -221,6 +223,28 @@ setMethod("asjob_limma", signature = c(x = "job_geo"),
     } else {
       counts <- as_tibble(x@params$about[[ use ]]@assayData$exprs)
       genes <- as_tibble(x@params$about[[ use ]]@featureData@data)
+    }
+    if (any(colnames(genes) == "gene_assignment")) {
+      genes <- dplyr::mutate(
+        genes, GENE_SYMBOL = strx(
+          gene_assignment, "(?<=// )[^/ ]+(?= //)"
+          ), .before = 2
+      )
+      if (!is.null(filter_split_symbol)) {
+        isInvalid <- genes$GENE_SYMBOL %in% filter_split_symbol
+        if (any(isInvalid)) {
+          message(glue::glue("Filter symbol of {bind(filter_split_symbol)}: {sum(isInvalid)}"))
+          genes <- genes[!isInvalid, ]
+          counts <- counts[!isInvalid, ]
+        }
+      }
+    } else if (any(colnames(genes) == "SPOT_ID.1")) {
+      genes <- dplyr::mutate(
+        genes, GENE_SYMBOL = gs(
+          SPOT_ID.1, "[^/]+// RefSeq // [^(]+\\(([^)]+)\\).*", "\\1"
+          ),
+        .before = 2
+      )
     }
     if (is.null(use.col)) {
       if (any(colnames(genes) == "rownames")) {
@@ -256,20 +280,6 @@ setMethod("asjob_limma", signature = c(x = "job_geo"),
       }
     } else {
       genes <- dplyr::relocate(genes, rownames, symbol = !!rlang::sym(use.col))
-    }
-    if (any(colnames(genes) == "gene_assignment")) {
-      genes <- dplyr::mutate(
-        genes, GENE_SYMBOL = strx(
-          gene_assignment, "(?<=// )[^/ ]+(?= //)"
-          ), .before = 2
-      )
-    } else if (any(colnames(genes) == "SPOT_ID.1")) {
-      genes <- dplyr::mutate(
-        genes, GENE_SYMBOL = gs(
-          SPOT_ID.1, "[^/]+// RefSeq // [^(]+\\(([^)]+)\\).*", "\\1"
-          ),
-        .before = 2
-      )
     }
     message(
       glue::glue("Gene annotation:\n{showStrings(colnames(genes), trunc = FALSE)}")
