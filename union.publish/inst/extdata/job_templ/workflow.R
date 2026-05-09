@@ -1,46 +1,37 @@
 # ==========================================================================
-# workflow of seurat
+# workflow of .{{{name}}}.
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-.job_seurat <- setClass("job_seurat", 
+.job_.{{{name}}}. <- setClass("job_.{{{name}}}.", 
   contains = c("job"),
-  representation = representation(
-    object = "ANY",
-    params = "list",
-    plots = "list",
-    tables = "list",
-    others = "ANY"),
   prototype = prototype(
-    pg = "seurat",
-    info = c("Tutorial: https://github.com/satijalab/seurat/wiki"),
+    pg = ".{{{name}}}.",
+    info = c(""),
     cite = "",
     method = "",
-    tag = "seurat",
+    tag = ".{{{name}}}.",
     analysis = ""
     ))
 
-job_seurat <- function()
+job_.{{{name}}}. <- function()
 {
-  .job_seurat()
+  .job_.{{{name}}}.()
 }
 
-setMethod("step0", signature = c(x = "job_seurat"),
+setMethod("step0", signature = c(x = "job_.{{{name}}}."),
   function(x){
-    step_message("Prepare your data with function `job_seurat`.")
+    step_message("Prepare your data with function `job_.{{{name}}}.`.")
   })
 
-setMethod("step1", signature = c(x = "job_seurat"),
+setMethod("step1", signature = c(x = "job_.{{{name}}}."),
   function(x){
     step_message("Quality control (QC).")
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_seurat"),
-  function(x, wd, postfix = NULL, run_after_cd = NULL, tmpdir = NULL, remote = "remote")
+setMethod("set_remote", signature = c(x = "job_.{{{name}}}."),
+  function(x, wd)
   {
     x$wd <- wd
-    x$set_remote <- T
-    x$remote <- "remote"
-    x$map_local <- "seurat_local"
     return(x)
   })

@@ -155,10 +155,10 @@ setMethod("step1", signature = c(x = "job_enrich"),
     if (length(res.kegg) == 1) {
 
       x <- snapAdd(
-        x, "KEGG 一共富集到 {.stat_table_by_pvalue(res.kegg[[1]], 10, use.p = use.p)}"
+        x, "KEGG 一共富集到 {.stat_table_by_pvalue(res.kegg[[1]], 10, use.p = use.p, enumeration = FALSE)}"
       )
       x <- snapAdd(
-        x, "GO 一共富集到 {.stat_table_by_pvalue(res.go[[1]], 5, 'ont', use.p = use.p)}"
+        x, "GO 一共富集到 {.stat_table_by_pvalue(res.go[[1]], 5, 'ont', use.p = use.p, enumeration = FALSE)}"
       )
     }
     x <- tablesAdd(x, res.kegg, res.go)
@@ -172,21 +172,32 @@ setMethod("step1", signature = c(x = "job_enrich"),
 
 .stat_table_by_pvalue <- function(data, n = 5, 
   split = NULL, use.p = "p.adjust", colName = "Description", target = "通路", by = "富集到",
-  needSum = TRUE)
+  needSum = TRUE, enumeration = TRUE)
 {
   if (is.null(split)) {
     data <- dplyr::arrange(data, !!rlang::sym(use.p))
     data <- dplyr::filter(data, !!rlang::sym(use.p) < .05)
     paths <- head(data[[colName]], n = n)
-    glue::glue("{nrow(data)} 个{target}，按 {use.p} 值从低到高排序的前 {length(paths)} 个{target}分别为：{atrans(paths)}。")
+    if (enumeration) {
+      glue::glue(
+        "{nrow(data)} 个{target}，按 {use.p} 值从低到高排序的前 {length(paths)} 个{target}分别为：{atrans(paths)}。"
+      )
+    } else {
+      glue::glue("{nrow(data)} 个{target}。")
+    }
   } else {
     data <- dplyr::filter(data, !!rlang::sym(use.p) < .05)
     ele <- split(data, data[[split]])
     ele <- vapply(
       ele, .stat_table_by_pvalue, character(1), 
-      n = n, use.p = use.p, target = target, by = by, colName = colName
+      n = n, use.p = use.p, target = target, by = by, 
+      colName = colName, enumeration = enumeration
     )
-    ele.snap <- bind(glue::glue("在 {names(ele)} {by} {ele}"), co = "\n\n")
+    if (enumeration) {
+      ele.snap <- bind(glue::glue("在 {names(ele)} {by} {ele}"), co = "\n\n")
+    } else {
+      ele.snap <- bind(glue::glue("在 {names(ele)} {by} {ele}"), co = "\n")
+    }
     if (needSum) {
       glue::glue("{nrow(data)} 个{target}。{ele.snap}")
     } else {

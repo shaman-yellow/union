@@ -177,7 +177,7 @@ setClassUnion("easywrite", c("data.frame", "matrix", "character", "factor", "num
 #' @importClassesFrom data.table data.table
 #' @importClassesFrom tibble tbl_df
 setClass("cor_tbl")
-.df_like <- c("tbl_df", "data.table", "cor_tbl")
+.df_like <- c("tbl_df", "cor_tbl", "data.table")
 # lapply(.df_like, setClass, where = topenv())
 .df <- c("data.frame", "matrix", "matrix", "array", .df_like)
 setClassUnion("df", .df)
@@ -596,37 +596,41 @@ set_showtext <- function() {
   return(file)
 }
 
-write_graphics <- function(data, name, ..., file = paste0(get_realname(name), ".pdf"), page = -1,
+write_graphics <- function(data, name, ..., file = paste0(get_realname(name), ".pdf"), page = -1L,
   mkdir = get_savedir("figs"))
 {
   if (!file.exists(mkdir))
     dir.create(mkdir)
   file <- file.path(mkdir, file)
   showtext <- getOption("SHOWTEXT", FALSE)
-  if (is(data, "wrap")) {
-    res <- try(data@showtext, TRUE)
-    if (!inherits(res, "try-error")) {
-      showtext <- res
-    }
-    if (!is.null(fam <- getOption("font_family"))) {
-      pdf(file, width = data@width, height = data@height, family = fam)
+  local({
+    if (is(data, "wrap")) {
+      res <- try(data@showtext, TRUE)
+      if (!inherits(res, "try-error")) {
+        showtext <- res
+      }
+      if (!is.null(fam <- getOption("font_family"))) {
+        pdf(file, width = data@width, height = data@height, family = fam)
+      } else {
+        pdf(file, width = data@width, height = data@height)
+      }
     } else {
-      pdf(file, width = data@width, height = data@height)
+      pdf(file)
     }
-  } else {
-    pdf(file)
-  }
-  withr::defer(dev.off())
-  if (showtext) {
-    showtext::showtext_begin()
-    withr::defer(showtext::showtext_end())
-  }
-  show(data)
-  withr::deferred_run()
+    on.exit({
+      dev.off()
+    })
+    if (showtext) {
+      showtext::showtext_begin()
+      on.exit(showtext::showtext_end())
+    }
+    show(data)
+  })
   len <- qpdf::pdf_length(file)
   if (len > 1) {
-    if (page == -1)
+    if (page == -1) {
       page <- len
+    }
     newfile <- tempfile(fileext = ".pdf")
     qpdf::pdf_subset(file, page, newfile)
     file.copy(newfile, file, TRUE)
@@ -1442,8 +1446,9 @@ wrap_scale <- function(data, n_width, n_height, min_width = NULL, min_height = N
   )
 }
 
-wrap_layout <- function(data = NULL, layout = NULL, size = calculate_layout_size(layout)$size[1], 
-  n = NULL, ...)
+wrap_layout <- function(data = NULL, layout = NULL,
+  size = calculate_layout_size(layout)$size[1],
+  f.w = 1L, f.h = 1L, n = NULL, ...)
 {
   if (length(layout) == 1 && is.numeric(layout)) {
     n <- layout
@@ -1451,7 +1456,7 @@ wrap_layout <- function(data = NULL, layout = NULL, size = calculate_layout_size
   if (!is.null(n)) {
     layout <- calculate_layout(n, ...)
   }
-  wp <- wrap(data, size * layout[2], size * layout[1])
+  wp <- wrap(data, size * layout[2] * f.w, size * layout[1] * f.h)
   wp$ncol <- layout[2]
   wp$nrow <- layout[1]
   return(wp)
@@ -1470,11 +1475,13 @@ calculate_layout <- function(n, max_ratio = 5, prefer_rows = FALSE,
 
   # ---- Hard constraints ----
   if (!is.null(ncol)) {
+    ncol <- min(ncol, n)
     rows <- ceiling(n / ncol)
     return(setNames(as.integer(c(rows, ncol)), c("rows", "cols")))
   }
 
   if (!is.null(nrow)) {
+    nrow <- min(nrow, n)
     cols <- ceiling(n / nrow)
     return(setNames(as.integer(c(nrow, cols)), c("rows", "cols")))
   }
@@ -1538,7 +1545,12 @@ calculate_layout <- function(n, max_ratio = 5, prefer_rows = FALSE,
     stop("No valid layout found.")
   }
 
-  best <- evaluate_candidates(candidates)[1, 1:2]
+  res <- evaluate_candidates(candidates)
+  if (is.matrix(res)) {
+    best <- res[1, 1:2]
+  } else {
+    best <- res
+  }
 
   # ---- Orientation ----
   if (!prefer_rows && best[1] > best[2]) {
@@ -2506,6 +2518,10 @@ setMethod("autor", signature = c(x = "feature_char", name = "missing"),
 
 setMethod("autor", signature = c(x = "feature_list", name = "missing"),
   function(x, ...){
+    if (length(x) == 1 && is(x[[1]], "feature_list")) {
+      name <- names(x)
+      x <- setNames(x[[1]], paste0(name, "|||", names(x[[1]])))
+    }
     lst <- setNames(x@.Data, names(x))
     data <- setNames(stack(lst), c(.nature(x@nature, TRUE), "Type"))[, 2:1]
     autor(tibble::as_tibble(data), ..., notshow = TRUE, shownote = FALSE)
@@ -2823,11 +2839,11 @@ setMethod("select_savefun", signature = c(x = "data_binary"),
 
 setMethod("select_savefun", signature = c(x = "can_not_be_draw"),
   function(x){
-    if (is(x, "wrap") && is(x@data, "funPlot")) {
-      if (any(.type_must_record_then_write == environmentName(environment(x@data@fun)))) {
-        return(get_fun(".write_graphics_after_recordplot_for_wrap_funPlot"))
-      }
-    }
+    # if (is(x, "wrap") && is(x@data, "funPlot")) {
+    #   if (any(.type_must_record_then_write == environmentName(environment(x@data@fun)))) {
+    #     return(get_fun(".write_graphics_after_recordplot_for_wrap_funPlot"))
+    #   }
+    # }
     get_fun("write_graphics")
   })
 

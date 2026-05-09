@@ -52,12 +52,18 @@ setMethod("step0", signature = c(x = "job_rms"),
   })
 
 setMethod("step1", signature = c(x = "job_rms"),
-  function(x, target = x$target, seed = x$seed, ...)
+  function(x, target = x$target, seed = x$seed, penalty = 1, 
+    loocv = "auto", ...)
   {
     step_message("Logistic ...")
     data <- object(x)[, colnames(object(x)) != "sample" ]
     set.seed(seed)
-    x$res_lrm <- new_lrm(data, formula = target)
+    if (identical(loocv, "auto") && nrow(data) < 40) {
+      loocv <- TRUE
+    }
+    x$res_lrm <- new_lrm(
+      data, formula = target, penalty = penalty, loocv = loocv
+    )
     x$res_nomo <- new_nomo(x$res_lrm, ...)
     x <- methodAdd(
       x, "以 R 包 `rms` ⟦pkgInfo('rms')⟧ 依据各独立诊断因子的权重赋值打分，将各因子评分求和得到总评分，作为风险评估模型，进而推断受试者的患病风险。"
@@ -77,6 +83,9 @@ setMethod("step1", signature = c(x = "job_rms"),
       glue::glue("各诊断指标的ROC|||{detail('note_roc')}")
     )
     x <- methodAdd(x, "以 R 包 `pROC` ⟦pkgInfo('pROC')⟧ 绘制该诊断模型的受试者工作特征 (ROC) 曲线，以曲线下面积 (Area Under the Curve，AUC) 评估模型效能。")
+    if (loocv) {
+      x <- methodAdd(x, "此外，为解决样本量较小的问题，减少模型在训练集上产生的过拟合偏倚，并更客观地评估模型的泛化能力，采用留一交叉验证（leave-one-out cross-validation，LOOCV）对列线图模型进行内部验证。具体而言，每次保留1个样本作为验证集，其余样本用于模型训练，重复进行直至所有样本均完成1次独立验证，最终汇总全部预测结果用于绘制 ROC 曲线并计算受试者工作特征曲线下面积（AUC），以评价模型的判别性能")
+    }
     x <- snapAdd(x, "ROC 评估{aref(p.rocs)}各诊断指标：{bind(x$res_lrm$aucs)} (AUC 介于 0.7-1 提示模型具有较好的预测效能)。")
     p.cal <- x$res_lrm$p.cal
     exLegend <- if (packageVersion("rms") >= "8.1.1") {
@@ -157,7 +166,8 @@ clinical_thresholds <- function(cal, max_deviation = 0.1) {
 
 ## logistic
 new_lrm <- function(data, formula, rev.level = FALSE, 
-  lang = c("en", "cn"), run_boot = FALSE, B = 500, ...)
+  lang = c("en", "cn"), 
+  run_boot = FALSE, B = 500, penalty = 0, loocv = TRUE, ...)
 {
   fun_escape_bug_of_rms <- function() {
     wh <- which(vapply(seq_len(ncol(data)), function(n) is.factor(data[[ n ]]), FUN.VALUE = logical(1)))
@@ -196,7 +206,11 @@ new_lrm <- function(data, formula, rev.level = FALSE,
   }
   message("Check levels: ", paste0(levels <- levels(data[[ y ]]), collapse = ", "))
   set_rms_datadist(data)
-  fit <- e(rms::lrm(formula, data = data, x = TRUE, y = TRUE))
+  fit <- e(
+    rms::lrm(
+      formula, data = data, x = TRUE, y = TRUE, penalty = penalty
+    )
+  )
   # fit_glm <- stats::glm(formula, data = data, family = stats::binomial())
   # 95\\% CL
   # exp(confint.default(lrm.eff$fit))
@@ -268,7 +282,12 @@ new_lrm <- function(data, formula, rev.level = FALSE,
       p.cal$children[[15]]$label <- c("表观状态", "误差纠正", "理想状态")
     }
   }
-  roc <- new_roc(fit$y, predict(fit), lang = lang, ...)
+  if (loocv) {
+    pred <- .loocv_lrm_pred(fit, data)
+  } else {
+    pred <- predict(fit)
+  }
+  roc <- new_roc(fit$y, pred, lang = lang, ...)
   coefs <- names(fit$coefficients)[ names(fit$coefficients) != "Intercept" ]
   rocs <- lapply(coefs,
     function(coef) {
@@ -284,6 +303,32 @@ new_lrm <- function(data, formula, rev.level = FALSE,
     aucs, lang, boots
   )
 }
+
+.loocv_lrm_pred <- function(fit, dat) {
+  if (!inherits(fit, "lrm")) {
+    stop("fit must be rms::lrm object.")
+  }
+  
+  fm <- stats::formula(fit)
+  y <- all.vars(fm)[1L]
+  n <- nrow(dat)
+  
+  unlist(lapply(seq_len(n), function(i) {
+    train <- dat[-i, , drop = FALSE]
+    test <- dat[i, , drop = FALSE]
+    
+    fit_i <- rms::lrm(
+      formula = fm,
+      data = train,
+      x = TRUE,
+      y = TRUE,
+      penalty = if (is.null(fit$penalty)) 0 else fit$penalty
+    )
+    
+    as.numeric(stats::predict(fit_i, newdata = test, type = "fitted"))
+  }), use.names = FALSE)
+}
+
 
 set_rms_datadist <- function(data) {
   .RMS_datadist <- e(rms::datadist(data))
@@ -321,7 +366,13 @@ new_nomo <- function(lrm, fun_label = lrm$levels[2], lang = lrm$lang,
     funPlot(rms:::plot.nomogram, args), 8, .6 * length(lrm$fit$coefficients) + 2
   )
   p.nomo <- .set_lab(p.nomo, "nomogram plot")
-  p.nomo_reg <- wrap(funPlot(regplot::regplot,
+  fun_regplot <- function(...) {
+    body <- .remove_devOff_in_regplot()
+    on.exit(.recover_regplot(body))
+    regplot::regplot(...)
+  }
+  environment(fun_regplot) <- topenv()
+  p.nomo_reg <- wrap(funPlot(fun_regplot,
     list(
       reg = lrm$fit,
       interval = "confidence",
@@ -395,4 +446,28 @@ new_roc <- function(y, x, ..., plot.thres = NULL, lang = c("en", "cn"), cn.mode 
 }
 
 fmt <- function(x, n = 4) formatC(x, digits = n, format = "f")
+
+.remove_devOff_in_regplot <- function() {
+  pkg <- fun_name <- "regplot"
+  fun_internal <- get(
+    fun_name, envir = asNamespace(pkg)
+  )
+  body <- body(fun_internal)
+  resolve <- .rapp_find_call_and_args(body, "dev.off")
+  body(fun_internal) <- .set_call_by_path(
+    body, resolve$path, substitute(message("Hellow world!"))
+  )
+  replaceFunInPackage(fun_name, fun_internal, pkg)
+  return(body)
+}
+
+.recover_regplot <- function(body) {
+  pkg <- fun_name <- "regplot"
+  fun_internal <- get(
+    fun_name, envir = asNamespace(pkg)
+  )
+  body(fun_internal) <- body
+  replaceFunInPackage(fun_name, fun_internal, pkg)
+}
+
 

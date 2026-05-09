@@ -750,6 +750,10 @@ setMethod("getsub", signature = c(x = "job_seurat"),
   function(x, ..., sample = 1L, group.by = x$group.by,
     sample_group.by = c("orig.ident", group.by))
   {
+    if (is.null(object(x))) {
+      warning("object(x) == NULL, return original job.")
+      return(x)
+    }
     if (sample > 0L && sample < 1L) {
       message("Sampling the cells.")
       metadata <- object(x)@meta.data
@@ -2386,8 +2390,8 @@ match_strings <- function(x, y, max_dist = 0.3, method = "jw",
     y = matched,
     # x_clean = x_norm,
     # y_clean = ifelse(is.na(idx), NA, y_norm[idx]),
-    distance = dist
-    # matched_index_in_y = idx,
+    distance = dist,
+    matched_index_in_y = idx
     # stringsAsFactors = FALSE
   )
 

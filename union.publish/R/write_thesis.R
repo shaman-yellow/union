@@ -677,7 +677,14 @@ custom_docx_document2 <- function(...){
     lines <- readLines(output_file)
     lines <- vapply(lines, FUN.VALUE = character(1),
       function(x) {
-        glue::glue(x, .open = "⟦", .close = "⟧")
+        res <- try(glue::glue(x, .open = "⟦", .close = "⟧"), TRUE)
+        if (inherits(res, "try-error")) {
+          Terror <<- x
+          stop(
+            'inherits(res, "try-error"), glue::glue with `⟦⟧` error in `post_knit`, see `Terror`'
+          )
+        }
+        res
       })
     if (getOption("autor_show_legend_after_ref", FALSE)) {
       all_placeHolder <- stringr::str_extract_all(lines, "<!-- autor_legend:[a-zA-Z0-9-]*? -->")

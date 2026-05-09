@@ -71,30 +71,35 @@ setMethod("step1", signature = c(x = "job_iobr"),
       "lsei"
     )
     method <- match.arg(method, methods)
-    require(IOBR)
     dir.create(cache, FALSE)
     if (run_all) {
       methods <- methods
     } else {
       methods <- method
     }
-    args <- list(...)
-    args$tumor <- tumor
-    args$eset <- object(x)
-    set.seed(x$seed)
+    message(
+      "To avoid environment pollution caused by IOBR loading, So, the IOBR is run with an Subroutine R!!!"
+    )
+    fun_iobr <- function(...) {
+      args <- list(...)
+      run_iobr <- function(eset, method, tumor) {
+        require(IOBR)
+        set.seed(12345L)
+        IOBR::deconvo_tme(eset = eset, method = method, tumor = tumor)
+      }
+      callr::r(run_iobr, args, libpath = .libPaths(), show = TRUE)
+    }
+    args <- list(tumor = tumor, eset = object(x))
     x$allres <- pbapply::pbsapply(
       methods, simplify = FALSE, cl = workers,
       function(method) {
         args$method <- method
-        try(expect_local_data(cache, "iobr", IOBR::deconvo_tme, args, rerun = rerun))
+        try(expect_local_data(cache, "iobr", fun_iobr, args, rerun = rerun))
       }
     )
     x$res <- x$allres[[ method ]]
     x <- methodAdd(x, "为系统评估诊断基因与免疫微环境之间的潜在联系，进一步开展免疫浸润及相关性分析，筛选与免疫微环境密切相关的细胞亚群，可从“基因–细胞互作”角度深化对疾病发生发展机制的理解。")
-    x <- methodAdd(x, "以 R 包 `IOBR` ⟦pkgInfo('IOBR')⟧ 选择算法 {method} 对数据集免疫浸润分析。")
-    if (isNamespaceLoaded("IOBR")) {
-      detach("package:IOBR")
-    }
+    x <- methodAdd(x, "以 R 包 `IOBR` ⟦pkgInfo('IOBR')⟧ 选择算法 {method} 对 {x$project} 数据集免疫浸润分析。")
     x$method <- method
     return(x)
   })
@@ -190,7 +195,9 @@ setMethod("step2", signature = c(x = "job_iobr"),
       scale_color_manual(values = color_set()) +
       scale_fill_manual(values = color_set()) +
       theme_minimal() +
-      theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) +
+      theme(
+        legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1)
+        ) +
       geom_blank()
     p.boxplot <- set_lab_legend(
       wrap(p.boxplot, 11, 5),
@@ -202,9 +209,9 @@ setMethod("step2", signature = c(x = "job_iobr"),
     feature(x) <- as_feature(s.com, "IOBR 免疫浸润分析差异细胞", nature = "cells")
     x <- snapAdd(x, "以 wilcox.test 组间差异分析{aref(p.boxplot)}，有显著区别 (⟦mark$blue('p &lt; {cut.p}')⟧) 的差异细胞有 {nrow(dataSig)} 类。")
     fun_snap <- function(higher) {
-      ifelse(higher == x$levels[1], "升高", "下降")
+      ifelse(higher == x$levels[1], "更高", "更低")
     }
-    snap_sig <- glue::glue("{s.com} 活性显著 {fun_snap(dataSig$higher)}")
+    snap_sig <- glue::glue("{s.com} 浸润水平显著{fun_snap(dataSig$higher)}")
     x <- snapAdd(x, "相比于 {x$levels[2]} 组，{x$levels[1]} 组的{bind(snap_sig)}。\n\n\n")
     mtx <- dplyr::select(mtx, -ID, -group)
     if (!keep_all) {
@@ -220,9 +227,9 @@ setMethod("step2", signature = c(x = "job_iobr"),
     )
     x <- methodAdd(x, "以 R 包 `psych` ⟦pkgInfo('psych')⟧ 对免疫浸润细胞之间进行关联分析 ({method_cor}) 。⟦mark$blue('将|cor| &gt; 0.3 且 p &lt; {cut.p} 的分析结果判定为具有统计学意义')⟧。")
     t.cells_cor <- add_anno(.corp(as_data_long(
-      res_cor.test$r, res_cor.test$p, "cells_x", "cells_y", 
-      "cor", "pvalue"
-    )))
+          res_cor.test$r, res_cor.test$p, "cells_x", "cells_y", 
+          "cor", "pvalue"
+          )))
     t.cells_cor <- set_lab_legend(
       t.cells_cor,
       glue::glue("{x@sig} cells correlation"),

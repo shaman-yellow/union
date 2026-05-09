@@ -33,7 +33,7 @@ setMethod("asjob_mlearn", signature = c(x = "job_deseq2"),
       if (length(ref) <= 2) {
         stop('length(ref) <= 2, too few genes.')
       }
-      snapAdd_onExit("x", "将{snap}用于机器学习筛选关键基因。")
+      snapAdd_onExit("x", "以 {x$project} 为训练集，将{snap}用于机器学习筛选关键基因。")
     }
     if (any(!ref %in% rownames(data))) {
       stop('any(!ref %in% rownames(data)).')
@@ -41,8 +41,10 @@ setMethod("asjob_mlearn", signature = c(x = "job_deseq2"),
     data <- t(data[ rownames(data) %in% ref, ])
     metadata <- data.frame(object@colData)
     levels <- eval(levels)
+    project <- x$project
     x <- .job_mlearn(object = data)
     x$metadata <- metadata
+    x$project <- project
     x$levels <- levels
     x$target <- factor(metadata[[ group ]], levels = levels)
     x$seed <- seed
@@ -66,7 +68,7 @@ setMethod("asjob_mlearn", signature = c(x = "job_limma"),
       if (length(ref) <= 2) {
         stop('length(ref) <= 2, too few genes.')
       }
-      snapAdd_onExit("x", "将{snap}用于机器学习筛选关键基因。")
+      snapAdd_onExit("x", "以 {x$project} 为训练集，将{snap}用于机器学习筛选关键基因。")
     }
     if (any(!ref %in% rownames(data))) {
       stop('any(!ref %in% rownames(data)).')
@@ -74,7 +76,9 @@ setMethod("asjob_mlearn", signature = c(x = "job_limma"),
     data <- t(data[ rownames(data) %in% ref, ])
     metadata <- data.frame(object$targets)
     levels <- eval(levels)
+    project <- x$project
     x <- .job_mlearn(object = data)
+    x$project <- project
     x$metadata <- metadata
     x$levels <- levels
     x$target <- factor(metadata[[ group ]], levels = levels)

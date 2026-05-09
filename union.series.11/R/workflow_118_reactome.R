@@ -169,20 +169,194 @@ setMethod("step3", signature = c(x = "job_reactome"),
   })
 
 heatmap_with_group <- function(.data, .row, .column, 
-  .value, ..., group_by, palette_value = c("#440154FF", "#21908CFF", "#fefada"))
+  .value, ..., group_by, split_by,
+  palette_value = c("#440154FF", "#21908CFF", "#fefada"),
+  palette_split = color_set()
+)
 {
-  if (exists("annotation_tile", envir = asNamespace("tidyHeatmap"))) {
-    fun_tile <- tidyHeatmap::annotation_tile
+  expect_package("tidyHeatmap", "1.13.1")
+  p.hp <- tidyHeatmap::heatmap(
+    .data, .row = {{ .row }}, .column = {{ .column }}, 
+    .value = {{ .value }}, ..., palette_value = palette_value,
+    show_heatmap_legend = missing(split_by)
+  )
+  if (!missing(split_by)) {
+    p.hp <- tidyHeatmap::annotation_group(
+      p.hp, {{ split_by }}, show_group_name = FALSE,
+      group_label_fontsize = 0L, palette_grouping = list(color_set())
+    )
+    legend_cols <- c(
+      rlang::as_name(rlang::ensym(.value)),
+      rlang::as_name(rlang::ensym(split_by))
+    )
+    legend <- .grob_legend(
+      .data, legend_cols, list(palette_value, palette_split)
+    )
+    p.hp <- tidyHeatmap::wrap_heatmap(p.hp) + legend + patchwork::plot_layout(widths = c(8, 1))
   } else {
-    fun_tile <- tidyHeatmap::add_tile
+    p.hp <- tidyHeatmap::annotation_tile(
+      p.hp, .column = {{ group_by }}
+    )
   }
-  fun_tile(
-    tidyHeatmap::heatmap(
-      .data, .row = {{ .row }}, .column = {{ .column }}, 
-      .value = {{ .value }}, ..., palette_value = palette_value
-      ), .column = {{ group_by }}
+  p.hp
+}
+
+.grob_legend <- function(data, col, palette = NULL,
+  title = NULL, at = NULL,
+  direction = c("vertical", "horizontal"),
+  gap = grid::unit(4, "mm"))
+{
+  direction <- match.arg(direction)
+
+  if (length(col) == 1L) {
+    col <- as.list(col)
+  }
+
+  lgd_list <- lapply(
+    seq_along(col),
+    function(i) {
+
+      nm <- col[[i]]
+      x <- data[[nm]]
+
+      ttl <- if (is.null(title)) {
+        nm
+      } else {
+        title[[i]]
+      }
+
+      # Safe palette extraction
+      pal <- NULL
+      if (!is.null(palette)) {
+
+        if (is.list(palette)) {
+          pal <- palette[[i]]
+        } else if (i == 1L) {
+          pal <- palette
+        }
+      }
+
+      # Safe break extraction
+      brk <- NULL
+      if (!is.null(at)) {
+
+        if (is.list(at)) {
+          brk <- at[[i]]
+        } else if (i == 1L) {
+          brk <- at
+        }
+      }
+
+      # Discrete legend
+      if (!is.numeric(x)) {
+
+        if (is.factor(x)) {
+          lv <- levels(x)
+        } else if (is.character(x)) {
+          lv <- sort(unique(x))
+        }
+        lv <- lv[!is.na(lv)]
+
+        if (is.null(pal)) {
+
+          pal <- scales::hue_pal()(length(lv))
+          names(pal) <- lv
+
+        } else {
+
+          if (!is.null(names(pal))) {
+
+            miss_nm <- setdiff(lv, names(pal))
+
+            if (length(miss_nm) > 0L) {
+              add_pal <- scales::hue_pal()(length(miss_nm))
+              names(add_pal) <- miss_nm
+              pal <- c(pal, add_pal)
+            }
+
+            pal <- pal[lv]
+
+          } else {
+
+            if (length(pal) < length(lv)) {
+              add_pal <- scales::hue_pal()(
+                length(lv) - length(pal)
+              )
+              pal <- c(pal, add_pal)
+            }
+
+            pal <- pal[seq_len(length(lv))]
+            names(pal) <- lv
+          }
+        }
+
+        ComplexHeatmap::Legend(
+          labels = lv,
+          legend_gp = grid::gpar(fill = pal[lv]),
+          title = ttl
+        )
+
+      } else {
+
+        # Continuous legend
+        if (is.null(brk)) {
+          brk <- pretty(x, n = 5L)
+        }
+
+        if (is.null(pal)) {
+
+          pal <- circlize::colorRamp2(
+            range(brk, na.rm = TRUE),
+            c("#F7FBFF", "#08306B")
+          )
+
+        } else if (is.function(pal)) {
+
+          pal <- pal
+
+        } else {
+
+          pal <- circlize::colorRamp2(
+            seq(
+              min(brk, na.rm = TRUE),
+              max(brk, na.rm = TRUE),
+              length.out = length(pal)
+            ),
+            pal
+          )
+        }
+
+        ComplexHeatmap::Legend(
+          col_fun = pal,
+          at = brk,
+          title = ttl
+        )
+      }
+    }
+  )
+
+  pd <- do.call(
+    ComplexHeatmap::packLegend,
+    c(
+      lgd_list,
+      list(
+        direction = direction,
+        gap = gap
+      )
+    )
+  )
+
+  # grDevices::pdf(NULL)
+  #
+  # on.exit(
+  #   grDevices::dev.off()
+  # )
+
+  grid::grid.grabExpr(
+    ComplexHeatmap::draw(pd)
   )
 }
+
 
 .reactome_prepare <- function (object, use_interactors = TRUE, include_disease_pathways = FALSE, 
   create_reactome_visualization = FALSE, create_reports = FALSE, 

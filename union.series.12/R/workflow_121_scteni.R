@@ -19,8 +19,23 @@ setGeneric("asjob_scteni",
 
 setMethod("asjob_scteni", signature = c(x = "ANY"),
   function(x, ref){
+    pr <- list()
+    if (is(x, "job_seurat")) {
+      pr <- params(x)
+      if (any(!ref %in% rownames(object(x)))) {
+        stop('any(!ref %in% rownames(object(x))).')
+      }
+      pr$dir_seurat <- create_job_cache_dir(x, "sctenifoldknk", path = ".")
+      pr$file_seurat <- file.path(pr$dir_seurat, glue::glue("seurat_{sig(x)}.rds"))
+      if (!file.exists(pr$file_seurat)) {
+        message(glue::glue("Save file: {pr$file_seurat}"))
+        saveRDS(object(x), pr$file_seurat)
+      }
+    }
     fea <- resolve_feature_snapAdd_onExit("x", ref)
     x <- .job_scteni(object = fea)
+    x@params <- append(x@params, pr)
+    x$features <- ref
     return(x)
   })
 
@@ -39,45 +54,52 @@ setMethod("step1", signature = c(x = "job_scteni"),
 
 setMethod("step2", signature = c(x = "job_scteni"),
   function(x, use.p = c("p.adj", "p.value"), cut.p = .05, 
-    cut.z = 2, recode = NULL, dir = "sct_results",
-    lst_diff = .read_scteni_results.hb(dir))
+    cut.z = 2, recode = NULL, dir = x$dir_seurat,
+    lst_diff = .read_scteni_results(dir, sig(x)))
   {
     step_message("Load results file and draw volcano plot.")
     use.p <- match.arg(use.p)
-    lst_diff <- sapply(names(lst_diff), simplify = FALSE,
+    if (!is.null(recode)) {
+      names(lst_diff) <- dplyr::recode(names(lst_diff), !!!recode)
+      lst_diff_no_filter <- lapply(lst_diff, 
+        function(data) {
+          dplyr::mutate(data, gene = dplyr::recode(gene, !!!recode))
+        })
+    } else {
+      lst_diff_no_filter <- lst_diff
+    }
+    lst_diff <- sapply(names(lst_diff_no_filter), simplify = FALSE,
       function(name) {
-        data <- lst_diff[[name]]
+        data <- lst_diff_no_filter[[name]]
+        message(glue::glue("All data, nrow: {nrow(data)}"))
         data <- dplyr::filter(
           data, gene != !!name, !!rlang::sym(use.p) < !!cut.p
         )
+        message(glue::glue("After filter by {use.p}, nrow: {nrow(data)}"))
         if (!is.null(cut.z)) {
           data <- dplyr::filter(data, abs(Z) > !!cut.z)
         }
-        if (!is.null(recode)) {
-          data <- dplyr::mutate(
-            data, gene = dplyr::recode(gene, !!!recode)
-          )
-        }
+        message(glue::glue("After filter by |Z|, nrow: {nrow(data)}"))
         data
       })
-    if (!is.null(recode)) {
-      names(lst_diff) <- dplyr::recode(names(lst_diff), !!!recode)
-    }
     lst_diff <- set_lab_legend(
       lst_diff,
       glue::glue("{x@sig} data of genes affected by {names(lst_diff)} knockout"),
       glue::glue("受 {names(lst_diff)} 敲除影响最显著的基因")
     )
     x <- tablesAdd(x, t.all_diff = lst_diff)
-    feature(x) <- as_feature(lapply(lst_diff, function(x) x$gene), "受关键基因敲除而显著影响的基因")
-    ps.volcano <- sapply(names(lst_diff), simplify = FALSE,
+    feature(x) <- as_feature(
+      lapply(lst_diff, function(x) x$gene), "受关键基因敲除而显著影响的基因"
+    )
+    ps.volcano <- sapply(names(lst_diff_no_filter), simplify = FALSE,
       function(name) {
-        data <- lst_diff[[name]]
+        data <- lst_diff_no_filter[[name]]
         cut.fc <- if (is.null(cut.z)) 0 else cut.z
         p <- plot_volcano(
           data, "gene", use = use.p, use.fc = "Z",
-          fc = cut.fc, label.fc = "Z-score", f.nudge = .1,
-          mode_fc = 1, HLs = head(data$gene, n = 10), show_legend = FALSE
+          fc = cut.fc, label.fc = "Z-score", f.nudge = .5,
+          mode_fc = 1, HLs = head(data$gene, n = 10), 
+          show_legend = FALSE, use_break = FALSE
         )
         set_lab_legend(
           wrap(p, 5, 6),
@@ -103,17 +125,185 @@ setMethod("step2", signature = c(x = "job_scteni"),
     return(x)
   })
 
-.read_scteni_results.hb <- function(dir, type = "3000HVG",
-  pattern = paste0("scTenifoldKnk_", type, "_"))
+.read_scteni_results <- function(dir, sig, type = "3000HVG",
+  pattern = glue::glue("sctenifoldknk_{sig}_{type}_"), 
+  ignore.case = TRUE
+)
 {
-  files <- list.files(dir, pattern, full.names = TRUE)
+  files <- list.files(
+    dir, pattern, full.names = TRUE, ignore.case = ignore.case
+  )
   res <- lapply(files,
     function(file) {
+      message(glue::glue("File exists {file.exists(file)} -> {file}"))
       readRDS(file)$diffRegulation
     })
   setNames(
     res, s(
-      tools::file_path_sans_ext(basename(files)), pattern, ""
+      tools::file_path_sans_ext(basename(files)), 
+      pattern, "", ignore.case = TRUE
     )
   )
 }
+
+.read_scteni_results.hb <- function(dir, type = "3000HVG",
+  pattern = paste0("scTenifoldKnk_", type, "_"))
+{
+  .read_scteni_results(dir = dir, type = type, pattern = pattern)
+}
+
+run_remote_sctenifoldknk.huibang <- function(x,
+  remote = "graphBan", remote_from = "remote")
+{
+  remote_dir <- glue::glue(
+    "~/{s(guess_project(), '^[0-9]+_', '')}"
+  )
+  sig <- s(rlang::expr_text(substitute(x)), "^[^.]+\\.", "")
+  dir_save <- dirname(x$file_seurat)
+  dir.create(dir_save, FALSE)
+  if (!file.exists(x$file_seurat)) {
+    if (!is_sshfs_mount(remote_from)) {
+      stop('!is_sshfs_mount(remote_from).')
+    }
+    message(glue::glue("Get `file_seurat` from: '{remote_from}'"))
+    file_from <- file.path(remote_from, x$file_seurat)
+    file.copy(file_from, x$file_seurat)
+  }
+  file_script <- file.path(dir_save, glue::glue("sctenifoldknk_{sig}.R"))
+  x$prefix <- prefix <- glue::glue("sctenifoldknk_{sig}")
+  if (TRUE) {
+    lines_fun <- capture.output(dput(.run_scTenifoldKnk))
+    lines_fun[1] <- paste(".run_scTenifoldKnk <- ", lines_fun[1])
+    values <- bind(paste0("'", x$features, "'"))
+    lines_run <- glue::glue(
+      ".run_scTenifoldKnk('{basename(x$file_seurat)}', c({values}), prefix = '{prefix}')"
+    )
+    lines_script <- c(lines_fun, "", lines_run)
+    writeLines(lines_script, file_script)
+  }
+  files <- paste(x$file_seurat, file_script)
+  cmd_prepare <- glue::glue(
+    "ssh {remote} 'mkdir {remote_dir}'"
+  )
+  cmd_send <- glue::glue("scp {files} {remote}:{remote_dir}")
+  pg <- glue::glue(
+    "/data/nas2/software/miniconda3/bin/conda run -n R4.3.3 Rscript"
+  )
+  cmd_run <- glue::glue("ssh {remote} 'cd {remote_dir} && nohup {pg} {basename(file_script)} > task.log 2>&1 &'")
+  cdRun(cmd_prepare)
+  cdRun(cmd_send)
+  cdRun(cmd_run, wait = FALSE)
+}
+
+get_remote_sctenifoldknk.huibang <- function(x,
+  sig = s(rlang::expr_text(substitute(x)), "^[^.]+\\.", ""),
+  pattern = glue::glue("sctenifoldknk_{sig}*"),
+  remote = "graphBan", remote_to = "remote", expect = length(x$features))
+{
+  dir_seurat <- x$dir_seurat
+  dir.create(dir_seurat, FALSE)
+  existFiles <- list.files(dir_seurat, pattern)
+  if (!length(existFiles) || length(existFiles) < expect) {
+    remote_dir <- glue::glue(
+      "~/{s(guess_project(), '^[0-9]+_', '')}"
+    )
+    files <- pattern
+    cmd_get <- glue::glue("scp {remote}:{remote_dir}/{files} {dir_seurat}")
+    cdRun(cmd_get)
+  }
+  existFiles <- list.files(dir_seurat, pattern, full.names = TRUE)
+  if (!is_sshfs_mount(remote_to)) {
+    stop('!is_sshfs_mount(remote_to).')
+  }
+  toDir <- file.path(remote_to, x$dir_seurat)
+  toDir_existFiles <- list.files(toDir, pattern)
+  if (!length(toDir_existFiles) || length(toDir_existFiles) < expect) {
+    message(glue::glue("Send to '{remote_to}'"))
+    file.copy(existFiles, toDir)
+  }
+}
+
+.run_scTenifoldKnk <- function(
+  rds_file,
+  genes_to_analyze,
+  qc = FALSE,
+  prefix = "scTenifoldKnk"
+)
+{
+  # Check required packages
+  required_pkgs <- c("Seurat", "SeuratObject", "scTenifoldKnk", "glue")
+
+  invisible(
+    lapply(required_pkgs, function(pkg) {
+      if (!requireNamespace(pkg, quietly = TRUE)) {
+        stop("Missing required package: ", pkg, call. = FALSE)
+      }
+    })
+  )
+
+  # Read Seurat object
+  message(glue::glue("Reading Seurat object: {rds_file}"))
+  seu <- readRDS(rds_file)
+
+  # Extract HVG
+  hvg <- Seurat::VariableFeatures(seu)
+
+  if (length(hvg) == 0L) {
+    stop("VariableFeatures(seu) is empty.")
+  }
+
+  # Extract count matrix
+  counts <- SeuratObject::GetAssayData(
+    object = seu,
+    layer = "counts"
+  )
+
+  rn <- rownames(counts)
+
+  # Pre-build gene pool and convert once
+  genes_pool <- unique(c(genes_to_analyze, hvg))
+  genes_pool <- intersect(rn, genes_pool)
+
+  message("Convert as matrix...")
+  mat0 <- as.matrix(
+    counts[genes_pool, , drop = FALSE]
+  )
+
+  rn0 <- rownames(mat0)
+
+  # Worker
+  .one_gene <- function(gene)
+  {
+    message(glue::glue("Run with gene: {gene}"))
+    if (match(gene, rn0, nomatch = 0L) == 0L) {
+      message(gene, ": gene not found")
+      return("Gene not found")
+    }
+
+    genes_use <- unique(c(gene, hvg))
+    genes_use <- genes_use[genes_use %in% rn0]
+    mat <- mat0[genes_use, , drop = FALSE]
+
+    tryCatch(
+      {
+        res <- scTenifoldKnk::scTenifoldKnk(
+          countMatrix = mat,
+          gKO = gene,
+          qc = qc
+        )
+        saveRDS(res, glue::glue("{prefix}_{length(hvg)}HVG_{gene}.rds"))
+        message(gene, ": done")
+        res
+      },
+      error = function(e) {
+        message(gene, ": failed - ", e$message)
+        e$message
+      }
+    )
+  }
+  invisible(stats::setNames(
+    lapply(genes_to_analyze, .one_gene),
+    genes_to_analyze
+  ))
+}
+

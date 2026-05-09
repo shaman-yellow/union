@@ -12,11 +12,12 @@ setwd(ORIGINAL_DIR)
 
 .{{{LIBRARY}}}.
 
-myPkg <- "./union.publish"
+myPkg <- "./union/union.utils"
 if (!dir.exists(myPkg)) {
   stop('Can not found package: ', myPkg)
 }
 devtools::load_all(myPkg)
+load_unions()
 setup.huibang()
 
 # ==========================================================================

@@ -13,6 +13,8 @@
     analysis = "DESeq2 差异分析"
     ))
 
+setClassUnion("job_DEG", c("job_limma", "job_deseq2"))
+
 setGeneric("asjob_deseq2",
   function(x, ...) standardGeneric("asjob_deseq2"))
 
@@ -168,7 +170,9 @@ setMethod("step2", signature = c(x = "job_deseq2"),
       x, "对 DESeq 函数处理过后的数据获取差异基因。⟦mark$blue('筛选差异表达基因（DEGs）的标准为 {use} &lt; {cut.p} 且 |log2(FoldChange)| &gt; {cut.fc}')⟧。"
     )
     x <- snapAdd(x, "显著基因统计：\n⟦mark$red('{res$snap}')⟧\n")
-    feature(x) <- res$sets
+    x$.feature <- as_feature(
+      res$sets, glue::glue("DEGs ({x$project}, {bind(names(res$sets))})")
+    )
     x <- tablesAdd(x, t.results, t.sigResults)
     return(x)
   })
@@ -310,31 +314,19 @@ setMethod("focus", signature = c(x = "job_deseq2"),
     # if which set to NULL, wilcox.test will be used.
     # else, the test results in 'results' table will be extracted.
     use <- match.arg(use)
-    if (x@step < 1L) {
-      stop('x@step < 1L.')
-    }
-    data <- SummarizedExperiment::assay(x$vst)
-    fakeLmJob <- .job_limma(sig = x@sig, step = 2L)
-    allData <- lapply(
-      x@tables$step2$t.results, dplyr::rename,
-      adj.P.Val = padj, P.Value = pvalue, logFC = log2FoldChange
-    )
-    fakeLmJob@tables$step2$tops <- allData
-    if (!is.null(which)) {
-      data.which <- allData[[ which ]]
-    } else {
-      data.which <- NULL
-    }
-    fakeLmJob$normed_data <- elist <- new_from_package("EList", "limma",
-      list(E = data, targets = data.frame(object(x)@colData), genes = x$genes)
-    )
+    fakeLmJob <- .as_job_limma.job_deseq2(x)
     if (identical(ref.use, "guess")) {
       ref.use <- .guess_symbol(fakeLmJob)
     }
+    if (!is.null(which)) {
+      data.which <- fakeLmJob@tables$step2$tops[[ which ]]
+    } else {
+      data.which <- NULL
+    }
     fakeLmJob <- suppressMessages(focus(
       fakeLmJob, ref = ref, ref.use = ref.use,
-      .name = .name, which = which, data.which = data.which, sig = sig, 
-      , use = use, test = test, run_roc = run_roc, ...
+      .name = .name, which = which, data.which = data.which, sig = sig,
+      use = use, test = test, run_roc = run_roc, ...
     ))
     where <- paste0("focusedDegs_", .name)
     if (identical(clear, "auto")) {
@@ -346,6 +338,37 @@ setMethod("focus", signature = c(x = "job_deseq2"),
     return(x)
   })
 
+setMethod("cal_corp", signature = c(x = "job_deseq2", y = "NULL"),
+  function(x, y, from, to, use = "symbol", group = NULL, ...)
+  {
+    fakeLmJob <- .as_job_limma.job_deseq2(x)
+    if (is.null(use)) {
+      use <- .guess_symbol(fakeLmJob)
+    }
+    j <- cal_corp(
+      fakeLmJob, NULL, from, to, use = use, group = group, mode = "ggcor", ...
+    )
+    return(j)
+  })
+
+.as_job_limma.job_deseq2 <- function(x) {
+  if (x@step < 1L) {
+    stop('x@step < 1L.')
+  }
+  data <- SummarizedExperiment::assay(x$vst)
+  fakeLmJob <- .job_limma(sig = x@sig, step = 2L)
+  allData <- lapply(
+    x@tables$step2$t.results, dplyr::rename,
+    adj.P.Val = padj, P.Value = pvalue, logFC = log2FoldChange
+  )
+  fakeLmJob@tables$step2$tops <- allData
+  fakeLmJob$normed_data <- new_from_package("EList", "limma",
+    list(E = data, targets = data.frame(object(x)@colData), genes = x$genes)
+  )
+  fakeLmJob$project <- x$project
+  fakeLmJob
+}
+
 setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
   function(x, idType = "Symbol", source = c("local", "biomart"),
     levels = NULL, guess_which_level = 1L, ...)
@@ -356,15 +379,29 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
     if (is.null(levels)) {
       levels <- .get_group_from_contrast_character(names(x@tables$step2$t.results)[guess_which_level])
     }
-    mtx <- SummarizedExperiment::assay(object(des.iua))
+    mtx <- SummarizedExperiment::assay(object(x))
     message("Transform the count to TPM.")
     message(glue::glue("The data dim: {bind(dim(mtx))}"))
-    require(IOBR)
     dir.create("tmp", FALSE)
     source <- match.arg(source)
     args <- list(countMat = mtx, idType = idType, source = source)
+    message(
+      "To avoid environment pollution caused by IOBR loading, So, the IOBR is run with an Subroutine R!!!"
+    )
+    fun_convert <- function(...) {
+      args <- list(...)
+      fun_run_iobr <- function(countMat, idType, source) {
+        require(IOBR)
+        IOBR::count2tpm(
+          countMat = countMat, idType = idType, source = source
+        )
+      }
+      callr::r(
+        fun_run_iobr, args = args, libpath = .libPaths(), show = TRUE
+      )
+    }
     mtx <- expect_local_data(
-      "tmp", "iobr_tpm", IOBR::count2tpm, args
+      "tmp", "iobr_tpm", fun_convert, args
     )
     # mtx <- e(IOBR::count2tpm(mtx, idType = idType, source = source, ...))
     message(glue::glue("The data dim: {bind(dim(mtx))}"))
@@ -375,49 +412,6 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
     x$vst <- vst
     return(x)
   })
-
-.evaluate_by_ROC <- function(data, metadata, gene, 
-  control = "control", sig)
-{
-  if (length(gene) > 1) {
-    stop('length(gene) > 1.')
-  }
-  expr <- data[rownames(data) == gene, ]
-  data <- data.frame(
-    expression = expr, group = metadata$group[match(colnames(data), metadata$sample)]
-  )
-  data$group <- ifelse(data$group == control, 0L, 1L)
-  roc <- e(pROC::roc(data$group, data$expression))
-  auc <- pROC::auc(roc)
-  ci <- pROC::ci.auc(roc)
-  best_coords <- pROC::coords(roc, "best", best.method = "youden",
-    ret = c("threshold", "sensitivity", "specificity", "ppv", "npv", "accuracy"))
-  p.roc <- wrap(as_grob(expression(pROC::plot.roc(roc,
-    main = "ROC Curve",
-    print.auc = TRUE, print.auc.pattern = "AUC: %.3f",
-    auc.polygon = TRUE, auc.polygon.col = "#90EE9020",
-    print.auc.x = ifelse(roc$percent, 30, .3),
-    print.auc.y = ifelse(roc$percent, 10, .1),
-    grid = c(0.1, 0.1), legacy.axes = TRUE
-  ))))
-  p.roc <- set_lab_legend(
-    wrap(p.roc, 6, 4.5),
-    glue::glue("{sig} ROC plot of {gene}"),
-    glue::glue("为 {gene} ROC 曲线|||{detail('note_roc')}")
-  )
-  snap <- glue::glue(
-    paste0(
-      "{gene} 的 ROC 分析结果{aref(p.roc)}，AUC = {round(auc, 3)}，AUC 的 95% 置信区间 = [{round(ci[1], 3)}, {round(ci[3], 3)}]；",
-      "最佳诊断临界值（基于约登指数），临界值 (threshold) = {round(best_coords$threshold, 2)}，敏感度 (Sensitivity) = {round(best_coords$sensitivity, 3)}，特异度 (Specificity) = {round(best_coords$specificity, 3)}。"
-    )
-  )
-  t.best_coords <- best_coords
-  t.best_coords <- .set_lab(
-    t.best_coords, sig, "best coords of", gene
-  )
-  t.best_coords <- setLegend(t.best_coords, "{gene}的最佳临界值诊断结果表格。")
-  namel(p.roc, t.best_coords, auc, ci, roc, snap)
-}
 
 .collate_snap_and_features_by_logfc <- function(lst, col = "log2FoldChange", get = "rownames", prefix = "", cut = 0)
 {
@@ -449,9 +443,79 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
   return(list(snap = snap, sets = sets))
 }
 
-setMethod("set_remote", signature = c(x = "job_deseq2"),
-  function(x, wd)
+setMethod("refine", signature = c(x = "job_DEG"),
+  function(x, ..., name = NULL, use.p = c("pvalue", "padj"), ref = "key", cut.auc = .7)
   {
-    x$wd <- wd
+    fun_extract <- function(x) {
+      alls <- grpf(names(x@params), "^focusedDegs_")
+      if (is.null(name) && length(alls) == 1L) {
+        use <- alls
+      } else if (!is.null(name) && any(name == alls)) {
+        use <- name
+      } else {
+        rlang::abort('What happened?')
+      }
+      data <- x[[ use ]]$summary
+      if (!is.factor(data$group)) {
+        stop('!is.factor(data$group), not valid format of summary.')
+      }
+      data <- dplyr::mutate(data, .group_id = as.integer(group))
+      if (is.null(data)) {
+        stop('is.null(data), no `focus` run?')
+      }
+      data
+    }
+    lst <- list(x)
+    if (...length()) {
+      lst <- c(lst, list(...))
+    }
+    projects <- names <- vapply(lst, function(x) x$project, character(1))
+    lst <- lapply(lst, fun_extract)
+    lst <- setNames(lst, names)
+    levels_main <- levels(lst[[1]]$group)
+    summary <- data_alls <- dplyr::bind_rows(lst, .id = "dataset")
+    snap_auc <- ""
+    if (!is.null(data_alls$auc) && !is.null(cut.auc)) {
+      summary <- dplyr::filter(data_alls, auc > cut.auc)
+      snap_auc <- glue::glue("这些基因的 ROC 分析满足 AUC &gt; {cut.auc}。")
+    }
+    summary <- dplyr::select(
+      summary, dataset, gene, .group_id, trend
+    )
+    project_main <- x$project
+    if (length(lst) > 1) {
+      summary <- find_common_cross_groups(summary, "dataset")
+      summary <- dplyr::filter(
+        summary, dataset == !!project_main
+      )
+    }
+    summary <- dplyr::filter(summary, .group_id == 2L)
+    if (ref == "key") {
+      snap <- "关键基因"
+    } else {
+      stop("...")
+    }
+    fea <- as_feature(summary$gene, snap)
+    x <- .job_venn()
+    x$.feature <- fea
+    fmt <- function(x) {
+      dplyr::recode(x, high = "表达量显著升高", low = "表达量显著下降")
+    }
+    fun_snapThat <- function(ex) {
+      lst <- split(summary, ~ trend)
+      lst <- vapply(
+        lst, function(x) bind(x$gene, co = ", "), FUN.VALUE = character(1)
+      )
+      glue::glue("基因 {unname(lst)} {ex}表现为{fmt(names(lst))}")
+    }
+    use.p <- match.arg(use.p)
+    if (length(lst) > 1) {
+      snaps <- fun_snapThat("一致")
+      x <- snapAdd(x, "综上，在各数据集 ({bind(projects)}) 中，将表达趋势一致的基因定义为{snap}。相比于 {levels_main[1]} 组，在 {levels_main[2]} 组，{bind(snaps)}({detail(use.p)} &lt; 0.05)。{snap_auc}因此，⟦mark$red('将 {bind(summary$gene)} 定义为{snap}')⟧。")
+    } else {
+      snaps <- fun_snapThat("")
+      x <- snapAdd(x, "综上，在 {project_main} 数据集中，在 {levels_main[2]} 组，{bind(snaps)}({detail(use.p)} &lt; 0.05)。{snap_auc}因此，⟦mark$red('将 {bind(summary$gene)} 定义为{snap}')⟧。")
+    }
     return(x)
   })
+

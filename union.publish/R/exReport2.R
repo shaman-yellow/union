@@ -337,7 +337,7 @@ parse_references_from_text <- function(content, reference_text) {
   parse_reference_block <- function(text) {
     text <- gsub("\r", "", text)
     
-    parts <- unlist(strsplit(text, "\n(?=\\d+\\.\\s)", perl = TRUE))
+    parts <- unlist(strsplit(text, "\n\n", perl = TRUE))
     parts <- trimws(parts)
     parts <- sub("^\\d+\\.\\s*", "", parts)
     

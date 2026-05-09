@@ -311,9 +311,21 @@ if (!exists("%||%")) {
 .onLoad <- function(libname, pkgname) {
   .expath()
   .expathsvg()
-  if (requireNamespace("rsvg", quietly = TRUE)) {
-    .check_external_svg()
+  # if (requireNamespace("rsvg", quietly = TRUE)) {
+  #   .check_external_svg()
+  # }
+}
+
+.get_description <- function(file, bind = "\n") {
+  file <- file.path(.expath, "description", file)
+  if (!file.exists(file)) {
+    stop('!file.exists(file), no such description file.')
   }
+  des <- readLines(file)
+  if (!is.null(bind)) {
+    des <- bind(des, co = bind)
+  }
+  des
 }
 
 #' @export agroup
@@ -913,7 +925,7 @@ smart_wrap <- function(plots, size = 3, ...) {
         } else {
           x
         }
-      }), ncol = layout[["cols"]]
+      }), ncol = layout[[ "cols" ]]
   )
   p <- wrap_layout(p, layout, size)
   p$layout <- layout
@@ -944,22 +956,37 @@ capitalize <- function (string)
 }
 
 bind_image_add_spacer <- function(x, y, stack = FALSE, 
-  space = 20, color = "white", trim = TRUE)
+  space = 20, color = "white", trim = TRUE, f.extend = 1, 
+  rev.extend = FALSE, trim.x = TRUE, trim.y = TRUE)
 {
   if (trim) {
-    x <- magick::image_trim(x)
-    y <- magick::image_trim(y)
+    if (trim.x) {
+      x <- magick::image_trim(x)
+    }
+    if (trim.y) {
+      y <- magick::image_trim(y)
+    }
   }
   fun_extend <- function(x, y, type = "width") {
-    gravity <- switch(type, width = "east", height = "north")
+    if (is.null(f.extend)) {
+      return(namel(x, y))
+    }
+    message(glue::glue("Extend type: {type}"))
+    if (rev.extend) {
+      gravity <- switch(type, width = "west", height = "south")
+    } else {
+      gravity <- switch(type, width = "east", height = "north")
+    }
     levels <- c(magick::image_info(x)[[type]], magick::image_info(y)[[type]])
     if (diff(levels) > 1) {
       x <- magick::image_extent(
-        x, geometry = sprintf("x%d", max(levels)), gravity = gravity
+        x, geometry = sprintf("x%d", floor(max(levels) * f.extend)), 
+        gravity = gravity
       )
     } else {
       y <- magick::image_extent(
-        y, geometry = sprintf("x%d", max(levels)), gravity = gravity
+        y, geometry = sprintf("x%d", floor(max(levels) * f.extend)), 
+        gravity = gravity
       )
     }
     namel(x, y)
@@ -980,7 +1007,9 @@ bind_image_add_spacer <- function(x, y, stack = FALSE,
       width = space, height = magick::image_info(x)$height, color = color
     )
   }
-  magick::image_append(c(x, spacer, y), stack = stack)
+  magick::image_append(
+    c(spacer, x, spacer, y, spacer), stack = stack
+  )
 }
 
 split_image_by_click <- function(img) {
