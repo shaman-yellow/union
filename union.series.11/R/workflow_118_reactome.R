@@ -25,7 +25,7 @@ setMethod("asjob_reactome", signature = c(x = "job_seurat"),
       fea <- as_feature(levels(Seurat::Idents(object)), "关键细胞", "cell")
       ref <- snap(fea)
     }
-    snapAdd_onExit("x", "将{ref}进行通路富集分析。")
+    snapAdd_onExit("x", "将{bind(ref)}进行通路富集分析。")
     if (is.null(object@meta.data[[compare.by]])) {
       stop('is.null(object@meta.data[[compare.by]]).')
     }
@@ -60,9 +60,24 @@ setMethod("step0", signature = c(x = "job_reactome"),
   })
 
 setMethod("step1", signature = c(x = "job_reactome"),
-  function(x){
+  function(x, fallback = TRUE, verify = TRUE)
+  {
     step_message("Send to reactome server.")
     cli::cli_alert_info("ReactomeGSA::perform_reactome_analysis")
+    if (fallback) {
+      options(reactome_gsa.url = "http://gsa.reactome.org")
+    }
+    if (!verify) {
+      Sys.setenv(
+        R_REMOTES_NO_ERRORS_FROM_WARNINGS = "true"
+      )
+      httr::set_config(
+        httr::config(
+          ssl_verifypeer = FALSE,
+          ssl_verifyhost = FALSE
+        )
+      )
+    }
     object(x) <- ReactomeGSA::perform_reactome_analysis(object(x), verbose = TRUE)
     x <- methodAdd(x, "反应组基因集分析（Reactome Gene Set Analysis，ReactomeGSA）是 Reactome 知识库旗下的多组学通路分析工具，可通过 Camera、PADOG 等方法将单细胞数据转化为通路水平信息，通过计算细胞集群平均表达量实现通路富集分析，识别细胞功能特征，解析细胞异质性。")
     x <- methodAdd(x, "使用 R 包 `ReactomeGSA` ⟦pkgInfo('ReactomeGSA')⟧ 基于基因表达量对 Reactome 通路进行“活性评分”。")

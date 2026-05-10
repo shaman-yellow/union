@@ -153,7 +153,7 @@ push_script.hb <- function(..., .project = guess_project(),
             lines[pos] <- s(
               lines[pos], glue::glue("\"[0-9]+_{theme}\""), glue::glue("\"{num}_{theme}\"")
             )
-            writeLine(lines, pathScript)
+            writeLines(lines, pathScript)
             return(file.path(pathScript))
           }
           return(file.path(path, existFiles))
@@ -508,6 +508,10 @@ methodDefinition_as_setMethod_call <- function(m) {
   }
   fun <- get_fun(fun_name, envir = envs_search[ hasThat ][[1]])
   if (isS4(fun)) {
+    if (!is(fun, "genericFunction")) {
+      message(glue::glue("Skip: {fun_name}, is S4, but not genericFunction."))
+      return()
+    }
     res <- .expr_resolve_S4(funCall, env_class = env_class)
     f <- try(selectMethod(res$callArgs$fun, signature = res$signature))
     if (inherits(f, "try-error")) {
@@ -525,6 +529,14 @@ methodDefinition_as_setMethod_call <- function(m) {
 
 .guess_class_from_lang <- function(lang, pattern = "job_[a-zA-Z0-9_]+", env_class = NULL)
 {
+  if (is(lang, "name")) {
+    from <- rlang::expr_text(lang)
+    if (!is.null(env_class[[from]])) {
+      return(env_class[[ from ]])
+    } else {
+      return(NULL)
+    }
+  }
   code <- rlang::expr_text(lang)
   class <- strx(code, pattern)
   fun_matchClass <- function(string, type = "rds") {
@@ -579,7 +591,10 @@ methodDefinition_as_setMethod_call <- function(m) {
 
 setup_counting_in_directory <- function(dir, pattern = "^[0-9]+") {
   unlink(list.files(dir, pattern, full.names = TRUE), force = TRUE)
-  options(autor_counting_start_dir = dir)
+  options(
+    autor_counting_start_dir = dir,
+    savedir = list(figs = dir, tabs = dir)
+  )
 }
 
 output_with_counting_number <- function(plots, envir = .GlobalEnv, 
@@ -848,10 +863,10 @@ save_small.huibang <- function(name, cutoff = 50, dir = "rdata_smallObject")
 }
 
 .set_gwas_token <- function() {
-  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc3Mjc0OTIyLCJleHAiOjE3Nzg0ODQ1MjJ9.e3RIs5GquY6d7HbiB0SrpWQtCG0CKMlzT4CHQvK-ZXSjUZPPs4m5g1MXR-AE5FhPXi-3ZbB5kh53_P0vU7okt28eG7dVXu7yGdE2bcEElNrUTkN_xgXpoVqjORK4sWBMucAVy7M0JH9DOw8wVPmkUVjaW3zXahvqN-zZhZLY_qHAaNVWKxeR9JRYNqxdf0p9IWdTbt46mCS2RdQg5ab1F4U18iUwgvMiHwCPvSv3yI_Z2d34PkQ3d0vpM5QHlKBImRtECDICL5XIBaHQfLX70Xc5KXH5hk3ors5pen90V5tnmCeiXQOMEr2xiJ9JhX0Kec-E09JYoCFNv8nh4eiWQg"
-  expire <- as.Date("2026-05-11")
+  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc4NDM2MzMyLCJleHAiOjE3Nzk2NDU5MzJ9.QwON99L9dvJ1EOSAg4qYvzoYss__oVbAt2Y9SvLfE0c5gRPCpaL1m8rj_d79Rh0qo8CTmNG39WZCB4o-KGbhHynVWJX9saIq-0tfQ3-Ww2KxTBVxZr4hn24XHwnraXUB00c03FOdVbA_Bk34py2_Fc_9arUT9PY2G87wpzLeEGYcnG5pRrI8yRQjyjI175OjCxFGvM1WKf3ccvUP6fJKj5lfNlok_aux9TSoLESDLsAby3ctrJ1gNmOVND1ONcTicEjVyOvTdW0LARcX7QBIwSLo0YCAM6AJqbScHb5YMXzFEJbgiLjj2bTfBSV2BlKcLyOhAP8Z4Cnt5lceiDFczg"
+  expire <- as.Date("2026-05-24")
   if (Sys.Date() >= expire) {
-    message(glue::glue("GWAS API token expired."))
+    message(glue::glue("GWAS API token expired, please reset it: <https://api.opengwas.io/profile/>"))
     NULL
   } else {
     token
@@ -910,7 +925,7 @@ send_job_to_remote <- function(path, to = "rds_jobSave", remote = "remote") {
 
 run_in_project_nohup <- function(script, ...) {
   run_in_project(
-    script, ..., wait = FALSE, ex1 = "nohup", ex2 = "> task.log 2>&1 &"
+    script, ..., wait = FALSE, ex1 = "nohup", ex2 = "> task_nohup.log 2>&1 &"
   )
 }
 
@@ -1018,7 +1033,7 @@ get_contents_refered_from_fields <- function(
         # Terror <<- namel(indices, res)
         stop('!all(indices %in% seq_along(res$reference)), not match reference.')
       }
-      pmids <- strx(res$reference, "(?<=PMID:[\\s\n\\d])[0-9]+")
+      pmids <- strx(res$reference, "(?<=PMID:[\\s\n\\d]{0,1})[0-9]+")
       if (any(is.na(pmids))) {
         stop('any(is.na(pmids)), some reference do not have pmid, please check manualy')
       }

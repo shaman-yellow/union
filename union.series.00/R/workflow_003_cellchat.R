@@ -107,9 +107,11 @@ setMethod("step1", signature = c(x = "job_cellchat"),
       p.showdb <- e(CellChat::showDatabaseCategory(db))
       p.showdb <- wrap(p.showdb, 8, 4)
       object(x)@DB <- db
-      future::plan("multisession", workers = workers)
       object(x) <- e(CellChat::subsetData(object(x)))
       ## cell communication
+      # old_plan <- future::plan()
+      # future::plan(future::multicore, workers = workers)
+      # on.exit(future::plan(old_plan))
       object(x) <- e(CellChat::identifyOverExpressedGenes(object(x)))
       object(x) <- e(CellChat::identifyOverExpressedInteractions(object(x)))
       x <- methodAdd(x, "以 CellChat::identifyOverExpressedGenes、CellChat::identifyOverExpressedInteractions，寻找高表达的信号基因之间的相互通讯。")

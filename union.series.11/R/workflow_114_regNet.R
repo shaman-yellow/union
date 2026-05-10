@@ -164,8 +164,12 @@ setMethod("step2", signature = c(x = "job_regNet"),
     message(glue::glue("Got data: {try_snap(ins, 'gene_name', 'mirna_name')}"))
     x$ins_mirna <- ins
     ins.snap <- try_snap(ins, "gene_name", "mirna_name")
-    x <- snapAdd(x, "将数据库 {bind(names(sets))} 预测或记录的 mRNA 的上游 miRNA，二者 mRNA-miRNA 关系对取交集，共得到 {nrow(ins)} 对调控关系【{ins.snap}】。")
-    x <- methodAdd(x, "取以上数据库的交集，确定高可信度的miRNA-mRNA调控配对。")
+    if (length(sets) > 1) {
+      x <- snapAdd(x, "将数据库 {bind(names(sets))} 预测或记录的 mRNA 的上游 miRNA，二者 mRNA-miRNA 关系对取交集，共得到 {nrow(ins)} 对调控关系【{ins.snap}】。")
+      x <- methodAdd(x, "取以上数据库的交集，确定高可信度的miRNA-mRNA调控配对。")
+    } else {
+      x <- snapAdd(x, "将数据库 {bind(names(sets))} 预测或记录的 mRNA 的上游 miRNA 建立 mRNA-miRNA 关系对，共得到 {nrow(ins)} 对调控关系【{ins.snap}】。")
+    }
     return(x)
   })
 
@@ -272,9 +276,41 @@ setMethod("step5", signature = c(x = "job_regNet"),
   })
 
 setMethod("step6", signature = c(x = "job_regNet"),
-  function(x, trrust = TRUE, layout = "fr")
+  function(x, trrust = TRUE, chipbase = FALSE,
+    layout = "fr", filter_chipbase = TRUE, num_quantile = .9, n_min_support = 3L)
   {
     targets <- object(x)
+    if (chipbase) {
+      file_chipbase <- get_url_data(
+        "hg38_network.bed.gz",
+        "https://rnasysu.com/chipbase3/data/download/network/hg38_network.bed.gz",
+        "chipbase", fun_decompress = NULL
+      )
+      fun_read <- function(...) {
+        .shFilter_read_table_by_id(
+          file_chipbase, targets, "gene_symbol", "\t"
+        )
+      }
+      chipbase <- expect_local_data(
+        "tmp", "chipbase_network", fun_read, list(targets)
+      )
+      chipbase <- dplyr::filter(chipbase, protein_tf_type == "tf")
+      which_not_in_data(chipbase, "gene_symbol", targets)
+      chipbase <- dplyr::rename(chipbase, TF = protein, Target = gene_symbol)
+      if (nrow(chipbase)) {
+        if (filter_chipbase) {
+          chipbase <- .filter_chipbase_tf(
+            chipbase, num_quantile = num_quantile, n_min_support = n_min_support
+          )
+        }
+        chipbase <- dplyr::relocate(chipbase, TF, Target)
+        chipbase <- dplyr::distinct(chipbase, TF, Target, .keep_all = TRUE)
+      }
+      x$all_tf$chipbase <- chipbase
+      x <- methodAdd(x, "\n\n基于 ChIPBase v3.0 数据库 <https://rnasysu.com/chipbase3/index.php> 获取转录因子与靶基因之间的潜在调控关系。该数据库整合了大量 ChIP-seq 数据，可用于系统分析转录因子在基因启动子或增强子区域的结合情况，并提供转录调控关系及表达相关性信息。通过将候选基因映射至 ChIPBase v3.0，可识别其潜在上游转录因子，并进一步构建 TF–target 调控网络，从而挖掘关键转录调控轴及其在相关生物学过程中的潜在作用机制。")
+      meth <- .description_filter_chipbase(num_quantile, n_min_support)
+      x <- methodAdd(x, "{meth}")
+    }
     if (trrust) {
       trrust <- ftibble(get_url_data(
           "trrust_rawdata.human.tsv",
@@ -287,7 +323,7 @@ setMethod("step6", signature = c(x = "job_regNet"),
       trrust <- dplyr::filter(trrust, Target %in% !!targets)
       which_not_in_data(trrust, "Target", targets)
       x$all_tf$trrust <- trrust
-      x <- methodAdd(x, "基于 TRRUST 数据库获取转录因子（TF）与靶基因之间的调控关系，用于构建转录调控网络并筛选关键调控因子。TRRUST 收录了经文献证据支持的人类和小鼠转录调控关系，包含转录因子、靶基因及其激活或抑制作用等信息。通过将基因映射至该数据库，可识别其上游调控转录因子，并进一步构建 TF–target 调控网络，挖掘核心转录因子及潜在调控轴，为解析基因表达调控机制提供依据。")
+      x <- methodAdd(x, "基于 TRRUST 数据库 (<https://www.grnpedia.org>) 获取转录因子（TF）与靶基因之间的调控关系，用于构建转录调控网络并筛选关键调控因子。TRRUST 收录了经文献证据支持的人类和小鼠转录调控关系，包含转录因子、靶基因及其激活或抑制作用等信息。通过将基因映射至该数据库，可识别其上游调控转录因子，并进一步构建 TF–target 调控网络，挖掘核心转录因子及潜在调控轴，为解析基因表达调控机制提供依据。")
     }
     data <- .merge_list_by_cols(x$all_tf, by = c("TF", "Target"))
     nodes <- list(
@@ -310,11 +346,11 @@ setMethod("step6", signature = c(x = "job_regNet"),
       guides(
         size = "none", shape = "none",
         color = guide_legend(override.aes = list(size = 4))
-      ) +
+        ) +
       scale_size_manual(values = c(mRNA = 10, TF = 6)) +
       scale_shape_manual(
         values = c(mRNA = 16, TF = 17)
-      ) +
+        ) +
       labs(color = "Type") +
       theme_void()
     p.regTF <- set_lab_legend(
@@ -327,14 +363,87 @@ setMethod("step6", signature = c(x = "job_regNet"),
     return(x)
   })
 
+
+
+.filter_chipbase_tf <- function(
+  data_chipbase,
+  col_tf = "TF",
+  col_target = "Target",
+  vec_promoter_col = c("up1", "down1"),
+  col_n_sample = "total_samples_num",
+  num_quantile = 0.75,
+  n_min_support = 1L
+)
+{
+  vec_keep_promoter <- apply(
+    data_chipbase[, vec_promoter_col, drop = FALSE],
+    MARGIN = 1L,
+    FUN = function(x)
+    {
+      any(x > 0L, na.rm = TRUE)
+    }
+  )
+
+  data_chipbase <- data_chipbase[
+    vec_keep_promoter,
+    ,
+    drop = FALSE
+    ]
+
+  message(
+    glue::glue(
+      "Promoter proximal records retained: {nrow(data_chipbase)}"
+    )
+  )
+
+  data_pair <- dplyr::rename(
+    data_chipbase, n_sample = !!rlang::sym(col_n_sample)
+  )
+
+  data_pair <- dplyr::group_by(
+    data_pair,
+    .data[[col_target]]
+  )
+
+  data_pair <- dplyr::mutate(
+    data_pair,
+    n_cutoff = max(
+      n_min_support,
+      stats::quantile(
+        n_sample,
+        probs = num_quantile,
+        na.rm = TRUE
+      )
+    )
+  )
+
+  data_pair <- dplyr::filter(
+    data_pair,
+    n_sample >= n_cutoff
+  )
+
+  data_pair <- dplyr::ungroup(
+    data_pair
+  )
+
+  message(
+    glue::glue(
+      "Retained TF-target pairs: {nrow(data_pair)}"
+    )
+  )
+
+  return(data_pair)
+}
+
 .merge_list_by_cols <- function(sets, by, keep = seq_along(by)) {
+  sets <- lapply(sets, function(x) dplyr::distinct(x[, keep]))
   if (length(sets) > 1) {
-    ins <- sets[[1]][, keep]
+    ins <- sets[[1]]
     for (i in 2:length(sets)) {
-      ins <- merge(ins, sets[[ i ]][, keep], by = by)
+      ins <- merge(ins, sets[[ i ]], by = by)
     }
   } else {
-    ins <- sets[[1]][, keep]
+    ins <- sets[[1]]
   }
   ins
 }
@@ -352,7 +461,7 @@ get_encori_miRNA_lncRNA <- function(miRNA, dir_db = .prefix("encori", "db"))
   query <- db@query
   if (length(query)) {
     res <- pbapply::pbsapply(query, .api_encori_miRNA_lncRNA, simplify = FALSE)
-    res <- frbind(res, idcol = ".id")
+    res <- frbind(res, idcol = ".id", fill = TRUE)
     db <- upd(db, res)
   }
   res <- dplyr::filter(db@db, .id %in% !!miRNA)
@@ -373,11 +482,12 @@ get_url_data <- function(expect_filename, url,
   expect_file <- file.path(dir, expect_filename)
   if (!file.exists(expect_file)) {
     dir.create(dir, FALSE)
-    download_file <- file.path(
-      dir, paste0(name, ".", tools::file_ext(url))
-    )
     if (is.null(fun_decompress)) {
       download_file <- expect_file
+    } else {
+      download_file <- file.path(
+        dir, paste0(name, ".", tools::file_ext(url))
+      )
     }
     utils::download.file(url, destfile = download_file)
     if (!is.null(fun_decompress)) {
@@ -434,3 +544,37 @@ get_miRNetR.huibang <- function() {
   pak::pkg_install
 }
 
+.description_filter_chipbase <- function(num_quantile, n_min_support)
+{
+  num_quantile_percent <- num_quantile * 100
+  glue::glue('为降低不同目标基因间公共 ChIP-seq 数据覆盖度差异带来的偏倚，本研究未采用统一固定的全局样本数阈值进行筛选。首先，仅保留在转录起始位点（TSS）上下游 ±1 kb 启动子邻近区域存在结合证据的 TF-target 相互作用。随后，统计每个 TF-target 关系对应的支持记录数，并在各 target 基因内部进行分位数筛选。具体筛选标准定义为：
+
+$$
+n_{sample} \\geq \\max\\left(
+<<n_min_support>>,
+Q_{<<num_quantile_percent>>}(n_{sample})
+\\right)
+$$
+
+其中，$n_{sample}$ 表示对应 TF-target 关系的支持记录数，$Q$ 表示各 target 基因内部支持记录数分布的分位数函数。最终保留满足条件的高可信度 TF-target 相互作用用于后续调控网络构建。', .open = "<<", .close = ">>")
+}
+
+
+#
+# chipbase <- dplyr::mutate(
+#   chipbase, sample_id = strx(name, "ChIPBase3ID[0-9]+"), .before = 1
+# )
+# data_motif <- ftibble(get_url_data(
+#     "hg38_motif.txt.gz",
+#     "https://rnasysu.com/chipbase3/data/download/motif/hg38_motif.txt.gz",
+#     "chipbase", fun_decompress = NULL
+#     ))
+# chipbase <- map(
+#   chipbase, "sample_id", data_motif, "sample_id", "best_match", col = "Regulator"
+# )
+# chipbase <- dplyr::mutate(
+#   chipbase, TF = Regulator
+# )
+# chipbase <- dplyr::relocate(
+#   chipbase, TF, Target = gene_symbol
+# )

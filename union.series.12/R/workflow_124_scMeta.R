@@ -113,6 +113,7 @@ setMethod("step2", signature = c(x = "job_scMeta"),
     .data = data, .row = rlang::quo(!!rlang::sym(col)), .column = rlang::quo(Cell),
     .value = rlang::quo(value), cluster_columns = FALSE, column_names_rot = 90,
     cluster_rows = TRUE, group_by = rlang::quo(group),
+    palette_value = c("#053061FF", "White", "#67001FFF"),
     row_names_max_width = grobWidth(textGrob(rownames(data), gpar(fontsize = 10, fontface = 1)))
   )
   wrap_scale_heatmap(

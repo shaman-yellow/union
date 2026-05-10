@@ -50,6 +50,11 @@ setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
         stop('length(compare) != 2.')
       }
       Seurat::Idents(object(x)) <- compare.by
+      if (SeuratObject::DefaultAssay(object(x)) == "SCT" && !is.null(x$seurat_subset) && x$seurat_subset) {
+        SeuratObject::DefaultAssay(object(x)) <- "RNA"
+        object(x) <- e(Seurat::NormalizeData(object(x)))
+        object(x) <- e(Seurat::ScaleData(object(x)))
+      }
       diff_genes <- e(Seurat::FindMarkers(object(x), compare[1], compare[2]))
       snap(diff_genes) <- glue::glue("使用 Seurat::FindMarkers 默认参数进行组间比较 {bind(compare, co = ' vs ')}")
     }
@@ -257,47 +262,114 @@ setMethod("step4", signature = c(x = "job_monocle2"),
   })
 
 setMethod("step5", signature = c(x = "job_monocle2"),
-  function(x, maxShow = 50, workers = 1, rerun = FALSE)
+  function(x, point = NULL, list_branches = NULL,
+    maxShow = 50, workers = 1, 
+    rerun = FALSE, features = NULL)
   {
-    step_message("differentialGeneTest (Pseudotime)")
-    run_diff <- function(cds, cores) {
-      require(monocle)
-      require(VGAM)
-      monocle::differentialGeneTest(cds = cds, cores = cores)
-    }
-    fun_cache <- function(...) {
-      genes <- x$VariableFeatures
-      callr::r(
-        run_diff, list(cds = object(x)[genes, ], cores = workers),
-        libpath = .libPaths(), show = FALSE
+    step_message("Pseudotime heatmap.")
+    if (!is.null(features)) {
+      if (!is(features, "feature")) {
+        stop('!is(features, "feature").')
+      }
+      genes <- resolve_feature(features)
+      x <- snapAdd(x, "以 `monocle::plot_genes_branched_heatmap` 函数，绘制拟时序相关基因表达热图，展示关键分支点上 {snap(features)} 表达动态变化。")
+    } else {
+      run_diff <- function(cds, cores) {
+        require(monocle)
+        require(VGAM)
+        monocle::differentialGeneTest(cds = cds, cores = cores)
+      }
+      fun_cache <- function(...) {
+        genes <- x$VariableFeatures
+        callr::r(
+          run_diff, list(cds = object(x)[genes, ], cores = workers),
+          libpath = .libPaths(), show = FALSE
+        )
+      }
+      args <- x$.args[ names(x$.args) %in% paste0("step", 1:4) ]
+      diff_test_pseudotime <- expect_local_data(
+        "tmp", "monocle_diff", fun_cache, list(args), rerun = rerun
       )
+      x <- methodAdd(x, "以 `monocle::differentialGeneTest` 根据 Pseudotime 鉴定高变基因中 (n = {length(x$VariableFeatures)}) 随拟时间动态变化且相关的基因。")
+      x <- snapAdd(x, "根据 Pseudotime 一共鉴定到 {nrow(data)} (⟦mark$blue('qval &lt; 0.05')⟧) 个随时间轴变化的基因，并以热图展示{aref(p.hp)} (Top {length(genes)})。")
+      diff_test_pseudotime <- tibble::as_tibble(diff_test_pseudotime)
+      x$diff_test_pseudotime <- diff_test_pseudotime <- dplyr::arrange(diff_test_pseudotime, qval)
+      data <- dplyr::filter(diff_test_pseudotime, qval < .05)
+      genes <- head(data$gene_short_name, n = maxShow)
     }
-    args <- x$.args[ names(x$.args) %in% paste0("step", 1:4) ]
-    diff_test_pseudotime <- expect_local_data(
-      "tmp", "monocle_diff", fun_cache, list(args), rerun = rerun
-    )
-    x <- methodAdd(x, "以 `monocle::differentialGeneTest` 根据 Pseudotime 鉴定高变基因中 (n = {length(x$VariableFeatures)}) 随拟时间动态变化且相关的基因。")
-    diff_test_pseudotime <- tibble::as_tibble(diff_test_pseudotime)
-    x$diff_test_pseudotime <- diff_test_pseudotime <- dplyr::arrange(diff_test_pseudotime, qval)
-    data <- dplyr::filter(diff_test_pseudotime, qval < .05)
-    genes <- head(data$gene_short_name, n = maxShow)
-    fun_heatmap <- function(cds) {
+    if (length(genes) < 4L) {
+      n_cluster <- 1L
+    } else {
+      n_cluster <- 4L
+    }
+    fun_heatmap <- function(cds, point, n_cluster, list_branches) {
       require(monocle)
-      monocle::plot_pseudotime_heatmap(
-        cds, num_clusters = 4,
-        show_rownames = TRUE, return_heatmap = TRUE
-      )
+      if (!is.null(point)) {
+        if (is.null(list_branches)) {
+          monocle::plot_genes_branched_heatmap(
+            cds, branch_point = point, num_clusters = n_cluster,
+            show_rownames = TRUE, return_heatmap = TRUE
+          )
+        } else {
+          lapply(list_branches,
+            function(branch_states) {
+              if (length(branch_states) != 2) {
+                stop('length(branch_states) != 2.')
+              }
+              branch_labels <- paste0("Cell state ", branch_states)
+              message(
+                glue::glue("Compare cell state: {paste(branch_states, collapse = ' vs ')}")
+              )
+              monocle::plot_genes_branched_heatmap(
+                cds, branch_point = point,
+                branch_states = branch_states,
+                branch_labels = branch_labels,
+                num_clusters = n_cluster,
+                show_rownames = TRUE, return_heatmap = TRUE
+              )
+            })
+        }
+      } else {
+        monocle::plot_pseudotime_heatmap(
+          cds, num_clusters = n_cluster,
+          show_rownames = TRUE, return_heatmap = TRUE
+        )
+      }
     }
     p.hp <- callr::r(
-      fun_heatmap, list(cds = object(x)[genes, ]),
+      fun_heatmap, list(
+        cds = object(x)[genes, ], point = point,
+        n_cluster = n_cluster, list_branches
+        ),
       libpath = .libPaths(), show = TRUE
     )
-    p.hp <- set_lab_legend(
-      wrap(p.hp$gtable, 5, 8),
-      glue::glue("{x@sig} pseudotime significant genes in heatmap"),
-      glue::glue("Monocle 拟时分析热图|||图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。")
-    )
-    x <- snapAdd(x, "根据 Pseudotime 一共鉴定到 {nrow(data)} (⟦mark$blue('qval &lt; 0.05')⟧) 个随时间轴变化的基因，并以热图展示{aref(p.hp)} (Top {length(genes)})。")
+    if (!is.null(point)) {
+      x$hp_raw <- p.hp
+      if (is.null(list_branches)) {
+        grob <- p.hp$ph_res$gtable
+        p.hp <- wrap_scale_heatmap(
+          grob, 12, length(genes), 
+          pre_height = 3L, raw = FALSE
+        )
+      } else {
+        layout <- wrap_layout(NULL, length(list_branches), f.w = 1.5)
+        p.hp <- patchwork::wrap_plots(
+          lapply(p.hp, function(x) x$ph_res$gtable), ncol = layout$ncol
+        )
+        p.hp <- add(layout, p.hp)
+      }
+      p.hp <- set_lab_legend(
+        p.hp,
+        glue::glue("{x@sig} pseudotime genes in heatmap with branch"),
+        glue::glue("Monocle 拟时分析热图|||拟时间分支节点上的基因表达变化。图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。")
+      )
+    } else {
+      p.hp <- set_lab_legend(
+        wrap(p.hp$gtable, 5, 8),
+        glue::glue("{x@sig} pseudotime genes in heatmap"),
+        glue::glue("Monocle 拟时分析热图|||图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。")
+      )
+    }
     x <- plotsAdd(x, p.hp)
     return(x)
   })

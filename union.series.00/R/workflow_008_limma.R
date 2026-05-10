@@ -804,7 +804,7 @@ setMethod("focus", signature = c(x = "job_limma"),
       )
     )
   } else {
-    snap <- glue::glue("{gene} 的 ROC 分析结果{aref(p.roc)}，AUC = {.round(auc)}。")
+    snap <- glue::glue("{gene} 的 AUC = {.round(auc)}。")
   }
   t.best_coords <- best_coords
   t.best_coords <- .set_lab(

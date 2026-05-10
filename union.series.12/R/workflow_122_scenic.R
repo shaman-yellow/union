@@ -221,7 +221,7 @@ setMethod("map", signature = c(x = "job_scenic", ref = "job_seurat"),
     )
     p.hp <- wrap_scale_heatmap(
       funPlot(heatmap_with_group, args),
-      data$Cell, data$Feature, pre_width = 3, w.size = .002, 
+      data$Cell, data$Feature, pre_width = 3, pre_height = 5, w.size = .002, 
       h.size = .005, min_width = 12, min_height = 8
     )
     p.hp <- set_lab_legend(
@@ -380,10 +380,14 @@ setMethod("diff", signature = c(x = "job_scenic"),
         list(
           .data = dotData, .row = quote(Regulon), .column = quote(Cell_type),
           .value = quote(Activity_Scaled), cluster_columns = FALSE,
-          cluster_rows = TRUE, group_by = quote(Group)
+          cluster_rows = TRUE, group_by = quote(Group),
+          palette_value = c("#053061FF", "White", "#67001FFF")
           ))
       p.hp <- set_lab_legend(
-        p.hp,
+        wrap_scale_heatmap(
+          p.hp, dotData$Cell_type, dotData$Regulon,
+          pre_width = 4.5, pre_height = 3
+        ),
         glue::glue("{x@sig} Diff regulon in {name}"),
         glue::glue("{name}中的差异 Regulon|||纵坐标表示 Regulon，横坐标表示细胞类型，热图颜色代表标准化后的 Regulon 活性。")
       )
@@ -402,6 +406,20 @@ setMethod("diff", signature = c(x = "job_scenic"),
     x <- snapAdd(
       x, "对 Regulon 的 AUCell 活性差异分析一共筛选到 {nrow(diff_regulon)} 个显著差异的 Regulon。对显著性结果按 Log2FC 降序排序，排名前 {nrow(data)} 的 Regulon 中，{snap}", step = .name
     )
+    # plot dimention
+    if (nrow(diff_regulon)) {
+      data_show <- dplyr::slice_max(diff_regulon, abs(avg_log2FC), n = 10)
+      layout <- wrap_layout(NULL, nrow(data_show))
+      ps.map <- e(Seurat::FeaturePlot(
+          object, features = data_show$regulon, combine = FALSE
+          ))
+      p.map <- add(layout, ps.map, TRUE)
+      p.map <- set_lab_legend(p.map,
+        glue::glue("{x@sig} Top differential regulon Activity UMAP mapping"),
+        glue::glue("Top 差异 Regulon 活性 UMAP 图||| 对显著性结果按 Log2FC 降序排序 Top {nrow(data_show)} 的 Regulon 活性 UMAP 图。")
+      )
+      lst_results$p.map <- p.map
+    }
     x[[ name_save ]] <- lst_results
     x <- stepPostModify(x, formal = FALSE)
     return(x)

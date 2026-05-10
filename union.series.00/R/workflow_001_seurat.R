@@ -480,8 +480,10 @@ setMethod("anno", signature = c(x = "job_seurat"),
         p.props_scsa_stat, .guess_levels_from_job_seurat(x), 
         name = "", mode = "ratio"
       )
-      # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
-      x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比做差异分析。{snap_stat}")
+      if (length(snap_stat)) {
+        # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
+        x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比做差异分析。{snap_stat}")
+      }
       x <- plotsAdd(x, p.props_scsa_stat)
     }
     return(x)
@@ -781,6 +783,7 @@ setMethod("getsub", signature = c(x = "job_seurat"),
     } else {
       object(x) <- e(SeuratObject:::subset.Seurat(object(x), ...))
     }
+    x$seurat_subset <- TRUE
     return(x)
   })
 

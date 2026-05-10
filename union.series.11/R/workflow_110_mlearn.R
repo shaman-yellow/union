@@ -130,7 +130,7 @@ setMethod("step1", signature = c(x = "job_mlearn"),
   })
 
 setMethod("step2", signature = c(x = "job_mlearn"),
-  function(x, n = 10, lambda.type = c("1se", "min"), seed = x$seed, ...)
+  function(x, n = 10, lambda.type = c("1se", "min"), alpha = 1, seed = x$seed, ...)
   {
     step_message("Lasso")
     lambda.type <- match.arg(lambda.type)
@@ -140,7 +140,7 @@ setMethod("step2", signature = c(x = "job_mlearn"),
     set.seed(seed)
     cv_lasso <- e(glmnet::cv.glmnet(
         x = data, y = target,
-        family = "binomial", alpha = 1, nfolds = n,
+        family = "binomial", alpha = alpha, nfolds = n,
         # type.measure = "deviance",
         standardize = TRUE, parallel = FALSE
         ))
@@ -201,7 +201,13 @@ setMethod("step2", signature = c(x = "job_mlearn"),
     )
     x <- plotsAdd(x, p.lasso_cv, p.coefs_path)
     prin <- if (lambda.type == "lambda.1se") "1-SE" else "最小误差"
-    x <- methodAdd(x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO 逻辑回归分析。设置 α = 1 实现 L1 正则化，通过 {n} 折交叉验证结合 {prin} 准则确定最优 λ 值。")
+    if (alpha == 1) {
+      x <- methodAdd(x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO 逻辑回归分析。设置 α = 1 实现 L1 正则化，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值。")
+    } else if (alpha < 1) {
+      x <- methodAdd(x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO (Elastic Net) 回归分析。设置 α = {alpha} 实现 L1 与 L2 正则化的加权组合，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值。")
+    } else {
+      stop('alpha?')
+    }
     x <- snapAdd(x, "LASSO 筛选的核心 feature（非零系数）数量为 {length(selected)}{aref(p.lasso_cv)}，对应为：{bind(selected)}。\n\n\n\n")
     return(x)
   })
@@ -245,7 +251,7 @@ setMethod("step3", signature = c(x = "job_mlearn"),
     x <- tablesAdd(x, t.tops)
     x <- plotsAdd(x, p.error)
     x <- methodAdd(x, "以 R 包 `randomForest` ⟦pkgInfo('randomForest')⟧ 构建随机森林分类模型，设定决策树数量（ntree）为 {ntree}，特征选择数 (mtry) 为基因总数的平方根，通过袋外数据 (OOB) 评估模型误差率，计算 Feature 重要性评分，筛选相对重要性 top {top}；同时分析分类树数量与误差率的关联趋势，确定模型最优复杂度。")
-    x <- snapAdd(x, "随机森林特征重要性 Top {top} 基因：{bind(t.tops$feature)}{aref(p.error)}。\n\n\n\n")
+    x <- snapAdd(x, "随机森林特征重要性 Top {top} 基因 (PMID: 37065165; PMID: 16398926; PMID: 41243474)：{bind(t.tops$feature)}{aref(p.error)}。\n\n\n\n")
     return(x)
   })
 

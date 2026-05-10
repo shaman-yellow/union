@@ -102,6 +102,9 @@ setMethod("asjob_mr", signature = c(x = "feature"),
     if (is.null(getOption("gwas_token"))) {
       stop('is.null(getOption("gwas_token")).')
     }
+    if (!nchar(ieugwasr::get_opengwas_jwt())) {
+      Sys.setenv(OPENGWAS_JWT = getOption("gwas_token"))
+    }
     if (mode == "eqtlgen") {
       data_exposure <- .get_exposure_opengwas_eqtlgen(
         fea <- x, strict = strict, ...
@@ -779,7 +782,9 @@ setMethod("step5", signature = c(x = "job_mr"),
   if (strict) {
     snap(data) <- glue::glue("{base}⟦mark$blue('显著性阈值设为 p < {pval_threshold}，并对工具变量执行 LD clumping（r² = {clump_r2}，窗口 = {clump_kb} kb），以保证独立性')⟧。未能匹配或缺乏显著 eQTL 的基因将被剔除，最终获得暴露因素的工具变量集合{stats}。")
   } else {
-    snap(data) <- glue::glue("考虑到 eQTL 数据中工具变量数量有限，为提高统计功效，本研究适当放宽工具变量筛选阈值，采用 P < {pval_threshold} 作为候选 SNP 的纳入标准 (PMID: 31341166)，并设置 LD 剔除参数为 r² = {clump_r2} (PMID: 33866329)、clumping window = {clump_kb} kb (PMID: 29955180)。上述参数设置已在多项基于 omics 数据的孟德尔随机化研究中得到广泛应用，能够在保证工具变量独立性的同时，提高 eQTL-MR 分析的有效 SNP 数量与统计稳定性。")
+    snap(data) <- glue::glue(
+      "考虑到 eQTL 数据中工具变量数量有限，为提高统计功效，本研究适当放宽工具变量筛选阈值，采用 P < {pval_threshold} 作为候选 SNP 的纳入标准 (PMID：31924771, 31341166)，并设置 LD 剔除参数为 r² = {clump_r2} (PMID: 40126059, 33866329)、clumping window = {clump_kb} kb (PMID: 29955180)。上述参数设置已在多项基于 omics 数据的孟德尔随机化研究中得到广泛应用，能够在保证工具变量独立性的同时，提高 eQTL-MR 分析的有效 SNP 数量与统计稳定性。"
+    )
   }
   return(data)
 }

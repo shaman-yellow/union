@@ -32,6 +32,7 @@
     mdb = "job_msigdb",
     fea = "feature",
     corgsea = "job_corgsea",
+    iobr = "job_iobr",
     gn = "job_genecard"
   )
   if (any(duplicated(names(prefix)))) {
