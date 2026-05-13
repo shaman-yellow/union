@@ -43,6 +43,65 @@ setup.sshfs <- function(sync = FALSE, project = guess_project(), ws = getRemoteW
   }
 }
 
+call_nvim_for_remote_setup <- function(file_script, 
+  project = guess_project(), mode = "huibang")
+{
+  if (mode == "huibang") {
+    text <- generate_setup_codes.huibang(file_script, project, TRUE)
+  }
+  SendCmdToNvim_lua(
+    glue::glue(
+      "SendCodeToTB([[{text}]])"
+    )
+  )
+}
+
+run_setup_codes.huibang <- function(file_script, project, envir = .GlobalEnv) {
+  eval(
+    generate_setup_codes.huibang(file_script, project), envir = envir
+  )
+}
+
+generate_setup_codes.huibang <- function(file_script, 
+  project, get_text = FALSE)
+{
+  file_script <- basename(file_script)
+  if (!grpl(file_script, "^r\\.[0-9]+_.*\\.r$")) {
+    stop('!grpl(file_script, "^r\\.[0-9]+_.*\\.r$"), not match correct script file name.')
+  }
+  name <- gs(file_script, "^r\\.|\\.r$", "")
+  odir <- paste0("/data/nas1/huanglichuang_OD/project/", project)
+  fun_replace <- function(x, envir = parent.frame(1L)) {
+    glue::glue(x, .open = ".{{{", .close = "}}}.", envir = envir)
+  }
+  lang <- substitute({
+    rm(list = ls()); gc()
+    ORIGINAL_DIR <- ".{{{odir}}}."
+    output <- file.path(ORIGINAL_DIR, ".{{{name}}}.")
+    if (!dir.exists(output)) {
+      dir.create(output, recursive = TRUE)
+    }
+    setwd(ORIGINAL_DIR)
+
+    .libPaths(c('/data/nas2/software/miniconda3/envs/public_R/lib/R/library/', '/data/nas1/huanglichuang_OD/conda/envs/extra_pkgs/lib/R/library/'))
+
+    myPkg <- "./union/union.utils"
+    if (!dir.exists(myPkg)) {
+      stop('Can not found package: ', myPkg)
+    }
+    devtools::load_all(myPkg)
+    load_unions()
+    setup.huibang()
+  })
+  text <- paste0(deparse(lang), collapse = "\n")
+  text <- fun_replace(text)
+  if (get_text) {
+    text
+  } else {
+    parse(text = text)
+  }
+}
+
 .upd_pkg_to_remote <- function(...) {
   .send_pkg_to_remote(..., upd = TRUE)
 }
@@ -147,13 +206,6 @@ push_script.hb <- function(..., .project = guess_project(),
           numReal <- strx(existFiles, "[0-9]+")
           if (numReal != num && sureThat("File exists: {existFiles}, rename to r.{num}_{theme}.r?")) {
             file.rename(file.path(path, existFiles), pathScript)
-            message("Will also Repalace the output path.")
-            lines <- readLines(pathScript)
-            pos <- grp(pathScript, "output <- file.path.ORIGINAL_DIR")
-            lines[pos] <- s(
-              lines[pos], glue::glue("\"[0-9]+_{theme}\""), glue::glue("\"{num}_{theme}\"")
-            )
-            writeLines(lines, pathScript)
             return(file.path(pathScript))
           }
           return(file.path(path, existFiles))
@@ -171,6 +223,51 @@ push_script.hb <- function(..., .project = guess_project(),
       pathScript
     })
 }
+
+push_script_runtime.hb <- function(..., .project = guess_project(), 
+  .ws = getRemoteWs(), .path = "scripts_mirror", .exlibrary = getOption("remote_R_library", ""))
+{
+  project <- .project
+  ws <- .ws
+  path <- .path
+  exlibrary <- .exlibrary
+  if (!is_sshfs_mount(path)) {
+    stop('!is_sshfs_mount(path).')
+  }
+  dir_project <- file.path(ws, project)
+  maxNum <- 1L
+  allFiles <- list.files(path)
+  vapply(list(...), FUN.VALUE = character(1),
+    function(theme) {
+      pattern <- glue::glue(
+        "^r\\.[0-9]{2}_{{{theme}}}\\.r$", .open = "{{{", .close = "}}}"
+      )
+      existFiles <- grpf(allFiles, pattern)
+      num <- sprintf("%02d", maxNum)
+      maxNum <<- maxNum + 1L
+      pathScript <- file.path(path, glue::glue("r.{num}_{theme}.r"))
+      if (length(existFiles)) {
+        if (length(existFiles) > 1) {
+          rlang::abort(glue::glue("Theme of {theme} found multiple files: {bind(existFiles)}"))
+        } else {
+          numReal <- strx(existFiles, "[0-9]+")
+          if (numReal != num && sureThat("File exists: {existFiles}, rename to r.{num}_{theme}.r?")) {
+            file.rename(file.path(path, existFiles), pathScript)
+            return(file.path(pathScript))
+          }
+          return(file.path(path, existFiles))
+        }
+      }
+      dir_output <- glue::glue("{num}_{theme}")
+      file.copy(
+        file.path(.expath, "job_templ", "script_runtime_setup_huibang.R"),
+        pathScript
+      )
+      pathScript
+    })
+}
+
+
 
 pdb_packaging.hb <- function(..., dir_save = "material") {
   project <- s(guess_project(), "[0-9]+_", "")
@@ -374,6 +471,28 @@ push_mirror_to_remote.hb <- function(dir_scripts = "scripts_mirror", path = "rem
   }
   files <- list.files(dir_scripts, full.names = TRUE)
   file.copy(files, path, TRUE)
+}
+
+push_mirror_runtime_remote.hb <- function(dir_scripts = "scripts_mirror", 
+  project = guess_project(), path = "remote")
+{
+  if (!is_sshfs_mount(path)) {
+    stop('!is_sshfs_mount(path).')
+  }
+  files <- list.files(dir_scripts, full.names = TRUE)
+  vapply(files, FUN.VALUE = logical(1L),
+    function(file) {
+      lines <- readLines(file)
+      if (length(which <- grp(lines, "# .{{{SETUP}}}.", fixed = TRUE)) == 1L) {
+        lines[ which ] <- ""
+        codes <- generate_setup_codes.huibang(
+          file, project, TRUE
+        )
+        lines <- append(lines, codes, after = which)
+      }
+      writeLines(file, file.path(path, basename(file)))
+      TRUE
+    })
 }
 
 push_checkout_after_output.hb <- function(test = TRUE, 
