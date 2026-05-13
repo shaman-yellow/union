@@ -111,10 +111,19 @@ setMethod("step1", signature = c(x = "job_mlearn"),
     p.svm <- caret:::ggplot.rfe(svm_rfe) +
       lims(x = range(subset_sizes)) +
       theme_classic()
+    data_error <- .get_ggplot_content(p.svm)
+    data_error <- dplyr::mutate(data_error, Error = 1 - Accuracy)
+    p.error <- ggplot(data_error, aes(x = Variables, y = Error)) +
+      geom_line() +
+      geom_point() +
+      theme_classic() +
+      labs(x = "Variables", y = "Error Rate (Cross-Validation)")
+    # p.svm_error <- 
+    p.svm <- patchwork::wrap_plots(p.svm, p.error)
     p.svm <- set_lab_legend(
-      wrap(p.svm, 5.5, 4),
+      wrap(p.svm, 7, 4),
       glue::glue("{x@sig} SVM-RFE candidate subset sizes evaluation"),
-      glue::glue("SVM-RFE候选子集正确率曲线|||{n}折交叉验证准确率（{n}x CV Accuracy）随特征数量变化的趋势。")
+      glue::glue("SVM-RFE候选子集正确率与错误率曲线|||{n}折交叉验证准确率与错误率（{n}x CV Accuracy）随特征数量变化的趋势。")
     )
     svm_rfe_res <- list(best_size = svm_rfe$bestSubset, features = caret::predictors(svm_rfe))
     x$svm_rfe_res <- svm_rfe_res
@@ -202,9 +211,14 @@ setMethod("step2", signature = c(x = "job_mlearn"),
     x <- plotsAdd(x, p.lasso_cv, p.coefs_path)
     prin <- if (lambda.type == "lambda.1se") "1-SE" else "最小误差"
     if (alpha == 1) {
-      x <- methodAdd(x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO 逻辑回归分析。设置 α = 1 实现 L1 正则化，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值。")
+      x <- methodAdd(
+        x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO 逻辑回归分析。设置 α = 1 实现 L1 正则化，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值 (λ = {fmt(cv_lasso[[ lambda.type ]])}, 
+        Log(λ) = {signif(log(cv_lasso[[ lambda.type ]]), 2)}) 。"
+      )
     } else if (alpha < 1) {
-      x <- methodAdd(x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO (Elastic Net) 回归分析。设置 α = {alpha} 实现 L1 与 L2 正则化的加权组合，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值。")
+      x <- methodAdd(
+        x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO (Elastic Net) 回归分析。设置 α = {alpha} 实现 L1 与 L2 正则化的加权组合，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值 (λ = {fmt(cv_lasso[[ lambda.type ]])}, Log(λ) = {signif(log(cv_lasso[[ lambda.type ]]), 2)})。"
+      )
     } else {
       stop('alpha?')
     }
@@ -247,9 +261,15 @@ setMethod("step3", signature = c(x = "job_mlearn"),
       glue::glue("{x@sig} top importance feature"),
       glue::glue("按 MeanDecreaseGini 降低排序的Top Feature。")
     )
+    p.tops <- .plot_rf_importance(importance_df, top)
+    p.tops <- set_lab_legend(
+      wrap(p.tops, 5, top * .2 + 2),
+      glue::glue("{x@sig} RF top importance feature"),
+      glue::glue("随机森林（Random Forest, RF）特征重要性分析图|||基于随机森林模型计算各特征的重要性评分，并按 MeanDecreaseGini 指标降序排列展示 Top 特征。其中，MeanDecreaseAccuracy 表示变量对模型预测准确率的贡献程度，数值越高说明该变量对分类性能影响越显著；MeanDecreaseGini 表示变量对节点纯度提升的贡献程度，数值越高说明该变量在随机森林决策过程中具有更强的区分能力。")
+    )
     x$rf_res <- list(rf_model = rf_model, features = t.tops$feature)
     x <- tablesAdd(x, t.tops)
-    x <- plotsAdd(x, p.error)
+    x <- plotsAdd(x, p.error, p.tops)
     x <- methodAdd(x, "以 R 包 `randomForest` ⟦pkgInfo('randomForest')⟧ 构建随机森林分类模型，设定决策树数量（ntree）为 {ntree}，特征选择数 (mtry) 为基因总数的平方根，通过袋外数据 (OOB) 评估模型误差率，计算 Feature 重要性评分，筛选相对重要性 top {top}；同时分析分类树数量与误差率的关联趋势，确定模型最优复杂度。")
     x <- snapAdd(x, "随机森林特征重要性 Top {top} 基因 (PMID: 37065165; PMID: 16398926; PMID: 41243474)：{bind(t.tops$feature)}{aref(p.error)}。\n\n\n\n")
     return(x)
@@ -310,6 +330,60 @@ setMethod("step4", signature = c(x = "job_mlearn"),
     x <- plotsAdd(x, p.auc, p.importance)
     return(x)
   })
+
+.plot_rf_importance <- function(data_importance, n_top) {
+  data_importance <- dplyr::arrange(
+    data_importance, MeanDecreaseGini
+  )
+  data_importance <- head(data_importance, n_top)
+
+  data_plot <- tidyr::pivot_longer(
+    data_importance,
+    cols = c(
+      MeanDecreaseAccuracy,
+      MeanDecreaseGini
+      ),
+    names_to = "metric",
+    values_to = "importance"
+  )
+
+  data_plot$feature <- factor(
+    data_plot$feature,
+    levels = data_importance$feature
+  )
+
+  message(
+    glue::glue(
+      "Prepared plotting table with {nrow(data_plot)} rows."
+    )
+  )
+
+  p_rf <- ggplot2::ggplot(
+    data_plot, ggplot2::aes(x = feature, y = importance, fill = metric)
+    ) +
+  ggplot2::geom_col(
+    position = ggplot2::position_dodge(width = 0.75),
+    width = 0.65
+    ) +
+  ggplot2::geom_text(
+    ggplot2::aes(label = round(importance, 2L)),
+    position = ggplot2::position_dodge(width = 0.75),
+    hjust = -0.1,
+    size = 3.5
+    ) +
+  ggplot2::scale_fill_manual(
+    values = c("MeanDecreaseAccuracy" = "#3C77C4",
+      "MeanDecreaseGini" = "#F28E2B"
+    )) +
+  ggplot2::labs(
+    title = "RF Feature Importance",
+    x = "Feature",
+    y = "Importance Score",
+    fill = "Type"
+    ) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_classic()
+}
 
 .mlearn_alter_xgboost <- function(
   data, target,

@@ -428,7 +428,7 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
     function(data) {
       ups <- fun_stat(data, `>`)
       downs <- fun_stat(data, `<`)
-      snap <- glue::glue("显著上调基因数量为{ups$sum}，显著下调基因数量为{downs$sum}")
+      snap <- glue::glue("显著基因总数为{ups$sum + downs$sum}，显著上调基因数量为{ups$sum}，显著下调基因数量为{downs$sum}")
       sets <- list(up = ups$alls, down = downs$alls)
       list(snap = snap, sets = sets)
     })

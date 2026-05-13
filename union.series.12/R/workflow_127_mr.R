@@ -159,6 +159,7 @@ setMethod("step1", signature = c(x = "job_mr"),
       x$source_confounder$id,
       p_threshold = cut.p, 
       type = "confounder",
+      col_stat = x$split_exposure,
       ..., ask_query = TRUE
     )
     snap_remove <- glue::glue("{snap(data_exposure)}")
@@ -169,7 +170,7 @@ setMethod("step1", signature = c(x = "job_mr"),
   })
 
 setMethod("step2", signature = "job_mr",
-  function(x, mode = c("mbg", "general"), ids = NULL, ...)
+  function(x, mode = c("mbg", "general"), ids = NULL, outcome = NULL, ...)
   {
     step_message("Get outcome data.")
     mode <- match.arg(mode)
@@ -180,11 +181,18 @@ setMethod("step2", signature = "job_mr",
       data_outcome <- .get_outcome_opengwas_general(
         x$data_exposure$SNP, ids, ...
       )
-      x <- methodAdd(x, "以为结局，探究两者之间的因果关联。")
       x$data_outcome <- data_outcome
       x$split_outcome <- "outcome"
       x$pattern_outcome <- "[^|]+"
       x$.snap_outcome <- glue::glue("{snap(data_outcome)}")
+      if (is.null(outcome)) {
+        outcome <- strx(unique(data_outcome$outcome), x$pattern_outcome)
+        if (length(outcome) > 5) {
+          stop('length(outcome) > 5, too many "outcome" type for representation in WORD.')
+        }
+        outcome <- bind(outcome)
+      }
+      x <- methodAdd(x, "以 {outcome} 为结局，探究两者之间的因果关联。")
     } else if (mode == "mbg") {
       data_outcome <- .get_outcome_opengwas_mbg(
         x$data_exposure$SNP, ...
@@ -216,6 +224,7 @@ setMethod("step3", signature = c(x = "job_mr"),
         x$data_outcome$id.outcome %||% x$data_outcome$id,
         p_threshold = cut.p,
         type = "outcomeFactor",
+        col_stat = x$split_exposure,
         ..., ask_query = TRUE
       )
       snap_remove <- glue::glue("排除与结局因素相关的 SNP。{snap(data_exposure)}")
@@ -773,8 +782,8 @@ setMethod("step5", signature = c(x = "job_mr"),
   message(
     glue::glue("All results stat: {stats}")
   )
-  if (length(genes) < 10L) {
-    stats <- glue::glue("【各基因 SNP 统计：{stats}】")
+  if (length(genes) < 15L) {
+    stats <- glue::glue("【各基因 SNP 统计 (括号内为数量)：{stats}】")
   } else {
     stats <- ""
   }
@@ -783,7 +792,7 @@ setMethod("step5", signature = c(x = "job_mr"),
     snap(data) <- glue::glue("{base}⟦mark$blue('显著性阈值设为 p < {pval_threshold}，并对工具变量执行 LD clumping（r² = {clump_r2}，窗口 = {clump_kb} kb），以保证独立性')⟧。未能匹配或缺乏显著 eQTL 的基因将被剔除，最终获得暴露因素的工具变量集合{stats}。")
   } else {
     snap(data) <- glue::glue(
-      "考虑到 eQTL 数据中工具变量数量有限，为提高统计功效，本研究适当放宽工具变量筛选阈值，采用 P < {pval_threshold} 作为候选 SNP 的纳入标准 (PMID：31924771, 31341166)，并设置 LD 剔除参数为 r² = {clump_r2} (PMID: 40126059, 33866329)、clumping window = {clump_kb} kb (PMID: 29955180)。上述参数设置已在多项基于 omics 数据的孟德尔随机化研究中得到广泛应用，能够在保证工具变量独立性的同时，提高 eQTL-MR 分析的有效 SNP 数量与统计稳定性。"
+      "考虑到 eQTL 数据中工具变量数量有限，为提高统计功效，本研究适当放宽工具变量筛选阈值，采用 P < {pval_threshold} 作为候选 SNP 的纳入标准 (PMID：31924771, 31341166)，并设置 LD 剔除参数为 r² = {clump_r2} (PMID: 40126059, 33866329)、clumping window = {clump_kb} kb (PMID: 29955180)。上述参数设置已在多项基于 omics 数据的孟德尔随机化研究中得到广泛应用，能够在保证工具变量独立性的同时，提高 eQTL-MR 分析的有效 SNP 数量与统计稳定性。在此基础上，未能匹配或缺乏显著 eQTL 的基因将被剔除，最终获得暴露因素的工具变量集合{stats}。"
     )
   }
   return(data)
@@ -978,7 +987,7 @@ setMethod("step5", signature = c(x = "job_mr"),
     } else {
       snap <- snaps
     }
-    snap(data) <- paste0(snap, "\n\n在数据提取过程中，我们通过暴露因素的 SNP 为依准，以 `TwoSampleMR::extract_outcome_data` 获取该结局数据对应的 SNP。")
+    snap(data) <- paste0(snap, "\n\n在数据提取过程中，我们通过暴露因素的 SNP 为依准，使用 R 包 `TwoSampleMR` ⟦pkgInfo('TwoSampleMR')⟧，以 `TwoSampleMR::extract_outcome_data` 获取该结局数据对应的 SNP。")
   } else {
     snap(data) <- ""
   }
@@ -1161,6 +1170,7 @@ setMethod("step5", signature = c(x = "job_mr"),
   ids,
   p_threshold = 1e-05,
   type = c("confounder", "outcomeFactor"),
+  col_stat = NULL,
   cache_prefix = glue::glue("opengwas_{type}"),
   check_new_snps = FALSE,
   check_new_ids = FALSE,
@@ -1238,7 +1248,16 @@ setMethod("step5", signature = c(x = "job_mr"),
 
   res <- tibble::as_tibble(res)
   type <- switch(type, confounder = "混杂", outcomeFactor = "结局")
-  snap(res) <- glue::glue("将暴露因素工具变量 (SNP) 中与{type}因素显著关联（P < {signif(p_threshold, 2)}）的 SNP 视为受{type}影响并予以排除 (仅基于原始工具变量 SNP 与潜在混杂因素的直接关联进行过滤，即不使用 proxy SNP 替代功能)。对于所有暴露因素的 SNP，最终剔除 {length(bad_snps)} 个{type}因素 SNP，保留 {nrow(res)} 个 SNP。")
+  snap_ex <- ""
+  if (!is.null(col_stat)) {
+    alls_pre <- unique(exposure_dat[[ col_stat ]])
+    alls_aft <- unique(res[[ col_stat ]])
+    exclude <- setdiff(alls_pre, alls_aft)
+    if (length(exclude)) {
+      snap_ex <- glue::glue(" (经本次过滤后，暴露因素 {bind(exclude)} 不再包含任何 SNP，因此从随后的评估中移除) ")
+    }
+  }
+  snap(res) <- glue::glue("将暴露因素工具变量 (SNP) 中与{type}因素显著关联（P < {signif(p_threshold, 2)}）的 SNP 视为受{type}影响并予以排除 (仅基于原始工具变量 SNP 与潜在混杂因素的直接关联进行过滤，即不使用 proxy SNP 替代功能)。对于所有暴露因素的 SNP，最终剔除 {length(bad_snps)} 个{type}因素 SNP，保留 {nrow(res)} 个 SNP。{snap_ex}")
   return(res)
 }
 
@@ -1714,8 +1733,14 @@ setMethod("step5", signature = c(x = "job_mr"),
   )
   res <- res[ seq_along(res) ]
   if (meth) {
+    if (length(exp_list) < 20) {
+      snap_ex <- bind(names(exp_list))
+      snap_ex <- glue::glue(" ({snap_ex}) ")
+    } else {
+      snap_ex <- ""
+    }
     res$snap_run <- glue::glue(
-      "在完成数据准备与协同处理后，本研究基于 `TwoSampleMR`，对 **{length(exp_list)}** 个暴露因素与 **{length(out_list)}** 个结局指标进行了系统性的因果推断（共计 **{nrow(grid)}** 个分析组合）。针对每一对暴露-结局组合，我们预设工具变量纳入标准为 $n_{SNP} \\ge$ **{min_nsnp}**。",
+      "在完成数据准备与协同处理后，本研究基于 `TwoSampleMR` ⟦pkgInfo('TwoSampleMR')⟧，对 **{length(exp_list)}** 个暴露因素**{snap_ex}**与 **{length(out_list)}** 个结局指标进行了系统性的因果推断（共计 **{nrow(grid)}** 个分析组合）。针对每一对暴露-结局组合，我们预设工具变量纳入标准为 $n_{SNP} \\ge$ **{min_nsnp}**。",
       .open = "**{", .close = "}**"
     )
   }
@@ -2749,7 +2774,7 @@ setMethod("step5", signature = c(x = "job_mr"),
 
   keep <- which(data_f$f_snp > cut.f)
 
-  snap <- glue::glue("为评估所选工具变量（SNPs）作为暴露因素的有效性，我们对每个 SNP 进行了 **F 检验（F-statistic）**。该检验基于每个 SNP 对暴露变量的解释力 ($R^2$) 及样本量 ($n$)，通过公式：
+  snap <- glue::glue("为评估所选工具变量（IVs）作为暴露因素的有效性，我们对每个 SNP 进行了 **F 检验（F-statistic）**。该检验基于每个 SNP 对暴露变量的解释力 ($R^2$) 及样本量 ($n$)，通过公式：
 
 $$
 F = \\frac{R^2}{1-R^2} \\times (n - 2)

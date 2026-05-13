@@ -55,7 +55,7 @@ job_corgsea <- function(data, ref, method = "spearman") {
   x <- methodAdd(
     x, "以相关系数构建全基因排序列表，在此基础上实施基因集富集分析（GSEA），以识别与诊断基因表达模式协同变化的功能通路。该策略能够将有限的诊断基因扩展至其相关的基因网络层面，从而揭示其潜在的生物学过程及分子机制，提高结果的生物学解释性与稳健性。"
   )
-  x <- snapAdd(x, "计算{snap(ref)}与其他基因的 Spearman 相关性系数，并以该系数为排序依据对全基因进行从大到小的排序。")
+  x <- snapAdd(x, "计算{snap(ref)}与其他基因的 Spearman 相关性系数 (以 R 包 `stats` ⟦pkgInfo('stats')⟧ 的 `cor` 函数)，并以该系数为排序依据对全基因进行从大到小的排序。")
 }
 
 setMethod("step0", signature = c(x = "job_corgsea"),
@@ -159,7 +159,12 @@ setMethod("step2", signature = c(x = "job_corgsea"),
         p.code
       })
     alls <- names(x$res.gsea)
-    x <- snapAdd(x, "选取 {bind(alls)} 的 Top {top} 富集通路{aref(p.codes)}。")
+    snap_ex <- if (x$.args$step1$pvalue) {
+      glue::glue(" (按 p.value 排序) ")
+    } else {
+      glue::glue(" (按 p.adjust 排序) ")
+    }
+    x <- snapAdd(x, "选取 {bind(alls)} 的 Top {top} 富集通路{aref(p.codes)}{snap_ex}。")
     x <- plotsAdd(x, p.codes)
     ins <- lapply(x@tables$step1$table_gsea,
       function(data) {

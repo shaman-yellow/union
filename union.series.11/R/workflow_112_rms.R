@@ -149,18 +149,41 @@ setMethod("step2", signature = c(x = "job_rms"),
     nomogram <- plogis(predict(x$res_lrm$fit, type = "lp"))
     data <- dplyr::mutate(data, nomogram = !!nomogram)
     cli::cli_h1("rmda::decision_curve")
-    dcas <- lapply(markers,
-      function(marker) {
-        rmda::decision_curve(
-          as.formula(paste0(x$target, "~", marker)),
-          data, study.design = "case", bootstrap = B, ...
-        )
-      })
-    p.dcas <- funPlot(rmda::plot_decision_curve,
-      list(x = dcas, curve.names = unlist(markers), confidence.intervals = FALSE)
+    fun_rmda <- function(arg_data, arg_markers) {
+      lapply(markers,
+        function(marker) {
+          rmda::decision_curve(
+            as.formula(paste0(x$target, "~", marker)),
+            data, study.design = "case", bootstrap = B, ...
+          )
+        })
+    }
+    dcas <- expect_local_data(
+      "tmp", "rmda_decision_curve", fun_rmda, list(data, markers)
     )
+    p.dcas <- local({
+      col <- c(grDevices::rainbow(length(markers), v = 0.8), "grey66", "black")
+      p <- local({
+        grDevices::pdf(NULL)
+        on.exit(dev.off())
+        grDevices::dev.control("enable")
+        rmda::plot_decision_curve(
+          x = dcas, curve.names = unlist(markers), 
+          confidence.intervals = FALSE, legend.position = "none", 
+          col = col
+        )
+        recordPlot()
+      })
+      grob_main <- gridGraphics::echoGrob(p)
+      grob_legend <- grid::legendGrob(
+        labels = c(markers, "All", "None"), pch = NA,
+        gp = grid::gpar(col = col, lwd = 2L, lty = 1L)
+      )
+      p <- patchwork::wrap_plots(grob_main, grob_legend)
+      p + patchwork::plot_layout(widths = c(7, 1))
+    })
     p.dcas <- set_lab_legend(
-      p.dcas,
+      wrap(p.dcas, 8, 7),
       glue::glue("{x@sig} Decision curve analysis"),
       glue::glue("决策曲线分析 (Decision curve analysis)|||DCA 用于评估不同模型在不同阈值下的净收益。横坐标为风险阈值，纵坐标为净获益率，平行于 x 轴的虚线 None 是不对任何人进行干预，抛物线形状的虚线 All 是对所有人进行干预，实线代表各指标的干预效果。")
     )
@@ -169,6 +192,20 @@ setMethod("step2", signature = c(x = "job_rms"),
     x <- plotsAdd(x, p.dcas)
     return(x)
   })
+
+.capture_base_grob <- function(expr, envir)
+{
+  grDevices::pdf(
+    file = NULL
+  )
+  on.exit(
+    grDevices::dev.off(),
+    add = TRUE
+  )
+  eval(expr, envir = envir)
+  gridGraphics::grid.echo()
+  grid::grid.grab()
+}
 
 clinical_thresholds <- function(cal, max_deviation = 0.1) {
   cal_data <- data.frame(

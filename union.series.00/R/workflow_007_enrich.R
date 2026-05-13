@@ -165,7 +165,7 @@ setMethod("step1", signature = c(x = "job_enrich"),
     x <- plotsAdd(x, p.kegg, p.go)
     x@params$check_go <- check_enrichGO(res.go)
     x$organism <- organism
-    x <- methodAdd(x, "以 R 包 `clusterProfiler` ⟦pkgInfo('clusterProfiler')⟧进行 KEGG 和 GO 富集分析。以 {use.p} 表示显著水平。富集筛选条件为 {use.p} &lt; 0.05。")
+    x <- methodAdd(x, "以 R 包 `clusterProfiler` ⟦pkgInfo('clusterProfiler')⟧进行 KEGG 和 GO 富集分析。以 {use.p} 表示显著水平 (且按 {use.p} 对结果排序)。富集筛选条件为 {use.p} &lt; 0.05。")
     return(x)
   })
 

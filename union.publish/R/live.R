@@ -2323,7 +2323,7 @@ autor_preset <- function(echo = FALSE, eval = FALSE,
   )
   # Disabled knitr's automatic capture to prevent contamination during `regplot` plotting
   if (knitr::pandoc_to("docx")) {
-    options("autor_pkgInfo_current" = new.env())
+    options("autor_pkgInfo_current" = new.env(), "autor_pkgInfo" = NULL)
   }
   knitr::knit_hooks$set(plot = function(x, options) NULL )
   knitr::opts_chunk$set(
@@ -2335,6 +2335,23 @@ autor_preset <- function(echo = FALSE, eval = FALSE,
     options
   }
   knitr::opts_hooks$set(fig.cap = fun_fig.cap)
+}
+
+upd_cache_pkgInfo <- function(data, cache = .prefix("pkgInfo.rds", "db")) {
+  if (!all(c("Package", "Version") %in% colnames(data))) {
+    stop('!all(c("Pacakge", "Version") %in% colnames(data)).')
+  }
+  if (file.exists(cache)) {
+    lst <- readRDS(cache)
+  } else {
+    lst <- list()
+  }
+  for (i in seq_len(nrow(data))) {
+    pkg <- data$Package[[i]]
+    lst[[ pkg ]]$version <- data$Version[[i]]
+    lst[[ pkg ]]$usage <- data$Usage[[i]]
+  }
+  saveRDS(lst, cache)
 }
 
 pkgInfo <- function(pkg, reload = FALSE, cache = .prefix("pkgInfo.rds", "db"), ...)

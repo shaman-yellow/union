@@ -83,7 +83,7 @@ table_qc.hb <- function() {
     ws <- getRemoteWs()
     pr <- guess_project()
     dir_project <- paste0(ws, "/", pr)
-    cmd <- glue::glue("cd {dir_project} && tar -xzvf {archive_package} -C {pkg}")
+    cmd <- glue::glue("cd {dir_project} && tar -xzvf {archive_package} -C {pkg} && command rm {archive_package}")
     cdRun("ssh ", remote, " '", cmd, "'")
   } else {
     untar(
@@ -590,7 +590,9 @@ methodDefinition_as_setMethod_call <- function(m) {
 }
 
 setup_counting_in_directory <- function(dir, pattern = "^[0-9]+") {
-  unlink(list.files(dir, pattern, full.names = TRUE), force = TRUE)
+  unlink(
+    list.files(dir, pattern, full.names = TRUE), force = TRUE, recursive = TRUE
+  )
   options(
     autor_counting_start_dir = dir,
     savedir = list(figs = dir, tabs = dir)

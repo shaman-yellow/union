@@ -291,3 +291,300 @@ find_common_cross_groups <- function(df, ...group) {
   }
 }
 
+.clear_autor_objects <- function(path, verbose = FALSE) {
+  objs <- c("autor", "include")
+  try(.remove_r_objects(path, objs, objs, backup = FALSE, verbose = verbose))
+}
+
+.remove_r_objects <- function(
+    path_pkg,
+    vec_generic = NULL,
+    vec_method = NULL,
+    vec_function = NULL,
+    recursive = TRUE,
+    backup = FALSE,
+    dry_run = FALSE,
+    verbose = TRUE)
+{
+  if (!dir.exists(path_pkg)) {
+    stop("Package path does not exist.")
+  }
+
+  path_r <- file.path(path_pkg, "R")
+
+  if (!dir.exists(path_r)) {
+    stop("Cannot find R directory.")
+  }
+
+  vec_file <- list.files(
+    path_r,
+    pattern = "\\.[Rr]$",
+    full.names = TRUE,
+    recursive = recursive
+  )
+
+  vec_generic <- unique(vec_generic)
+  vec_method <- unique(vec_method)
+  vec_function <- unique(vec_function)
+
+  vec_generic <- vec_generic[!is.na(vec_generic)]
+  vec_method <- vec_method[!is.na(vec_method)]
+  vec_function <- vec_function[!is.na(vec_function)]
+
+  .get_call_name <- function(expr)
+  {
+    if (!is.call(expr)) {
+      return(NA_character_)
+    }
+
+    obj_head <- expr[[1L]]
+
+    if (is.symbol(obj_head)) {
+      return(as.character(obj_head))
+    }
+
+    if (is.call(obj_head)) {
+      return(deparse1(obj_head))
+    }
+
+    NA_character_
+  }
+
+  .extract_first_arg <- function(expr)
+  {
+    if (length(expr) < 2L) {
+      return(NA_character_)
+    }
+
+    obj <- tryCatch(
+      eval(expr[[2L]]),
+      error = function(e) NA_character_
+    )
+
+    as.character(obj)
+  }
+
+  .should_remove_expr <- function(expr)
+  {
+    .walk_call <- function(node)
+    {
+      if (!is.call(node)) {
+        return(FALSE)
+      }
+
+      str_call <- .get_call_name(node)
+
+      if (identical(str_call, "setGeneric")) {
+
+        str_name <- .extract_first_arg(node)
+
+        if (str_name %in% vec_generic) {
+          return(TRUE)
+        }
+      }
+
+      if (identical(str_call, "setMethod")) {
+
+        str_name <- .extract_first_arg(node)
+
+        if (str_name %in% vec_method) {
+          return(TRUE)
+        }
+      }
+
+      if (identical(str_call, "<-") || identical(str_call, "=")) {
+
+        obj_lhs <- node[[2L]]
+        obj_rhs <- node[[3L]]
+
+        if (
+          is.symbol(obj_lhs) &&
+            is.call(obj_rhs) &&
+            identical(.get_call_name(obj_rhs), "function")
+          ) {
+
+          str_name <- as.character(obj_lhs)
+
+          if (str_name %in% vec_function) {
+            return(TRUE)
+          }
+        }
+      }
+
+      vec_child <- as.list(node)[-1L]
+
+      any(
+        vapply(
+          vec_child,
+          .walk_call,
+          logical(1L)
+        )
+      )
+    }
+
+    .walk_call(expr)
+  }
+
+  .process_file <- function(path_file)
+  {
+    if (verbose) {
+      message(
+        glue::glue(
+          "[READ] {basename(path_file)}"
+        )
+      )
+    }
+
+    vec_line <- readLines(
+      path_file,
+      warn = FALSE
+    )
+
+    obj_expr <- tryCatch(
+      parse(
+        text = vec_line,
+        keep.source = TRUE
+      ),
+      error = function(e) e
+    )
+
+    if (inherits(obj_expr, "error")) {
+
+      message(
+        glue::glue(
+          "[SKIP] Parse failed: {basename(path_file)}"
+        )
+      )
+
+      return(NULL)
+    }
+
+    lst_srcref <- attr(obj_expr, "srcref")
+
+    if (is.null(lst_srcref)) {
+
+      message(
+        glue::glue(
+          "[SKIP] Missing srcref: {basename(path_file)}"
+        )
+      )
+
+      return(NULL)
+    }
+
+    vec_remove <- sapply(
+      obj_expr,
+      .should_remove_expr
+    )
+
+    if (!any(vec_remove)) {
+
+      if (verbose) {
+
+        message(
+          glue::glue(
+            "[KEEP] No target found: {basename(path_file)}"
+          )
+        )
+      }
+
+      return(FALSE)
+    }
+
+    vec_delete_line <- rep(
+      FALSE,
+      length(vec_line)
+    )
+
+    vec_idx <- which(vec_remove)
+
+    invisible(
+      sapply(
+        vec_idx,
+        function(idx)
+        {
+          obj_sr <- lst_srcref[[idx]]
+
+          idx_start <- obj_sr[[1L]]
+          idx_end <- obj_sr[[3L]]
+
+          vec_delete_line[
+            idx_start:idx_end
+          ] <<- TRUE
+
+          if (verbose) {
+
+            message(
+              glue::glue(
+                "[REMOVE] {basename(path_file)} :: lines {idx_start}-{idx_end}"
+              )
+            )
+          }
+
+          NULL
+        }
+      )
+    )
+
+    vec_new <- vec_line[!vec_delete_line]
+
+    if (dry_run) {
+
+      message(
+        glue::glue(
+          "[DRY RUN] {basename(path_file)}"
+        )
+      )
+
+      return(TRUE)
+    }
+
+    if (backup) {
+
+      path_backup <- paste0(
+        path_file,
+        ".bak"
+      )
+
+      ok_backup <- file.copy(
+        from = path_file,
+        to = path_backup,
+        overwrite = TRUE
+      )
+
+      if (!ok_backup) {
+
+        message(
+          glue::glue(
+            "[WARN] Backup failed: {basename(path_file)}"
+          )
+        )
+      }
+    }
+
+    writeLines(
+      vec_new,
+      con = path_file
+    )
+
+    if (verbose) {
+
+      message(
+        glue::glue(
+          "[WRITE] {basename(path_file)}"
+        )
+      )
+    }
+
+    TRUE
+  }
+
+  lst_res <- lapply(
+    vec_file,
+    .process_file
+  )
+
+  invisible(lst_res)
+}
+
+

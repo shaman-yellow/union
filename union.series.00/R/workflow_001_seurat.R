@@ -482,7 +482,7 @@ setMethod("anno", signature = c(x = "job_seurat"),
       )
       if (length(snap_stat)) {
         # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
-        x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比做差异分析。{snap_stat}")
+        x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比以 Wilcoxon tests (`wilcox.test`) 做差异分析。{snap_stat}")
       }
       x <- plotsAdd(x, p.props_scsa_stat)
     }

@@ -8,7 +8,7 @@ Author: LiChuang Huang <shaman.yellow@foxmail.com> [aut, cre]
     (<https://orcid.org/0000-0002-5445-1988>)
 Maintainer: LiChuang Huang <shaman.yellow@foxmail.com>
 Description: What the package does (one paragraph).
-License: MIT + file LICENSE
+License: file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

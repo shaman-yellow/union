@@ -127,6 +127,9 @@ setMethod("step1", signature = c(x = "job_venn"),
     }
     x <- snapAdd(x, "对{bind(names(object(x)))} 取交集，得到{length(p.venn$ins)}个交集{iter}{aref(p.venn)}。")
     x <- plotsAdd(x, p.venn)
+    x$.feature_sets <- as_feature(
+      lapply(object(x), unique), "All sets for Venn"
+    )
     if (!is.null(x$analysis)) {
       feature(x) <- as_feature(p.venn$ins, x$analysis, nature = x$nature, ...)
     } else {
@@ -178,10 +181,14 @@ new_venn <- function(..., lst = NULL, wrap = TRUE,
     }
     shouldChange <- !grpl(p$layers[[which]]$data$id, "/")
     p$layers[[which]]$data[shouldChange, ] <- dplyr::mutate(
-      p$layers[[which]]$data[shouldChange, ], both = paste0(name, "\n", count, " (", percent, ")")
+      p$layers[[which]]$data[shouldChange, ],
+      both = paste0(
+        stringr::str_wrap(name, 20), "\n", count, " (", percent, ")"
+      )
     )
     p$layers[[which]]$data[!shouldChange, ] <- dplyr::mutate(
-      p$layers[[which]]$data[!shouldChange, ], both = paste0(count, " (", percent, ")")
+      p$layers[[which]]$data[!shouldChange, ],
+      both = paste0(count, " (", percent, ")")
     )
     p$layers[[whichText]] <- NULL
   }
