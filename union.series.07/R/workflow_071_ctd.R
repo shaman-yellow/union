@@ -26,12 +26,12 @@ job_ctd <- function(db = get_ctd_data())
   .job_ctd(object = db)
 }
 
-setMethod("step0", signature = c(x = "job_ctd"),
+setMethod_traceable("step0", signature = c(x = "job_ctd"),
   function(x){
     step_message("Prepare your data with function `job_ctd`.")
   })
 
-setMethod("step1", signature = c(x = "job_ctd"),
+setMethod_traceable("step1", signature = c(x = "job_ctd"),
   function(x, pattern)
   {
     step_message("Search disease in `CTD_diseases`")
@@ -41,7 +41,7 @@ setMethod("step1", signature = c(x = "job_ctd"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_ctd"),
+setMethod_traceable("step2", signature = c(x = "job_ctd"),
   function(x, rm.na = TRUE){
     step_message("Get relationship table.")
     t.chemical <- dplyr::filter(

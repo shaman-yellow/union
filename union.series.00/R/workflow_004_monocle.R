@@ -21,7 +21,7 @@
 setGeneric("do_monocle", 
   function(x, ref, ...) standardGeneric("do_monocle"))
 
-setMethod("do_monocle", signature = c(x = "job_seurat", ref = "character"),
+setMethod_traceable("do_monocle", signature = c(x = "job_seurat", ref = "character"),
   function(x, ref, dims = 1:15, resolution = 1.2, group.by = x@params$group.by, 
     sct = FALSE, ...)
   {
@@ -49,7 +49,7 @@ setMethod("do_monocle", signature = c(x = "job_seurat", ref = "character"),
 setGeneric("asjob_monocle",
   function(x, ...) standardGeneric("asjob_monocle"))
 
-setMethod("asjob_monocle", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_monocle", signature = c(x = "job_seurat"),
   function(x, group.by = x@params$group.by, ..., use = names(x@object@assays)[[1]]){
     step_message("
       Other parameters would be passed to `SeuratWrappers::as.cell_data_set`.
@@ -96,7 +96,7 @@ setMethod("asjob_monocle", signature = c(x = "job_seurat"),
     mn 
   })
 
-setMethod("step0", signature = c(x = "job_monocle"),
+setMethod_traceable("step0", signature = c(x = "job_monocle"),
   function(x){
     step_message("Prepare your data with methods `asjob_monocle`.
       A processed 'Seurat' object is needed. (job_seurat at least in step 3).
@@ -104,7 +104,7 @@ setMethod("step0", signature = c(x = "job_monocle"),
     )
   })
 
-setMethod("step1", signature = c(x = "job_monocle"),
+setMethod_traceable("step1", signature = c(x = "job_monocle"),
   function(x, groups = x@params$group.by, pt.size = 1.5, pre = FALSE, norm_method = "none"){
     step_message("Constructing single-cell trajectories.
       red{{`groups`}} would passed to `monocle3::plot_cells` for
@@ -154,7 +154,7 @@ setMethod("step1", signature = c(x = "job_monocle"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_monocle"),
+setMethod_traceable("step2", signature = c(x = "job_monocle"),
   function(x, roots){
     step_message("
       red{{`roots`}} would passed to `monocle3::order_cells` for setting
@@ -185,7 +185,7 @@ setMethod("step2", signature = c(x = "job_monocle"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_monocle"),
+setMethod_traceable("step3", signature = c(x = "job_monocle"),
   function(x, formula_string = NULL, group.by = NULL, workers = 4){
     step_message("This step do:
       0. Subset by pseudotime
@@ -296,7 +296,7 @@ setMethod("step3", signature = c(x = "job_monocle"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_monocle"),
+setMethod_traceable("step4", signature = c(x = "job_monocle"),
   function(x, groups = ids(x), genes, group.by = x$group.by, cutoff = .5,
     cutoff.den = 1, group.den = "orig.ident", significant = TRUE)
   {
@@ -367,14 +367,14 @@ setMethod("step4", signature = c(x = "job_monocle"),
   })
 
 
-setMethod("regroup", signature = c(x = "job_seurat", ref = "hclust"),
+setMethod_traceable("regroup", signature = c(x = "job_seurat", ref = "hclust"),
   function(x, ref, k, by.name = FALSE, rename = NULL){
     ref <- cutree(ref, k)
     x$cutree <- ref
     regroup(x, ref, k, by.name, rename)
   })
 
-setMethod("regroup", signature = c(x = "job_seurat", ref = "integer"),
+setMethod_traceable("regroup", signature = c(x = "job_seurat", ref = "integer"),
   function(x, ref, k, by.name = FALSE, rename = NULL){
     if (!is.null(rename)) {
       if (is.character(rename)) {
@@ -396,7 +396,7 @@ setMethod("regroup", signature = c(x = "job_seurat", ref = "integer"),
     return(x)
   })
 
-setMethod("ids", signature = c(x = "job_monocle"),
+setMethod_traceable("ids", signature = c(x = "job_monocle"),
   function(x, id = x@params$group.by, unique = TRUE){
     ids <- SummarizedExperiment::colData(object(x))[[ id ]]
     if (unique)
@@ -405,7 +405,7 @@ setMethod("ids", signature = c(x = "job_monocle"),
       ids
   })
 
-setMethod("add_anno", signature = c(x = "job_monocle"),
+setMethod_traceable("add_anno", signature = c(x = "job_monocle"),
   function(x, branches = NULL)
   {
     metaPrin <- igraph::V(monocle3::principal_graph(object(x))[[ "UMAP" ]])
@@ -442,7 +442,7 @@ get_branches.mn <- function(x, branches) {
   branches
 }
 
-setMethod("map", signature = c(x = "job_monocle", ref = "job_seurat"),
+setMethod_traceable("map", signature = c(x = "job_monocle", ref = "job_seurat"),
   function(x, ref, use.x, use.ref, name = "cell_mapped"){
     matched <- match(rownames(object(x)@colData), rownames(object(ref)@meta.data))
     object(x)@colData[[name]] <- as.character(object(ref)@meta.data[[use.ref]])[matched]
@@ -458,7 +458,7 @@ setMethod("map", signature = c(x = "job_monocle", ref = "job_seurat"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_monocle"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_monocle"),
   function(x, ref, cols = c("pseudotime", "branch"))
   {
     if (any(cols == "pseudotime") && !any(colnames(meta) == "pseudotime")) {
@@ -483,7 +483,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "job_monocle"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_monocle", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_monocle", ref = "character"),
   function(x, ref, branches = NULL, enrich = NULL, seurat = NULL, HLs = NULL,
     assay = NULL, enrichExtra = NULL, group_by = NULL, use.enrich = c("go", "kegg"), ...)
   {
@@ -819,7 +819,7 @@ cal_modules.cds <- function(cds, gene_sigs, cell_group, workers = 4) {
 }
 
 
-setMethod("asjob_seurat", signature = c(x = "job_monocle"),
+setMethod_traceable("asjob_seurat", signature = c(x = "job_monocle"),
   function(x, k, rename = NULL, reset_palette = TRUE){
     x <- regroup(x$sr_sub, x$cellClass_tree.gene_module, k, rename = rename)
     if (reset_palette)
@@ -828,7 +828,7 @@ setMethod("asjob_seurat", signature = c(x = "job_monocle"),
     return(x)
   })
 
-setMethod("focus", signature = c(x = "job_monocle"),
+setMethod_traceable("focus", signature = c(x = "job_monocle"),
   function(x, features, group.by = x@params$group.by, name = "genes", ...)
   {
     res <- focus(
@@ -839,7 +839,7 @@ setMethod("focus", signature = c(x = "job_monocle"),
     return(x)
   })
 
-setMethod("vis", signature = c(x = "job_monocle"),
+setMethod_traceable("vis", signature = c(x = "job_monocle"),
   function(x, refs, group.by = x@param$group.by,
     use = "logcounts", rownames = TRUE, rownames.size = 5, smooth = TRUE)
   {
@@ -905,7 +905,7 @@ setMethod("vis", signature = c(x = "job_monocle"),
     rev(RColorBrewer::brewer.pal(11, "RdYlGn")))
 }
 
-setMethod("skel", signature = c(x = "job_monocle"),
+setMethod_traceable("skel", signature = c(x = "job_monocle"),
   function(x, suffix, pattern, sig.mn = paste0("mn.", suffix),
     sig.sr = paste0("sr.", suffix),
     sig.sr_sub = paste0("sr_sub.", suffix))

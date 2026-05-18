@@ -31,7 +31,7 @@ new_pdb <- new_query_pdb <- function(wd = "protein_pdb") {
 }
 
 #' @exportMethod via_symbol
-setMethod("via_symbol", signature = c(x = "query_pdb"),
+setMethod_traceable("via_symbol", signature = c(x = "query_pdb"),
   function(x, symbol, max_pdb = 3, organism_id = "9606", cl = 1, fun_download = download_pdb.RCurl)
   {
     object(x) <- e(UniProt.ws::mapUniProt(
@@ -54,7 +54,7 @@ setMethod("via_symbol", signature = c(x = "query_pdb"),
   })
 
 #' @exportMethod show
-setMethod("show", signature = c(object = "query_pdb"),
+setMethod_traceable("show", signature = c(object = "query_pdb"),
   function(object){
     if (!is.null(object$pdb_ids)) {
       lst <- lapply(object$pdb_ids, paste0, collapse = " ")
@@ -65,7 +65,7 @@ setMethod("show", signature = c(object = "query_pdb"),
   })
 
 #' @exportMethod vis
-setMethod("vis", signature = c(x = "query_pdb"),
+setMethod_traceable("vis", signature = c(x = "query_pdb"),
   function(x, symbol, id = NULL){
     id <- match.arg(id, x$pdb_ids[[ symbol ]])
     data <- readLines(x$pdb_files[[ id ]])
@@ -86,7 +86,7 @@ setMethod("vis", signature = c(x = "query_pdb"),
   })
 
 #' @exportMethod anno
-setMethod("anno", signature = c(x = "query_pdb"),
+setMethod_traceable("anno", signature = c(x = "query_pdb"),
   function(x, symbols, ids = NULL, title = "Proteins Infomation",
     .name = "annotation", .style = "BiocStyle::html_document")
   {

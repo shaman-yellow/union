@@ -21,7 +21,7 @@
 setGeneric("asjob_maf",
   function(x, ...) standardGeneric("asjob_maf"))
 
-setMethod("asjob_maf", signature = c(x = "job_tcga"),
+setMethod_traceable("asjob_maf", signature = c(x = "job_tcga"),
   function(x, use = "follow_up", keep_consensus = TRUE)
   {
     if (x@step < 3L) {
@@ -69,14 +69,14 @@ setMethod("asjob_maf", signature = c(x = "job_tcga"),
 #   time = "days_to_last_followup", Status = "vital_status"
 # )
 
-setMethod("step0", signature = c(x = "job_maf"),
+setMethod_traceable("step0", signature = c(x = "job_maf"),
   function(x){
     step_message("Prepare your data with function `asjob_maf`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_maf"),
+setMethod_traceable("step1", signature = c(x = "job_maf"),
   function(x, genes = NULL, top = 30)
   {
     step_message("Visualize the overview of data.")

@@ -21,7 +21,7 @@
 setGeneric("asjob_lasso",
   function(x, ...) standardGeneric("asjob_lasso"))
 
-setMethod("asjob_lasso", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_lasso", signature = c(x = "job_limma"),
   function(x, use.filter = NULL, use = .guess_symbol(x), from_normed = TRUE,
     dup_method = c("max", "min", "mean"), 
     use.format = TRUE, exclude = NULL,
@@ -62,12 +62,12 @@ job_lasso <- function(data, metadata) {
   .job_lasso(object = data, params = list(metadata = metadata))
 }
 
-setMethod("step0", signature = c(x = "job_lasso"),
+setMethod_traceable("step0", signature = c(x = "job_lasso"),
   function(x){
     step_message("Prepare your data with function `asjob_lasso`. ")
   })
 
-setMethod("step1", signature = c(x = "job_lasso"),
+setMethod_traceable("step1", signature = c(x = "job_lasso"),
   function(x, target = "vital_status", levels = c("Alive", "Dead"),
     time = "days_to_last_follow_up", n.train = .8, seed = 555)
   {
@@ -118,7 +118,7 @@ setMethod("step1", signature = c(x = "job_lasso"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_lasso"),
+setMethod_traceable("step2", signature = c(x = "job_lasso"),
   function(x, use_data = c("all", "train"), top = 30, efs = FALSE)
   {
     step_message("Evaluate variable (genes) importance.")
@@ -143,7 +143,7 @@ setMethod("step2", signature = c(x = "job_lasso"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_lasso"),
+setMethod_traceable("step3", signature = c(x = "job_lasso"),
   function(x, use_data = x$use_data, family = "cox", use_tops = FALSE, cutoff = .05)
   {
     step_message("Univariate COX.")
@@ -189,7 +189,7 @@ setMethod("step3", signature = c(x = "job_lasso"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_lasso"),
+setMethod_traceable("step4", signature = c(x = "job_lasso"),
   function(x, use_data = x$use_data, use_valid = use_data, inherit_unicox = TRUE,
     inherit_unicox.cut.p = NULL,
     fun = c("cv.glmnet", "coxph", "glmnet"), nfold = 10,
@@ -315,7 +315,7 @@ setMethod("step4", signature = c(x = "job_lasso"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_lasso"),
+setMethod_traceable("step5", signature = c(x = "job_lasso"),
   function(x){
     step_message("Try Merge Univariate cox and Multivariate cox results (coxph).")
     if (!is.null(x$uni_cox) && !is.null(x$multi_cox$coef) && x$fun_multiCox == "coxph") {
@@ -424,7 +424,7 @@ plot_colStack.efs <- function(raw, top = 30,
   p
 }
 
-setMethod("map", signature = c(x = "job_lasso"),
+setMethod_traceable("map", signature = c(x = "job_lasso"),
   function(x, ref, pvalue = TRUE){
     data <- select(object(x), dplyr::all_of(ref))
     data$group <- x$metadata$group
@@ -433,7 +433,7 @@ setMethod("map", signature = c(x = "job_lasso"),
     p
   })
 
-setMethod("merge", signature = c(x = "job_lasso", y = "job_lasso"),
+setMethod_traceable("merge", signature = c(x = "job_lasso", y = "job_lasso"),
   function(x, y, scale = TRUE, use_alias = TRUE, db = org.Hs.eg.db::org.Hs.eg.db, ...)
   {
     common <- intersect(colnames(x$metadata), colnames(y$metadata))

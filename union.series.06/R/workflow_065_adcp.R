@@ -24,18 +24,18 @@ job_adcp <- function(cids, hgnc_symbols)
   .job_adcp(object = namel(cids, hgnc_symbols))
 }
 
-setMethod("step0", signature = c(x = "job_adcp"),
+setMethod_traceable("step0", signature = c(x = "job_adcp"),
   function(x){
     step_message("Prepare your data with function `job_adcp`.")
   })
 
-setMethod("step1", signature = c(x = "job_adcp"),
+setMethod_traceable("step1", signature = c(x = "job_adcp"),
   function(x, bdb = NULL, each_target = 1, pdbs = NULL)
   {
     callNextMethod(x, bdb, each_target, pdbs)
   })
 
-setMethod("step2", signature = c(x = "job_adcp"),
+setMethod_traceable("step2", signature = c(x = "job_adcp"),
   function(x, dir = "ligand", use = c("this", "nextMethod"), cl = 10)
   {
     use <- match.arg(use)
@@ -80,7 +80,7 @@ setMethod("step2", signature = c(x = "job_adcp"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_adcp"),
+setMethod_traceable("step3", signature = c(x = "job_adcp"),
   function(x, cl = 10, pattern = "ORGANISM_SCIENTIFIC: HOMO SAPIENS",
     extra_pdb.files = NULL, extra_layouts = NULL, extra_symbols = NULL)
   {
@@ -88,7 +88,7 @@ setMethod("step3", signature = c(x = "job_adcp"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_adcp"),
+setMethod_traceable("step4", signature = c(x = "job_adcp"),
   function(x, time = 3600, savedir = "adcp_space", log = "/tmp/res.log", save.object = "ad3.rds")
   {
     step_message("Run ADFR and ADCP ...")

@@ -33,12 +33,12 @@ job_dmr <- function(data, genome = c("hg38", "mm10", "rn6"),
   x
 }
 
-setMethod("step0", signature = c(x = "job_dmr"),
+setMethod_traceable("step0", signature = c(x = "job_dmr"),
   function(x){
     step_message("Prepare your data with function `job_dmr`.")
   })
 
-setMethod("step1", signature = c(x = "job_dmr"),
+setMethod_traceable("step1", signature = c(x = "job_dmr"),
   function(x, plot_cpgIsland = TRUE)
   {
     step_message("DMR distribution.")
@@ -92,7 +92,7 @@ setMethod("step1", signature = c(x = "job_dmr"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_dmr"),
+setMethod_traceable("step2", signature = c(x = "job_dmr"),
   function(x, chrs = NULL, geneOverlap = TRUE, must = TRUE)
   {
     step_message("Specify chromosomes to visualization.")
@@ -125,7 +125,7 @@ setMethod("step2", signature = c(x = "job_dmr"),
     return(x)
   })
 
-setMethod("vis", signature = c(x = "job_dmr"),
+setMethod_traceable("vis", signature = c(x = "job_dmr"),
   function(x, chr, subset = NULL, ucscRefseq = FALSE, zo = 1.2, symbol = NULL, ...)
   {
     if (length(symbol) > 1) {

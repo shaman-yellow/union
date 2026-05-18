@@ -91,12 +91,12 @@ job_fusion <- function(file_gwas, SNP = "rsID",
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_fusion"),
+setMethod_traceable("step0", signature = c(x = "job_fusion"),
   function(x){
     step_message("Prepare your data with function `job_fusion`.")
   })
 
-setMethod("step1", signature = c(x = "job_fusion"),
+setMethod_traceable("step1", signature = c(x = "job_fusion"),
   function(x){
     step_message("Format as .sumstats file.")
     prefix <- tools::file_path_sans_ext(x$file_gwas, TRUE) 
@@ -111,7 +111,7 @@ setMethod("step1", signature = c(x = "job_fusion"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_fusion"),
+setMethod_traceable("step2", signature = c(x = "job_fusion"),
   function(x, tissue = "Whole_Blood", from = "GTEx", type = "all_samples_link",
     dir_weights = .prefix("fusion_weights", "db"), force = FALSE)
   {
@@ -189,7 +189,7 @@ setMethod("step2", signature = c(x = "job_fusion"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_fusion"),
+setMethod_traceable("step3", signature = c(x = "job_fusion"),
   function(x, chrs = "all", dir_output = "fusion", 
     cl = 3L, use = c("adjust.P", "P"), use.cut = .05)
   {
@@ -255,7 +255,7 @@ setMethod("step3", signature = c(x = "job_fusion"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_fusion"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_fusion"),
   function(x, ref, pattern = NULL, cut.pct = .1, use = "contrasts", 
     plot_heatmap = FALSE, group.by = x$group.by)
   {

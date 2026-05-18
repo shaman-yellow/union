@@ -16,7 +16,7 @@
 setGeneric("asjob_mlearn",
   function(x, ...) standardGeneric("asjob_mlearn"))
 
-setMethod("asjob_mlearn", signature = c(x = "job_deseq2"),
+setMethod_traceable("asjob_mlearn", signature = c(x = "job_deseq2"),
   function(x, ref, group = "group", levels = rev(.guess_compare_deseq2(x, 1L)), seed = 987456L)
   {
     if (x@step < 1L) {
@@ -51,7 +51,7 @@ setMethod("asjob_mlearn", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("asjob_mlearn", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_mlearn", signature = c(x = "job_limma"),
   function(x, ref, group = "group", levels = rev(.guess_compare_limma(x, 1L)), seed = 987456L)
   {
     if (x@step < 1L) {
@@ -86,12 +86,12 @@ setMethod("asjob_mlearn", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_mlearn"),
+setMethod_traceable("step0", signature = c(x = "job_mlearn"),
   function(x){
     step_message("Prepare your data with function `job_mlearn`.")
   })
 
-setMethod("step1", signature = c(x = "job_mlearn"),
+setMethod_traceable("step1", signature = c(x = "job_mlearn"),
   function(x, subset_sizes = 15:50, n = 10, method = "cv", kernel = "linear", seed = x$seed,
     workers = NULL, ..., rerun = FALSE, skip = FALSE)
   {
@@ -138,7 +138,7 @@ setMethod("step1", signature = c(x = "job_mlearn"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mlearn"),
+setMethod_traceable("step2", signature = c(x = "job_mlearn"),
   function(x, n = 10, lambda.type = c("1se", "min"), alpha = 1,
     style_plot = c("internal", "ggplot"), seed = x$seed, ...)
   {
@@ -234,7 +234,7 @@ setMethod("step2", signature = c(x = "job_mlearn"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mlearn"),
+setMethod_traceable("step3", signature = c(x = "job_mlearn"),
   function(x, ntree = 1000, top = 10, seed = x$seed, ...)
   {
     step_message("Random Forest.")
@@ -283,7 +283,7 @@ setMethod("step3", signature = c(x = "job_mlearn"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_mlearn"),
+setMethod_traceable("step4", signature = c(x = "job_mlearn"),
   function(x, n = 10, seed = x$seed,
     early = 5L, eta = .05, nrounds = 100L, rerun = FALSE)
   {
@@ -714,12 +714,12 @@ run_mlean_with_seeds <- function(x, ..., ntry = 100, expect = 2)
     })
 }
 
-setMethod("asjob_venn", signature = c(x = "job_mlearn"),
+setMethod_traceable("asjob_venn", signature = c(x = "job_mlearn"),
   function(x){
     job_venn(lst = feature(x), mode = "ck")
   })
 
-setMethod("feature", signature = c(x = "job_mlearn"),
+setMethod_traceable("feature", signature = c(x = "job_mlearn"),
   function(x){
     lst <- list(SVM_RFE = x$svm_rfe_res$features,
       LASSO = x$lasso_res$features,
@@ -923,7 +923,7 @@ setMethod("feature", signature = c(x = "job_mlearn"),
 #   res
 # }
 
-setMethod("set_remote", signature = c(x = "job_mlearn"),
+setMethod_traceable("set_remote", signature = c(x = "job_mlearn"),
   function(x, wd)
   {
     x$wd <- wd

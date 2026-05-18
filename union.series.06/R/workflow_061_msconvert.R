@@ -25,12 +25,12 @@ job_msconvert <- function(wd, files)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_msconvert"),
+setMethod_traceable("step0", signature = c(x = "job_msconvert"),
   function(x){
     step_message("Prepare your data with function `job_msconvert`.")
   })
 
-setMethod("step1", signature = c(x = "job_msconvert"),
+setMethod_traceable("step1", signature = c(x = "job_msconvert"),
   function(x, ion = c("positive", "negative"),
     pattern = NULL,
     dir = paste0(ion, "_mzML"),

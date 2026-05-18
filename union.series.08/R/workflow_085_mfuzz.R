@@ -24,12 +24,12 @@ job_mfuzz <- function()
   .job_mfuzz()
 }
 
-setMethod("step0", signature = c(x = "job_mfuzz"),
+setMethod_traceable("step0", signature = c(x = "job_mfuzz"),
   function(x){
     step_message("Prepare your data with function `job_mfuzz`.")
   })
 
-setMethod("step1", signature = c(x = "job_mfuzz"),
+setMethod_traceable("step1", signature = c(x = "job_mfuzz"),
   function(x, order = NULL, row.names = 1) {
     step_message("Convert to `ExpressionSet`.")
     data <- object(x)
@@ -42,7 +42,7 @@ setMethod("step1", signature = c(x = "job_mfuzz"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mfuzz"),
+setMethod_traceable("step2", signature = c(x = "job_mfuzz"),
   function(x, centers = 8, mflow = c(2, 4), alpha = .1, seed = 1000)
   {
     step_message("Clustering of genes.")
@@ -65,7 +65,7 @@ setMethod("step2", signature = c(x = "job_mfuzz"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mfuzz"),
+setMethod_traceable("step3", signature = c(x = "job_mfuzz"),
   function(x, up, down){
     step_message("Select clusters for up or down genes.")
     alls <- x$clusters$cluster
@@ -85,7 +85,7 @@ setMethod("step3", signature = c(x = "job_mfuzz"),
     return(x)
   })
 
-setMethod("asjob_enrich", signature = c(x = "job_mfuzz"),
+setMethod_traceable("asjob_enrich", signature = c(x = "job_mfuzz"),
   function(x, ...){
     step_message("Extract genes for selected clusters.")
     clusters <- list(ups = x$ups, downs = x$downs)
@@ -97,7 +97,7 @@ setMethod("asjob_enrich", signature = c(x = "job_mfuzz"),
 setGeneric("asjob_mfuzz",
   function(x, ...) standardGeneric("asjob_mfuzz"))
 
-setMethod("asjob_mfuzz", 
+setMethod_traceable("asjob_mfuzz", 
   signature = c(x = "job_limma"),
   function(x){
     if (x@step < 3L) {
@@ -123,7 +123,7 @@ setMethod("asjob_mfuzz",
 setGeneric("do_lasso", 
   function(x, ref, ...) standardGeneric("do_lasso"))
 
-setMethod("do_lasso", signature = c(x = "job_limma", ref = "job_mfuzz"),
+setMethod_traceable("do_lasso", signature = c(x = "job_limma", ref = "job_mfuzz"),
   function(x, ref, use = c("all", "up", "down"), ...){
     if (x@step < 1) {
       stop('x@step < 1, job_limma should be Normalized.')
@@ -145,7 +145,7 @@ setMethod("do_lasso", signature = c(x = "job_limma", ref = "job_mfuzz"),
     x
   })
 
-# setMethod("snap", signature = c(x = "job_mfuzz"),
+# setMethod_traceable("snap", signature = c(x = "job_mfuzz"),
   # function(x, up, down){
   #   if (x@step < 3) {
   #     stop('x@step < 3, no genes defined.')

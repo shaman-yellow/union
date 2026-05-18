@@ -35,7 +35,7 @@ job_pubmed <- function(keys, type = c("Review", "Clinical Study"),
   x
 }
 
-setMethod("step0", signature = c(x = "job_pubmed"),
+setMethod_traceable("step0", signature = c(x = "job_pubmed"),
   function(x){
     step_message("Prepare your data with function `job_pubmed`.")
   })

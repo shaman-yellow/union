@@ -47,12 +47,12 @@ job_bindingdb <- function(dir = .prefix("bindingdb", "db"),
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_bindingdb"),
+setMethod_traceable("step0", signature = c(x = "job_bindingdb"),
   function(x){
     step_message("Prepare your data with function `job_bindingdb`.")
   })
 
-setMethod("step1", signature = c(x = "job_bindingdb"),
+setMethod_traceable("step1", signature = c(x = "job_bindingdb"),
   function(x, cids = NULL, symbol = NULL)
   {
     step_message("Filter to find targets.")
@@ -85,7 +85,7 @@ setMethod("step1", signature = c(x = "job_bindingdb"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_bindingdb"),
+setMethod_traceable("step2", signature = c(x = "job_bindingdb"),
   function(x, dir = "bindingdb"){
     step_message("Get all bindingdb infomation.")
     dir.create(dir, FALSE)
@@ -126,7 +126,7 @@ ld_slice_read <- function(file, rows, tmp = "/tmp/ldtmp.txt") {
   ftibble(tmp)
 }
 
-setMethod("asjob_vina", signature = c(x = "job_bindingdb"),
+setMethod_traceable("asjob_vina", signature = c(x = "job_bindingdb"),
   function(x){
     if (x@step < 2L) {
       stop('x@step < 2L.')

@@ -29,13 +29,13 @@ job_miranda <- function(mirna, rna)
   x
 }
 
-setMethod("step0", signature = c(x = "job_miranda"),
+setMethod_traceable("step0", signature = c(x = "job_miranda"),
   function(x){
     step_message("Prepare your data with function `job_miranda`."
     )
   })
 
-setMethod("step1", signature = c(x = "job_miranda"),
+setMethod_traceable("step1", signature = c(x = "job_miranda"),
   function(x, wd = timeName("miranda"), rna_type = "coding"){
     step_message("Prepare computional files.")
     if (is.null(x$mart)) {
@@ -56,7 +56,7 @@ setMethod("step1", signature = c(x = "job_miranda"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_miranda"),
+setMethod_traceable("step2", signature = c(x = "job_miranda"),
   function(x, command = "conda run -n base miranda"){
     step_message("Run miranda.")
     x$outfile <- paste0(x$wd, "/", "results.txt")

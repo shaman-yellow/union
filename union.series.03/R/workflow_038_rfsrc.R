@@ -26,7 +26,7 @@ job_rfsrc <- function()
 setGeneric("asjob_rfsrc",
   function(x, ...) standardGeneric("asjob_rfsrc"))
 
-setMethod("asjob_rfsrc", signature = c(x = "job_maf"),
+setMethod_traceable("asjob_rfsrc", signature = c(x = "job_maf"),
   function(x){
     data <- e(maftools::genesToBarcodes(object(x), object(x)@gene.summary[[1]], justNames = TRUE))
     data <- as_tibble(as_df.lst(data))
@@ -42,14 +42,14 @@ setMethod("asjob_rfsrc", signature = c(x = "job_maf"),
     .job_rfsrc(object = data)
   })
 
-setMethod("step0", signature = c(x = "job_rfsrc"),
+setMethod_traceable("step0", signature = c(x = "job_rfsrc"),
   function(x){
     step_message("Prepare your data with function `job_rfsrc`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_rfsrc"),
+setMethod_traceable("step1", signature = c(x = "job_rfsrc"),
   function(x, top = 30){
     step_message("Classification importance.")
     if (is.null(x$imp)) {

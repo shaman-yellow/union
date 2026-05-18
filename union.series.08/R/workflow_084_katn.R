@@ -15,7 +15,7 @@
 setGeneric("asjob_katn",
   function(x, ...) standardGeneric("asjob_katn"))
 
-setMethod("asjob_katn", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_katn", signature = c(x = "job_seurat"),
   function(x, refs = NULL, group.by = x$group.by,
     use = names(x@object@assays)[[1]], split.by = "orig.ident", layer = "counts")
   {
@@ -62,12 +62,12 @@ setValidity("job_katn",
   }
 }
 
-setMethod("step0", signature = c(x = "job_katn"),
+setMethod_traceable("step0", signature = c(x = "job_katn"),
   function(x){
     step_message("Prepare your data with function `job_katn`.")
   })
 
-setMethod("step1", signature = c(x = "job_katn"),
+setMethod_traceable("step1", signature = c(x = "job_katn"),
   function(x, workers = 5, space = glue::glue("copykat_batch_{x@sig}"), cl = 5, ...)
   {
     step_message("Running...")
@@ -109,7 +109,7 @@ setMethod("step1", signature = c(x = "job_katn"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_katn"),
+setMethod_traceable("step2", signature = c(x = "job_katn"),
   function(x, workers = 20, cl = 5, ignore = FALSE, ...){
     step_message("Plot heatmap.")
     if (is.remote(x)) {
@@ -127,7 +127,7 @@ setMethod("step2", signature = c(x = "job_katn"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_katn"),
+setMethod_traceable("step3", signature = c(x = "job_katn"),
   function(x){
     step_message("Collate results (remote).")
     if (is.remote(x)) {
@@ -164,7 +164,7 @@ setMethod("step3", signature = c(x = "job_katn"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_katn"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_katn"),
   function(x, ref, from = "scsa_cell", to = "copykat_cell")
   {
     if (ref@step < 3L) {
@@ -178,7 +178,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "job_katn"),
     fun_method(x, ref)
   })
 
-setMethod("set_remote", signature = c(x = "job_katn"),
+setMethod_traceable("set_remote", signature = c(x = "job_katn"),
   function(x, wd = glue::glue("~/katn_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

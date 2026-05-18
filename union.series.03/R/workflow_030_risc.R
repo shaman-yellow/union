@@ -21,7 +21,7 @@
 setGeneric("asjob_risc",
   function(x, ...) standardGeneric("asjob_risc"))
 
-setMethod("asjob_risc", signature = c(x = "list"),
+setMethod_traceable("asjob_risc", signature = c(x = "list"),
   function(x, filter, group.by){
     if (is.null(names(x))) {
       stop("is.null(names(x))")
@@ -63,14 +63,14 @@ setMethod("asjob_risc", signature = c(x = "list"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_risc"),
+setMethod_traceable("step0", signature = c(x = "job_risc"),
   function(x){
     step_message("Prepare your data with function `asjob_risc`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_risc"),
+setMethod_traceable("step1", signature = c(x = "job_risc"),
   function(x, workers = 5, minPC = 10, maxPC = 20){
     step_message("Preprocess before integration.
       red{{Note: in default, the data Quality was considered been done
@@ -108,7 +108,7 @@ setMethod("step1", signature = c(x = "job_risc"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_risc"),
+setMethod_traceable("step2", signature = c(x = "job_risc"),
   function(x, ref, pattern, colors = pgc(pattern, ids(x)), seed = 123)
   {
     step_message("Integration and transformed as Seurat object.")
@@ -137,7 +137,7 @@ setMethod("step2", signature = c(x = "job_risc"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_risc"),
+setMethod_traceable("step3", signature = c(x = "job_risc"),
   function(x, group.by = x@params$group.by){
     step_message("Cell clustering and Find markers genes.")
     object(x) <- e(RISC::scCluster(object(x), slot = "cell.pls", neighbor = 3, npc = 20))
@@ -153,7 +153,7 @@ setMethod("step3", signature = c(x = "job_risc"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_risc"),
+setMethod_traceable("step4", signature = c(x = "job_risc"),
   function(x, contrasts, group.by = x$group.by, p.adjust = .01, log2fc = 1){
     step_message("Test for DEGs.")
     if (is.data.frame(contrasts)) {
@@ -178,7 +178,7 @@ setMethod("step4", signature = c(x = "job_risc"),
     return(x)
   })
 
-setMethod("focus", signature = c(x = "job_risc"),
+setMethod_traceable("focus", signature = c(x = "job_risc"),
   function(x, features, cluster = 3, group.by = x$group.by, colors = x$palette){
     step_message("Heatmap for DEGs.")
     ann_col <- if (is.null(colors)) NULL else list(Group = colors)
@@ -186,13 +186,13 @@ setMethod("focus", signature = c(x = "job_risc"),
       ann_col = ann_col, gene.cluster = cluster)
   })
 
-setMethod("vis", signature = c(x = "job_risc"),
+setMethod_traceable("vis", signature = c(x = "job_risc"),
   function(x, group.by = x$group.by, pt.size = .7, colors = color_set()) {
     e(RISC::DimPlot(object(x), colFactor = group.by,
         size = pt.size, Colors = colors))
   })
 
-setMethod("ids", signature = c(x = "job_risc"),
+setMethod_traceable("ids", signature = c(x = "job_risc"),
   function(x, id = x@params$group.by, unique = TRUE){
     ids <- object(x)@coldata[[ id ]]
     if (unique)
@@ -200,7 +200,7 @@ setMethod("ids", signature = c(x = "job_risc"),
     ids
   })
 
-setMethod("asjob_seurat", signature = c(x = "job_risc"),
+setMethod_traceable("asjob_seurat", signature = c(x = "job_risc"),
   function(x, name = "integrated"){
     group.by <- x$group.by
     palette <- x$palette
@@ -229,20 +229,20 @@ setMethod("asjob_seurat", signature = c(x = "job_risc"),
     return(x)
   })
 
-setMethod("asjob_monocle", signature = c(x = "job_risc"),
+setMethod_traceable("asjob_monocle", signature = c(x = "job_risc"),
   function(x){
     x <- asjob_seurat(x)
     x <- asjob_monocle(x)
     return(x)
   })
 
-setMethod("mutate", signature = c(x = "job_risc"),
+setMethod_traceable("mutate", signature = c(x = "job_risc"),
   function(x, ...){
     object(x)@coldata <- dplyr::mutate(object(x)@coldata, ...)
     return(x)
   })
 
-setMethod("asjob_gsea", signature = c(x = "job_risc"),
+setMethod_traceable("asjob_gsea", signature = c(x = "job_risc"),
   function(x, contrast.pattern = NULL, marker.list = x@tables$step4$contrasts)
   {
     if (!is.null(contrast.pattern)) {
@@ -253,7 +253,7 @@ setMethod("asjob_gsea", signature = c(x = "job_risc"),
     job_gsea(dplyr::relocate(topTable, hgnc_symbol = Symbol, logFC = log2FC))
   })
 
-# setMethod("asjob_monocle", signature = c(x = "job_risc"),
+# setMethod_traceable("asjob_monocle", signature = c(x = "job_risc"),
   # function(x, group.by = x@params$group.by, dims = 50){
   #   if (x@step < 3L) {
   #     stop("x@step < 3L")

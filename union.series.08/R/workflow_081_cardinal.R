@@ -50,12 +50,12 @@ job_cardinal <- function(files, names = NULL, groups = NULL, ...)
   .job_cardinal(object = object)
 }
 
-setMethod("step0", signature = c(x = "job_cardinal"),
+setMethod_traceable("step0", signature = c(x = "job_cardinal"),
   function(x){
     step_message("Prepare your data with function `job_cardinal`.")
   })
 
-setMethod("step1", signature = c(x = "job_cardinal"),
+setMethod_traceable("step1", signature = c(x = "job_cardinal"),
   function(x, test = 1:6)
   {
     step_message("Preprocessing.")
@@ -81,7 +81,7 @@ setMethod("step1", signature = c(x = "job_cardinal"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_cardinal"),
+setMethod_traceable("step2", signature = c(x = "job_cardinal"),
   function(x){
     step_message("Statistic (PCA).")
     x$pca <- e(Cardinal::PCA(object(x)))
@@ -92,7 +92,7 @@ setMethod("step2", signature = c(x = "job_cardinal"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_cardinal"),
+setMethod_traceable("step3", signature = c(x = "job_cardinal"),
   function(x, formula = "~ group", show = 10,
     use.segment = FALSE, workers = 5, ...)
   {
@@ -130,7 +130,7 @@ setMethod("step3", signature = c(x = "job_cardinal"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_cardinal", ref = "df"),
+setMethod_traceable("map", signature = c(x = "job_cardinal", ref = "df"),
   function(x, ref, order_by = "i", distinct = TRUE, tol = .01, ...)
   {
     message("Merge identification data into feature data and top tables.")
@@ -164,14 +164,14 @@ setMethod("map", signature = c(x = "job_cardinal", ref = "df"),
     return(x)
   })
 
-setMethod("focus", signature = c(x = "job_cardinal"),
+setMethod_traceable("focus", signature = c(x = "job_cardinal"),
   function(x, ...)
   {
     Cardinal::plot(object(x), log2(intensity + 1) ~ mz,
       ylab = "Log2(intensity + 1)", zlab = "m/z", ...)
   })
 
-setMethod("vis", signature = c(x = "job_cardinal"),
+setMethod_traceable("vis", signature = c(x = "job_cardinal"),
   function(x, i = NULL, mz = NULL, layout = c(1, length(ids(x))), ids = NULL, use.ids = NULL, ...)
   {
     if (!is.null(ids) && !is.null(use.ids)) {
@@ -193,7 +193,7 @@ setMethod("vis", signature = c(x = "job_cardinal"),
     p
   })
 
-setMethod("ids", signature = c(x = "job_cardinal"),
+setMethod_traceable("ids", signature = c(x = "job_cardinal"),
   function(x, which = "run", unique = TRUE){
     ids <- object(x)[[ which ]]
     if ( unique ) {

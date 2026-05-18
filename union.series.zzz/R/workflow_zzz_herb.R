@@ -4,13 +4,13 @@
 
 setClassUnion("JOB_herb", c("job_herb", "job_tcmsp", "job_batman", "job_tcmsp2"))
 
-setMethod("slice", signature = c(x = "JOB_herb"),
+setMethod_traceable("slice", signature = c(x = "JOB_herb"),
   function(x, ...){
     x@params$herbs_info <- dplyr::slice(x@params$herbs_info, ...)
     return(x)
   })
 
-setMethod("vis", signature = c(x = "JOB_herb"),
+setMethod_traceable("vis", signature = c(x = "JOB_herb"),
   function(x, col.fill = 2, axes = 1:4, label.auto = FALSE, label.freq = NULL, label.factor = 1)
   {
     symDisease <- x@tables$step3$disease_targets_annotation$hgnc_symbol
@@ -24,7 +24,7 @@ setMethod("vis", signature = c(x = "JOB_herb"),
     p
   })
 
-setMethod("intersect", signature = c(x = "JOB_herb", y = "JOB_herb"),
+setMethod_traceable("intersect", signature = c(x = "JOB_herb", y = "JOB_herb"),
   function(x, y, names)
   {
     lst <- list(unique(x$data.allu$Target.name),
@@ -48,7 +48,7 @@ setMethod("intersect", signature = c(x = "JOB_herb", y = "JOB_herb"),
     }
   })
 
-setMethod("feature", signature = c(x = "JOB_herb"),
+setMethod_traceable("feature", signature = c(x = "JOB_herb"),
   function(x)
   {
     if (!is.null(x$.feature)) {
@@ -62,7 +62,7 @@ setMethod("feature", signature = c(x = "JOB_herb"),
     }
   })
 
-setMethod("map", signature = c(x = "JOB_herb", ref = "feature"),
+setMethod_traceable("map", signature = c(x = "JOB_herb", ref = "feature"),
   function(x, ref, HLs = NULL, levels = NULL, lab.level = "Level", name = "dis", compounds = NULL,
     compounds.keep.intersection = FALSE,
     syns = NULL, enrichment = NULL, en.top = 10, use.enrich = c("kegg", "go"), 

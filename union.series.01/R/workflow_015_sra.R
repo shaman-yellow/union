@@ -23,14 +23,14 @@ job_sra <- function(project, wd = "sra_data")
   x
 }
 
-setMethod("step0", signature = c(x = "job_sra"),
+setMethod_traceable("step0", signature = c(x = "job_sra"),
   function(x){
     step_message("Prepare your data with function `job_sra`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_sra"),
+setMethod_traceable("step1", signature = c(x = "job_sra"),
   function(x){
     step_message("Prepare for dowloading SRA data (e.g., 16s rRNA data).")
     cli::cli_alert_info("esearch -db sra -query")
@@ -40,7 +40,7 @@ setMethod("step1", signature = c(x = "job_sra"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_sra"),
+setMethod_traceable("step2", signature = c(x = "job_sra"),
   function(x){
     step_message("Download load SRA data.")
     cli::cli_alert_info("bash: prefetch ...")
@@ -57,7 +57,7 @@ setMethod("step2", signature = c(x = "job_sra"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_sra"),
+setMethod_traceable("step3", signature = c(x = "job_sra"),
   function(x, workers = 6, pattern = "fastq\\.gz$")
   {
     step_message("Format as fastq file (pair-end)")
@@ -72,7 +72,7 @@ setMethod("step3", signature = c(x = "job_sra"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_sra"),
+setMethod_traceable("step4", signature = c(x = "job_sra"),
   function(x, filter = TRUE){
     step_message("Try to format `x@params$info` as metadata.")
     info <- dplyr::mutate(x@params$info, SampleName = gs(SampleName, "_", "."))
@@ -91,7 +91,7 @@ setMethod("step4", signature = c(x = "job_sra"),
 setGeneric("asjob_qiime",
   function(x, ...) standardGeneric("asjob_qiime"))
 
-setMethod("asjob_qiime", signature = c(x = "job_sra"),
+setMethod_traceable("asjob_qiime", signature = c(x = "job_sra"),
   function(x, wd = "qiime_data", export = "qiime_export"){
     dir.create(wd)
     job_qiime(x@params$metadata, wd, export = export)
@@ -100,7 +100,7 @@ setMethod("asjob_qiime", signature = c(x = "job_sra"),
 setGeneric("asjob_sra",
   function(x, ...) standardGeneric("asjob_sra"))
 
-setMethod("asjob_sra", signature = c(x = "df"),
+setMethod_traceable("asjob_sra", signature = c(x = "df"),
   function(x, path){
     metadata <- x
     x <- .job_sra()

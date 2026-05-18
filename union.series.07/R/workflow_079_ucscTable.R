@@ -29,12 +29,12 @@ job_ucscTable <- function(genome)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_ucscTable"),
+setMethod_traceable("step0", signature = c(x = "job_ucscTable"),
   function(x){
     step_message("Prepare your data with function `job_ucscTable`.")
   })
 
-setMethod("step1", signature = c(x = "job_ucscTable"),
+setMethod_traceable("step1", signature = c(x = "job_ucscTable"),
   function(x){
     step_message("")
     return(x)

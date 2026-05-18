@@ -24,19 +24,19 @@
 setGeneric("asjob_regNet",
   function(x, ...) standardGeneric("asjob_regNet"))
 
-setMethod("asjob_regNet", signature = c(x = "feature"),
+setMethod_traceable("asjob_regNet", signature = c(x = "feature"),
   function(x){
     fea <- resolve_feature_snapAdd_onExit("x", x)
     x <- .job_regNet(object = fea)
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_regNet"),
+setMethod_traceable("step0", signature = c(x = "job_regNet"),
   function(x){
     step_message("Prepare your data with function `job_regNet`.")
   })
 
-setMethod("step1", signature = c(x = "job_regNet"),
+setMethod_traceable("step1", signature = c(x = "job_regNet"),
   function(x, recode = NULL, tsh = TRUE, tbs = TRUE, 
     miRNetR = FALSE, mdb = FALSE, miRNetR_cache = NULL)
   {
@@ -152,7 +152,7 @@ setMethod("step1", signature = c(x = "job_regNet"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_regNet"),
+setMethod_traceable("step2", signature = c(x = "job_regNet"),
   function(x, use = "all"){
     step_message("miRNA intersection.")
     sets <- x$all_miRNA
@@ -173,7 +173,7 @@ setMethod("step2", signature = c(x = "job_regNet"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_regNet"),
+setMethod_traceable("step3", signature = c(x = "job_regNet"),
   function(x, enc = TRUE, npi = TRUE, mi = unique(x$ins_mirna$mirna_name)){
     step_message("Got lncRNA.")
     x$all_lncRNA <- list()
@@ -212,7 +212,7 @@ setMethod("step3", signature = c(x = "job_regNet"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_regNet"),
+setMethod_traceable("step4", signature = c(x = "job_regNet"),
   function(x, use = "all"){
     step_message("lncRNA intersection")
     sets <- x$all_lncRNA
@@ -229,7 +229,7 @@ setMethod("step4", signature = c(x = "job_regNet"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_regNet"),
+setMethod_traceable("step5", signature = c(x = "job_regNet"),
   function(x, layout = "fr"){
     step_message("Network.")
     funName <- function(x) {
@@ -275,7 +275,7 @@ setMethod("step5", signature = c(x = "job_regNet"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_regNet"),
+setMethod_traceable("step6", signature = c(x = "job_regNet"),
   function(x, trrust = TRUE, chipbase = FALSE,
     layout = "fr", filter_chipbase = TRUE, num_quantile = .9, n_min_support = 3L)
   {

@@ -41,12 +41,12 @@ job_biomart2 <- function(values,
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_biomart2"),
+setMethod_traceable("step0", signature = c(x = "job_biomart2"),
   function(x){
     step_message("Prepare your data with function `job_biomart2`.")
   })
 
-setMethod("step1", signature = c(x = "job_biomart2"),
+setMethod_traceable("step1", signature = c(x = "job_biomart2"),
   function(x, group_number = 500, cl = 10,
     savepath = paste0("biomart2_", x$args$fromAttri, "_AS_", x$args$toAttri))
   {
@@ -98,7 +98,7 @@ setMethod("step1", signature = c(x = "job_biomart2"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_biomart2"),
+setMethod_traceable("step2", signature = c(x = "job_biomart2"),
   function(x, tops, use = c("P.Value", "adj.P.Val"), idcol = colnames(x$mapped)[[1]])
   {
     step_message("Add column in `tops`.")
@@ -119,7 +119,7 @@ setMethod("step2", signature = c(x = "job_biomart2"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_biomart2", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_biomart2", ref = "character"),
   function(x, ref, mode = c("from2to", "to2from"))
   {
     mode <- match.arg(mode)

@@ -27,7 +27,7 @@ job_fella <- function(kegg) {
 setGeneric("asjob_fella",
   function(x, ...) standardGeneric("asjob_fella"))
 
-setMethod("asjob_fella", signature = c(x = "job_metabo"),
+setMethod_traceable("asjob_fella", signature = c(x = "job_metabo"),
   function(x){
     mapped <- x@tables$step1$mapped
     x <- .job_fella()
@@ -36,14 +36,14 @@ setMethod("asjob_fella", signature = c(x = "job_metabo"),
     x
   })
 
-setMethod("step0", signature = c(x = "job_fella"),
+setMethod_traceable("step0", signature = c(x = "job_fella"),
   function(x){
     step_message("Prepare your data with function `job_fella`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_fella"),
+setMethod_traceable("step1", signature = c(x = "job_fella"),
   function(x, org = "hsa", db_fella = .prefix(name = "db")){
     step_message("Use KEGG ID to perform FELLA.
       "
@@ -99,13 +99,13 @@ setMethod("step1", signature = c(x = "job_fella"),
     return(x)
   })
 
-setMethod("clear", signature = c(x = "job_fella"),
+setMethod_traceable("clear", signature = c(x = "job_fella"),
   function(x, ...){
     x@params$db <- NULL
     callNextMethod(x, ..., name = "fl")
   })
 
-setMethod("map", signature = c(x = "job_enrich", ref = "job_fella"),
+setMethod_traceable("map", signature = c(x = "job_enrich", ref = "job_fella"),
   function(x, ref, use.x = "kegg", use.ref = "hypergeom") {
     if (use.ref == "hypergeom") {
       ref <- ref@tables$step1$t.hypergeom[[1]][[ "KEGG.id" ]]

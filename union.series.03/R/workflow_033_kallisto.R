@@ -22,7 +22,7 @@
 setGeneric("asjob_kall",
   function(x, ...) standardGeneric("asjob_kall"))
 
-setMethod("asjob_kall", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_kall", signature = c(x = "job_fastp"),
   function(x){
     metadata <- x$metadata
     x <- .job_kall()
@@ -30,14 +30,14 @@ setMethod("asjob_kall", signature = c(x = "job_fastp"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_kall"),
+setMethod_traceable("step0", signature = c(x = "job_kall"),
   function(x){
     step_message("Prepare your data with function `asjob_kall`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_kall"),
+setMethod_traceable("step1", signature = c(x = "job_kall"),
   function(x, idx = .prefix("hg38_mrna.idx", "db"),
     ref_file = .prefix("Homo_sapiens.GRCh38.cdna.all.fa.gz", "db"),
     org = NULL)
@@ -61,7 +61,7 @@ setMethod("step1", signature = c(x = "job_kall"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_kall"),
+setMethod_traceable("step2", signature = c(x = "job_kall"),
   function(x, workers = 8, output = "kallisto_quantification")
   {
     step_message("Mapping to reference genome.")
@@ -86,7 +86,7 @@ setMethod("step2", signature = c(x = "job_kall"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_kall"),
+setMethod_traceable("step3", signature = c(x = "job_kall"),
   function(x, path = x$output){
     step_message("Collate all quantification results.")
     res <- read_kall_quant(path)
@@ -95,7 +95,7 @@ setMethod("step3", signature = c(x = "job_kall"),
     return(x)
   })
 
-setMethod("meta", signature = c(x = "job_kall"),
+setMethod_traceable("meta", signature = c(x = "job_kall"),
   function(x, sra, geo, col.group = "title")
   {
     message("Try get metadata.")

@@ -33,12 +33,12 @@ job_superpred <- function(smiles, ref = NULL)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_superpred"),
+setMethod_traceable("step0", signature = c(x = "job_superpred"),
   function(x){
     step_message("Prepare your data with function `job_superpred`.")
   })
 
-setMethod("step1", signature = c(x = "job_superpred"),
+setMethod_traceable("step1", signature = c(x = "job_superpred"),
   function(x, db_file = .prefix("superPred/targets.rds", "db"), tempdir = "download", port = 4444)
   {
     step_message("Touch the online tools.")
@@ -133,7 +133,7 @@ setMethod("step1", signature = c(x = "job_superpred"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_superpred"),
+setMethod_traceable("step2", signature = c(x = "job_superpred"),
   function(x, cut.p = .5)
   {
     step_message("Filter data")
@@ -161,7 +161,7 @@ setMethod("step2", signature = c(x = "job_superpred"),
 setGeneric("asjob_superpred",
   function(x, ...) standardGeneric("asjob_superpred"))
 
-setMethod("asjob_superpred", signature = c(x = "job_pubchemr"),
+setMethod_traceable("asjob_superpred", signature = c(x = "job_pubchemr"),
   function(x){
     if (x@step < 1L) {
       stop("x@step < 1L")
@@ -172,7 +172,7 @@ setMethod("asjob_superpred", signature = c(x = "job_pubchemr"),
 setGeneric("do_herb", 
   function(x, ref, ...) standardGeneric("do_herb"))
 
-setMethod("do_herb", signature = c(x = "job_pubchemr", ref = "job_superpred"),
+setMethod_traceable("do_herb", signature = c(x = "job_pubchemr", ref = "job_superpred"),
   function(x, ref, disease = NULL, disease.score = 5, HLs = NULL, names = NULL, run_step3 = TRUE,
     metadata = NULL)
   {
@@ -252,7 +252,7 @@ setMethod("do_herb", signature = c(x = "job_pubchemr", ref = "job_superpred"),
     return(hb)
   })
 
-setMethod("asjob_superpred", signature = c(x = "job_herb"),
+setMethod_traceable("asjob_superpred", signature = c(x = "job_herb"),
   function(x, hob_filter = FALSE, ..., tmp = "PubChemR.rds"){
     db <- object(x)$component
     cpds <- x@tables$step1$herbs_compounds
@@ -297,7 +297,7 @@ setMethod("asjob_superpred", signature = c(x = "job_herb"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_herb", ref = "job_superpred"),
+setMethod_traceable("map", signature = c(x = "job_herb", ref = "job_superpred"),
   function(x, ref){
     cpds <- ref$from_herb
     data <- dplyr::select(ref@tables$step1$targets,

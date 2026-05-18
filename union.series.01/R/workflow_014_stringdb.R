@@ -31,18 +31,18 @@ job_stringdb <- function(data)
 setGeneric("asjob_stringdb",
   function(x, ...) standardGeneric("asjob_stringdb"))
 
-setMethod("asjob_stringdb", signature = c(x = "job_herb"),
+setMethod_traceable("asjob_stringdb", signature = c(x = "job_herb"),
   function(x){
     job_stringdb(data = x$ppi_used)
   })
 
-setMethod("asjob_stringdb", signature = c(x = "character"),
+setMethod_traceable("asjob_stringdb", signature = c(x = "character"),
   function(x){
     message("`x` should be gene Symbols.")
     job_stringdb(data.frame(Symbol = x))
   })
 
-setMethod("asjob_stringdb", signature = c(x = "feature"),
+setMethod_traceable("asjob_stringdb", signature = c(x = "feature"),
   function(x, extra = NULL){
     x <- resolve_feature_snapAdd_onExit("x", x)
     if (!is.null(extra)) {
@@ -52,14 +52,14 @@ setMethod("asjob_stringdb", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_stringdb"),
+setMethod_traceable("step0", signature = c(x = "job_stringdb"),
   function(x){
     step_message("Prepare your data with function `job_stringdb`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_stringdb"),
+setMethod_traceable("step1", signature = c(x = "job_stringdb"),
   function(x, tops = 30, layout = "spiral", species = 9606, score_threshold = 400,
     network_type = "phy", input_directory = .prefix("stringdb_physical_v12.0", name = "db"),
     version = "12.0", label = FALSE, HLs = NULL, use.anno = TRUE, link_data = "detailed",
@@ -170,7 +170,7 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     return(x)
   })
 
-setMethod("filter", signature = c(x = "job_stringdb"),
+setMethod_traceable("filter", signature = c(x = "job_stringdb"),
   function(x, ref.x, ref.y, lab.x = "Source", lab.y = "Target",
     use = "preferred_name", data = x$graph, level.x = NULL,
     lab.fill = "log2FC",
@@ -272,13 +272,13 @@ setMethod("filter", signature = c(x = "job_stringdb"),
     return(x)
   })
 
-setMethod("asjob_enrich", signature = c(x = "job_stringdb"),
+setMethod_traceable("asjob_enrich", signature = c(x = "job_stringdb"),
   function(x, tops = x$tops){
     ids <- head(x@tables$step1$hub_genes$Symbol, tops)
     job_enrich(list(hub_genes = ids), x@tables$step1$hub_genes)
   })
 
-setMethod("vis", signature = c(x = "job_stringdb"),
+setMethod_traceable("vis", signature = c(x = "job_stringdb"),
   function(x, HLs){
     p <- ggraph(x$graph_mcc) +
       geom_edge_arc(

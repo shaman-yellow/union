@@ -29,12 +29,12 @@ job_gmix <- function(disease, fuzzy = NULL,
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_gmix"),
+setMethod_traceable("step0", signature = c(x = "job_gmix"),
   function(x){
     step_message("Prepare your data with function `job_gmix`.")
   })
 
-setMethod("step1", signature = c(x = "job_gmix"),
+setMethod_traceable("step1", signature = c(x = "job_gmix"),
   function(x, get_pharm = TRUE, get_dis = TRUE, get_genecard = TRUE){
     step_message("Search databases.")
     fun <- function(name, col) {
@@ -64,7 +64,7 @@ setMethod("step1", signature = c(x = "job_gmix"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_gmix"),
+setMethod_traceable("step2", signature = c(x = "job_gmix"),
   function(x, use.pharm = NULL, use.dis = NULL, use.score = NULL, restrict = FALSE)
   {
     step_message("Get data.")
@@ -103,7 +103,7 @@ setMethod("step2", signature = c(x = "job_gmix"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_gmix", ref = "job_gmix"),
+setMethod_traceable("map", signature = c(x = "job_gmix", ref = "job_gmix"),
   function(x, ref, extra = NULL)
   {
     fun <- function(x) rm.no(unlist(x@params$lst.genes, use.names = FALSE))
@@ -166,7 +166,7 @@ get_disgenet_data <- function(file_disease = .prefix("database/DisGeNet_disease_
   data
 }
 
-setMethod("merge", signature = c(x = "job_gmix", y = "job_gmix"),
+setMethod_traceable("merge", signature = c(x = "job_gmix", y = "job_gmix"),
   function(x, y, ...){
     lst <- c(list(x), list(y), list(...))
     lst <- lapply(lst, function(x) x@params$lst.genes)

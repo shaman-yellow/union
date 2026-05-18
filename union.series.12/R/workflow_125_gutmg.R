@@ -23,12 +23,12 @@ job_gutmg <- function(dir = ".")
   .job_gutmg()
 }
 
-setMethod("step0", signature = c(x = "job_gutmg"),
+setMethod_traceable("step0", signature = c(x = "job_gutmg"),
   function(x){
     step_message("Prepare your data with function `job_gutmg`.")
   })
 
-setMethod("step1", signature = c(x = "job_gutmg"),
+setMethod_traceable("step1", signature = c(x = "job_gutmg"),
   function(x){
     step_message("Quality control (QC).")
     return(x)

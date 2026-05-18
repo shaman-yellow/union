@@ -23,7 +23,7 @@
 setGeneric("asjob_biobakery",
   function(x, ...) standardGeneric("asjob_biobakery"))
 
-setMethod("asjob_biobakery", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_biobakery", signature = c(x = "job_fastp"),
   function(x){
     y <- .job_biobakery()
     y$wd <- object(x)
@@ -32,14 +32,14 @@ setMethod("asjob_biobakery", signature = c(x = "job_fastp"),
     return(y)
   })
 
-setMethod("step0", signature = c(x = "job_biobakery"),
+setMethod_traceable("step0", signature = c(x = "job_biobakery"),
   function(x){
     step_message("Prepare your data with function `job_biobakery`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_biobakery"),
+setMethod_traceable("step1", signature = c(x = "job_biobakery"),
   function(x, workers = 9){
     step_message("One-stop analysis.")
     if (!is.null(x$from_job_fastp)) {
@@ -59,7 +59,7 @@ setMethod("step1", signature = c(x = "job_biobakery"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_biobakery"),
+setMethod_traceable("set_remote", signature = c(x = "job_biobakery"),
   function(x, wd, postfix = NULL, db = "/data/hlc/biobakery_workflows_databases"){
     x$postfix <- postfix
     x$run_after_cd <- paste0("export KNEADDATA_DB_HUMAN_GENOME=", db)

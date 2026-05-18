@@ -17,7 +17,7 @@
 setGeneric("asjob_scteni",
   function(x, ...) standardGeneric("asjob_scteni"))
 
-setMethod("asjob_scteni", signature = c(x = "ANY"),
+setMethod_traceable("asjob_scteni", signature = c(x = "ANY"),
   function(x, ref){
     pr <- list()
     if (is(x, "job_seurat")) {
@@ -39,12 +39,12 @@ setMethod("asjob_scteni", signature = c(x = "ANY"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_scteni"),
+setMethod_traceable("step0", signature = c(x = "job_scteni"),
   function(x){
     step_message("Prepare your data with function `job_scteni`.")
   })
 
-setMethod("step1", signature = c(x = "job_scteni"),
+setMethod_traceable("step1", signature = c(x = "job_scteni"),
   function(x){
     step_message("Do nothing")
     x <- methodAdd(x, "**scTenifoldKnk** 是一种基于单细胞转录组数据构建基因调控网络并进行 *in silico* 虚拟敲除的计算方法，其核心目的是在无需实际基因编辑实验的情况下，评估特定基因在细胞系统中的功能重要性及其对全局转录调控网络的影响。具体而言，该方法通过对目标基因进行网络层面的“移除”，并比较敲除前后基因调控网络结构及表达模式的变化，从而识别潜在的下游调控通路及受影响的关键基因模块。该分析有助于优先筛选具有重要生物学意义的候选关键基因，为后续机制研究和实验验证提供理论依据。")
@@ -52,7 +52,7 @@ setMethod("step1", signature = c(x = "job_scteni"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_scteni"),
+setMethod_traceable("step2", signature = c(x = "job_scteni"),
   function(x, use.p = c("p.adj", "p.value"), cut.p = .05, 
     cut.z = 2, recode = NULL, dir = x$dir_seurat,
     lst_diff = .read_scteni_results(dir, sig(x)))

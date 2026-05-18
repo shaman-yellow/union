@@ -726,6 +726,9 @@ save_small.huibang <- function(name, cutoff = 50, dir = "rdata_smallObject")
 
 setup.huibang <- function() {
   options(
+    autor_s4_trace = TRUE,
+    autor_s4_trace_file = ".s4trace/current.rds",
+    autor_s4_trace_append = TRUE,
     tibble.print_max = 100,
     pillar.width = 100,
     pillar.max_columns = 15,

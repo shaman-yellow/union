@@ -22,12 +22,12 @@
 setGeneric("asjob_scenic",
   function(x, ...) standardGeneric("asjob_scenic"))
 
-setMethod("step0", signature = c(x = "job_scenic"),
+setMethod_traceable("step0", signature = c(x = "job_scenic"),
   function(x){
     step_message("Prepare your data with function `job_scenic`.")
   })
 
-setMethod("asjob_scenic", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_scenic", signature = c(x = "job_seurat"),
   function(x, sketch = TRUE, ncells = 10000, filter = TRUE,
     org = c("human"), dir_db = pg("db_scenic"), overwrite = FALSE)
   {
@@ -134,7 +134,7 @@ setMethod("asjob_scenic", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step1", signature = c(x = "job_scenic"),
+setMethod_traceable("step1", signature = c(x = "job_scenic"),
   function(x, workers = 16)
   {
     step_message("Run pyscenic grn")
@@ -150,7 +150,7 @@ setMethod("step1", signature = c(x = "job_scenic"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_scenic"),
+setMethod_traceable("step2", signature = c(x = "job_scenic"),
   function(x, workers = 3L)
   {
     step_message("Run pyscenic ctx")
@@ -164,7 +164,7 @@ setMethod("step2", signature = c(x = "job_scenic"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_scenic"),
+setMethod_traceable("step3", signature = c(x = "job_scenic"),
   function(x, workers = 3L){
     step_message("Run pyscenic aucell")
     x$file_aucell <- file.path(x$dir_cache, glue::glue("aucell_{x$hash}.loom"))
@@ -179,7 +179,7 @@ setMethod("step3", signature = c(x = "job_scenic"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_scenic", ref = "job_seurat"),
+setMethod_traceable("map", signature = c(x = "job_scenic", ref = "job_seurat"),
   function(x, ref, name = NULL, name.by = NULL, ntop = 3,
     group.by = ref$group.by, .name = "seurat")
   {
@@ -299,7 +299,7 @@ setMethod("map", signature = c(x = "job_scenic", ref = "job_seurat"),
 }
 
 
-setMethod("diff", signature = c(x = "job_scenic"),
+setMethod_traceable("diff", signature = c(x = "job_scenic"),
   function(x, ref, name = NULL, split.by = ref$group.by, compare.by = "group",
     ident.1 = x$levels[1], ident.2 = x$levels[2],
     use.p = c("p_val_adj", "p_val"), 
@@ -498,7 +498,7 @@ setMethod("diff", signature = c(x = "job_scenic"),
   paste0(strings, collapse = " ")
 }
 
-setMethod("status", signature = c(x = "job_scenic"),
+setMethod_traceable("status", signature = c(x = "job_scenic"),
   function(x){
     system(glue::glue("tail -f {x$file_log}"))
   })

@@ -23,14 +23,14 @@ job_metabo <- function()
   .job_metabo()
 }
 
-setMethod("step0", signature = c(x = "job_metabo"),
+setMethod_traceable("step0", signature = c(x = "job_metabo"),
   function(x){
     step_message("Prepare your data with function `job_metabo`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_metabo"),
+setMethod_traceable("step1", signature = c(x = "job_metabo"),
   function(x, cpds, libname = "kegg_pathway"){
     step_message("Enrichment analysis.")
     require(MetaboAnalystR)
@@ -65,7 +65,7 @@ setMethod("step1", signature = c(x = "job_metabo"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_metabo"),
+setMethod_traceable("step2", signature = c(x = "job_metabo"),
   function(x, query){
     step_message("Get KEGG infomation to Genes.")
     mapped <- filter(x@tables$step1$mapped, Query %in% dplyr::all_of(query))

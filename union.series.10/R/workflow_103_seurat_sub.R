@@ -11,7 +11,7 @@
 setGeneric("asjob_seurat_sub",
    function(x, ...) standardGeneric("asjob_seurat_sub"))
 
-setMethod("asjob_seurat_sub", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_seurat_sub", signature = c(x = "job_seurat"),
   function(x, ref, group, group.by = "scsa_cell", cellName = "cell",
     get_after = "seurat_clusters", refine = NULL, cut.refine = 0)
   {
@@ -118,19 +118,19 @@ setMethod("asjob_seurat_sub", signature = c(x = "job_seurat"),
 #   ]
 # object(x)@active.ident <- as.factor(object(x)@meta.data$orig.ident)
 
-setMethod("step0", signature = c(x = "job_seurat_sub"),
+setMethod_traceable("step0", signature = c(x = "job_seurat_sub"),
   function(x){
     step_message("Prepare your data with function `job_seurat_sub`.")
   })
 
-setMethod("step1", signature = c(x = "job_seurat_sub"),
+setMethod_traceable("step1", signature = c(x = "job_seurat_sub"),
   function(x){
     step_message("Render as job_seurat5n.")
     x <- .job_seurat5n(x)
     return(x)
   })
 
-setMethod("refine", signature = c(x = "job_seurat"),
+setMethod_traceable("refine", signature = c(x = "job_seurat"),
   function(x, pos, neg, group.by = "seurat_clusters")
   {
     if (x@step < 3L) {
@@ -170,7 +170,7 @@ setMethod("refine", signature = c(x = "job_seurat"),
     stat
   })
 
-# setMethod("step2", signature = c(x = "job_seurat_sub"),
+# setMethod_traceable("step2", signature = c(x = "job_seurat_sub"),
 #   function(x){
 #     if (x$sub_from == "job_seurat5n") {
 #       step_message("Render as `job_seurat5n`.")
@@ -182,7 +182,7 @@ setMethod("refine", signature = c(x = "job_seurat"),
 #     return(x)
 #   })
 
-# setMethod("step2", signature = c(x = "job_seurat_sub"),
+# setMethod_traceable("step2", signature = c(x = "job_seurat_sub"),
 #   function(x, reset = FALSE, sct = FALSE) {
 #     step_message("Reset variable features.")
 #     if (reset || sct) {
@@ -209,7 +209,7 @@ setMethod("refine", signature = c(x = "job_seurat"),
 #     return(x)
 #   })
 
-# setMethod("step3", signature = c(x = "job_seurat_sub"),
+# setMethod_traceable("step3", signature = c(x = "job_seurat_sub"),
 #   function(x, dims = 1:15, resolution = 1.2, force = TRUE, ...)
 #   {
 #     x <- callNextMethod(x, dims, resolution, force = force, ...)

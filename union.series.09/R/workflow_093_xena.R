@@ -55,12 +55,12 @@ job_xena <- function(mode = "TcgaTargetGtex", dir = .prefix("xena", "db"), use_h
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_xena"),
+setMethod_traceable("step0", signature = c(x = "job_xena"),
   function(x){
     step_message("Prepare your data with function `job_xena`.")
   })
 
-setMethod("step1", signature = c(x = "job_xena"),
+setMethod_traceable("step1", signature = c(x = "job_xena"),
   function(x, cancer, site, Normal = TRUE, cancer_types = c("Primary Tumor", "Metastatic"),
     group = "guess", mode = c(
       "SKCM", "OV", "COAD", "LUAD", "LUSC"
@@ -125,7 +125,7 @@ setMethod("step1", signature = c(x = "job_xena"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_xena"),
+setMethod_traceable("step2", signature = c(x = "job_xena"),
   function(x){
     step_message("Load the data via data.table::fread (Use: select).")
     if (!is.null(x$counts)) {
@@ -142,7 +142,7 @@ setMethod("step2", signature = c(x = "job_xena"),
     return(x)
   })
 
-setMethod("asjob_limma", signature = c(x = "job_xena"),
+setMethod_traceable("asjob_limma", signature = c(x = "job_xena"),
   function(x, raw_counts = TRUE){
     message("Convert job_xena as job_limma.")
     counts <- x$counts

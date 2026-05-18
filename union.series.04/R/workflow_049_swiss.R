@@ -37,14 +37,14 @@ job_swiss <- function(smiles, ref = NULL)
 setGeneric("asjob_swiss",
   function(x, ...) standardGeneric("asjob_swiss"))
 
-setMethod("asjob_swiss", signature = c(x = "job_tcmsp"),
+setMethod_traceable("asjob_swiss", signature = c(x = "job_tcmsp"),
   function(x){
     data <- x@tables$step2$ingredients
     .check_columns(data, c("Mol ID", "smiles"))
     job_swiss(nl(data$`Mol ID`, data$smiles, FALSE))
   })
 
-setMethod("asjob_swiss", signature = c(x = "job_pubchemr"),
+setMethod_traceable("asjob_swiss", signature = c(x = "job_pubchemr"),
   function(x){
     if (x@step < 1L) {
       stop("x@step < 1L")
@@ -52,12 +52,12 @@ setMethod("asjob_swiss", signature = c(x = "job_pubchemr"),
     job_swiss(unlist(x@params$smiles))
   })
 
-setMethod("step0", signature = c(x = "job_swiss"),
+setMethod_traceable("step0", signature = c(x = "job_swiss"),
   function(x){
     step_message("Prepare your data with function `job_swiss`.")
   })
 
-setMethod("step1", signature = c(x = "job_swiss"),
+setMethod_traceable("step1", signature = c(x = "job_swiss"),
   function(x, db_file = .prefix("swissTargetPrediction/targets.rds", "db"), tempdir = "download", sleep = 5, port = 4444)
   {
     step_message("Touch the online tools.")
@@ -125,7 +125,7 @@ setMethod("step1", signature = c(x = "job_swiss"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_swiss"),
+setMethod_traceable("step2", signature = c(x = "job_swiss"),
   function(x, cut.p = .1){
     step_message("Filter data")
     if (is.null(names(object(x))) || is.null(x$data_target$Name)) {
@@ -149,7 +149,7 @@ setMethod("step2", signature = c(x = "job_swiss"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_tcmsp", ref = "job_swiss"),
+setMethod_traceable("map", signature = c(x = "job_tcmsp", ref = "job_swiss"),
   function(x, ref){
     refTargets <- ref@tables$step1$targets
     meta <- x@tables$step2$ingredients

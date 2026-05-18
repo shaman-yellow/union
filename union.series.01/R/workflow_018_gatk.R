@@ -25,7 +25,7 @@
 setGeneric("asjob_gatk",
   function(x, ...) standardGeneric("asjob_gatk"))
 
-setMethod("asjob_gatk", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_gatk", signature = c(x = "job_fastp"),
   function(x, wd){
     if (any(duplicated(x@params$metadata$SampleName)))
       stop("any(duplicated(x@params$metadata$SampleName)) == TRUE")
@@ -36,14 +36,14 @@ setMethod("asjob_gatk", signature = c(x = "job_fastp"),
     x
   })
 
-setMethod("step0", signature = c(x = "job_gatk"),
+setMethod_traceable("step0", signature = c(x = "job_gatk"),
   function(x){
     step_message("Prepare your data with function `asjob_gatk`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_gatk"),
+setMethod_traceable("step1", signature = c(x = "job_gatk"),
   function(x, geneRef_file = .prefix("hg38.fa", "db"),
     knownSites = c(.prefix("resources_broad_hg38_v0_1000G_phase1.snps.high_confidence.hg38.vcf", "db"),
       .prefix("resources_broad_hg38_v0_Mills_and_1000G_gold_standard.indels.hg38.vcf", "db")),
@@ -74,7 +74,7 @@ setMethod("step1", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_gatk"),
+setMethod_traceable("step2", signature = c(x = "job_gatk"),
   function(x, workers = 9, only.bwa = TRUE, use.sambamba = TRUE){
     step_message("Alignment to reference gnome.
       Then remote duplicated.
@@ -93,7 +93,7 @@ setMethod("step2", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_gatk"),
+setMethod_traceable("step3", signature = c(x = "job_gatk"),
   function(x, elprep = "conda run -n base elprep",
     bcftools = "conda run -n base bcftools",
     batch = FALSE, mem = 28, workers = 9)
@@ -117,7 +117,7 @@ setMethod("step3", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_gatk"),
+setMethod_traceable("step4", signature = c(x = "job_gatk"),
   function(x){
     if (is.null(x@params$use.elprep)) {
       step_message("GATK VQSR")
@@ -133,7 +133,7 @@ setMethod("step4", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_gatk"),
+setMethod_traceable("step5", signature = c(x = "job_gatk"),
   function(x, annovar_path = pg("annovar"),
     use_db = 1:2, ref = get_realname(x@params$geneRef_file),
     db_used = c("refGene", "cytoBand", "exac03", "avsnp147", "dbnsfp30a")[use_db],
@@ -160,7 +160,7 @@ setMethod("step5", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_gatk"),
+setMethod_traceable("step6", signature = c(x = "job_gatk"),
   function(x) {
     step_message("Collate annovar results as table.")
     path_multianno <- "annovar_res"
@@ -201,7 +201,7 @@ setMethod("step6", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_gatk"),
+setMethod_traceable("step7", signature = c(x = "job_gatk"),
   function(x, annovar_data = x@params$annovar_mutiannos){
     step_message("Use `maftools` to global visualization.")
     data <- e(maftools::annovarToMaf(annovar_data, refBuild = x@params$ref))
@@ -215,7 +215,7 @@ setMethod("step7", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("step8", signature = c(x = "job_gatk"),
+setMethod_traceable("step8", signature = c(x = "job_gatk"),
   function(x, genes){
     data <- x@params$maf
     res <- try(e(maftools::somaticInteractions(data, genes = genes)), TRUE)
@@ -232,7 +232,7 @@ setMethod("step8", signature = c(x = "job_gatk"),
     return(x)
   })
 
-setMethod("is_workflow_object_exists", signature = c(object = "character"),
+setMethod_traceable("is_workflow_object_exists", signature = c(object = "character"),
   function(object, x, path = NULL){
     if (missing(x)) {
       x <- get("x", envir = parent.frame(2))

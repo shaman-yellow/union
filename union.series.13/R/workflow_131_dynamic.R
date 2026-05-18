@@ -16,7 +16,7 @@
 setGeneric("asjob_dynamic",
   function(x, ...) standardGeneric("asjob_dynamic"))
 
-setMethod("asjob_dynamic", signature = c(x = "list"),
+setMethod_traceable("asjob_dynamic", signature = c(x = "list"),
   function(x){
     if (!is.null(names(x))) {
       x <- c(unname(x), sigs = list(names(x)))
@@ -24,7 +24,7 @@ setMethod("asjob_dynamic", signature = c(x = "list"),
     do.call(asjob_dynamic, x)
   })
 
-setMethod("asjob_dynamic", signature = c(x = "job_vina"),
+setMethod_traceable("asjob_dynamic", signature = c(x = "job_vina"),
   function(x, ..., sigs = NULL)
   {
     if (...length()) {
@@ -58,12 +58,12 @@ setMethod("asjob_dynamic", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_dynamic"),
+setMethod_traceable("step0", signature = c(x = "job_dynamic"),
   function(x){
     step_message("Prepare your data with function `asjob_dynamic`.")
   })
 
-setMethod("step1", signature = c(x = "job_dynamic"),
+setMethod_traceable("step1", signature = c(x = "job_dynamic"),
   function(x) {
     step_message("Do nothing.")
     x <- methodAdd(x, "使用 GROMACS 2024.4 软件进行分子动力学模拟。体系采用 AMBER99SB-ILDN 力场，并使用 TIP3P 水模型构建溶剂环境。构建溶剂盒时确保蛋白质与盒边之间的最小距离为 1 nm，并通过添加适量离子以维持体系电中性。首先采用最速下降法对体系进行能量最小化。随后依次进行等温等体积（NVT）和等温等压（NPT）平衡过程，各阶段约持续 100 ps。在平衡过程中，温度耦合采用 V-rescale 方法，参考温度设定为 300 K；压力耦合采用 Parrinello–Rahman 方法。积分步长设定为 2 fs，并采用 LINCS 算法约束键长。在体系达到平衡后，进行 20 ns 的分子动力学模拟。基于模拟轨迹计算蛋白–配体复合物的 RMSD、蛋白 RMSF、体系总能量以及氢键数量等参数。")
@@ -71,7 +71,7 @@ setMethod("step1", signature = c(x = "job_dynamic"),
   })
 
 
-setMethod("step2", signature = c(x = "job_dynamic"),
+setMethod_traceable("step2", signature = c(x = "job_dynamic"),
   function(x, dir_results, fun_detect = .detect_gromacs_xvg_project.hb, ...)
   {
     step_message("Load results and plot.")

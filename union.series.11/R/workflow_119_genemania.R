@@ -17,19 +17,19 @@
 setGeneric("asjob_genemania",
   function(x, ...) standardGeneric("asjob_genemania"))
 
-setMethod("asjob_genemania", signature = c(x = "feature"),
+setMethod_traceable("asjob_genemania", signature = c(x = "feature"),
   function(x, ...){
     fea <- resolve_feature_snapAdd_onExit("x", x)
     x <- .job_genemania(object = fea)
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_genemania"),
+setMethod_traceable("step0", signature = c(x = "job_genemania"),
   function(x){
     step_message("Prepare your data with function `job_genemania`.")
   })
 
-setMethod("step1", signature = c(x = "job_genemania"),
+setMethod_traceable("step1", signature = c(x = "job_genemania"),
   function(x, crawler = FALSE, dir_save = "geneMANIA"){
     step_message("Open webpage.")
     x$dir_save <- dir_save
@@ -49,7 +49,7 @@ setMethod("step1", signature = c(x = "job_genemania"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_genemania"),
+setMethod_traceable("step2", signature = c(x = "job_genemania"),
   function(x, n_show = 7){
     step_message("Load file.")
     # files <- c("genemania-genes.txt", "genemania-interactions.txt", "genemania-functions.txt")
@@ -71,7 +71,7 @@ setMethod("step2", signature = c(x = "job_genemania"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_genemania"),
+setMethod_traceable("step3", signature = c(x = "job_genemania"),
   function(x, rerun = FALSE){
     step_message("Render Picture.")
     file <- file.path(x$dir_save, "genemania-report.pdf")

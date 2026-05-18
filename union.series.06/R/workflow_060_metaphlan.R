@@ -18,12 +18,12 @@
     analysis = "MetaPhlAn 微生物宏基因组的群落信息分析"
     ))
 
-setMethod("step0", signature = c(x = "job_mpa"),
+setMethod_traceable("step0", signature = c(x = "job_mpa"),
   function(x){
     step_message("Prepare your data with function `asjob_mpa`.")
   })
 
-setMethod("step1", signature = c(x = "job_mpa"),
+setMethod_traceable("step1", signature = c(x = "job_mpa"),
   function(x, path_db = .prefix("bowtie2db", "db"))
   {
     step_message("Dowload (prepare) the database files.")
@@ -50,7 +50,7 @@ setMethod("step1", signature = c(x = "job_mpa"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mpa"),
+setMethod_traceable("step2", signature = c(x = "job_mpa"),
   function(x) {
     step_message("Mapping... Time consumed.")
     res <- pbapply::pbapply(x$metadata, 1, simplify = TRUE,
@@ -77,7 +77,7 @@ setMethod("step2", signature = c(x = "job_mpa"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mpa"),
+setMethod_traceable("step3", signature = c(x = "job_mpa"),
   function(x, pattern_filter = NULL, ...)
   {
     files <- x$metadata$mpa_output
@@ -97,7 +97,7 @@ setMethod("step3", signature = c(x = "job_mpa"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_mpa"),
+setMethod_traceable("set_remote", signature = c(x = "job_mpa"),
   function(x, wd){
     x$wd <- wd
     return(x)
@@ -107,7 +107,7 @@ setMethod("set_remote", signature = c(x = "job_mpa"),
 setGeneric("asjob_mpa",
   function(x, ...) standardGeneric("asjob_mpa"))
 
-setMethod("asjob_mpa", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_mpa", signature = c(x = "job_fastp"),
   function(x, workers = 10){
     if (x@step < 2L) {
       stop("x@step < 2L")
@@ -121,7 +121,7 @@ setMethod("asjob_mpa", signature = c(x = "job_fastp"),
     return(x)
   })
 
-setMethod("asjob_mp", signature = c(x = "job_mpa"),
+setMethod_traceable("asjob_mp", signature = c(x = "job_mpa"),
   function(x, pattern)
   {
     dic <- dplyr::select(x$metadata, mpa_output, depth)

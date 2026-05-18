@@ -60,12 +60,12 @@ job_unitmp <- function(mode = c("htp_all", "htp_exists"), db = .prefix("unitmp",
   .job_unitmp(object = dat)
 }
 
-setMethod("step0", signature = c(x = "job_unitmp"),
+setMethod_traceable("step0", signature = c(x = "job_unitmp"),
   function(x){
     step_message("Prepare your data with function `job_unitmp`.")
   })
 
-setMethod("step1", signature = c(x = "job_unitmp"),
+setMethod_traceable("step1", signature = c(x = "job_unitmp"),
   function(x){
     step_message("Quality control (QC).")
     return(x)

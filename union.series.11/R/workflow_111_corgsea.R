@@ -16,7 +16,7 @@
 setGeneric("asjob_corgsea",
   function(x, ...) standardGeneric("asjob_corgsea"))
 
-setMethod("asjob_corgsea", signature = c(x = "job_deseq2"),
+setMethod_traceable("asjob_corgsea", signature = c(x = "job_deseq2"),
   function(x, ref, method = "spearman")
   {
     if (x@step < 1L) {
@@ -30,7 +30,7 @@ setMethod("asjob_corgsea", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("asjob_corgsea", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_corgsea", signature = c(x = "job_limma"),
   function(x, ref, method = "spearman"){
     if (x@step < 1L) {
       stop('x@step < 1L.')
@@ -58,12 +58,12 @@ job_corgsea <- function(data, ref, method = "spearman") {
   x <- snapAdd(x, "计算{snap(ref)}与其他基因的 Spearman 相关性系数 (以 R 包 `stats` ⟦pkgInfo('stats')⟧ 的 `cor` 函数)，并以该系数为排序依据对全基因进行从大到小的排序。")
 }
 
-setMethod("step0", signature = c(x = "job_corgsea"),
+setMethod_traceable("step0", signature = c(x = "job_corgsea"),
   function(x){
     step_message("Prepare your data with function `job_corgsea`.")
   })
 
-setMethod("step1", signature = c(x = "job_corgsea"),
+setMethod_traceable("step1", signature = c(x = "job_corgsea"),
   function(x, db, cutoff = .05, pattern = NULL, pvalue = FALSE, 
     cutoff.nes = 1, db_anno = NULL, rerun = FALSE, mode = c(
       "curated gene sets" = "C2",
@@ -142,7 +142,7 @@ setMethod("step1", signature = c(x = "job_corgsea"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_corgsea"),
+setMethod_traceable("step2", signature = c(x = "job_corgsea"),
   function(x, top = 10, intersect = TRUE){
     step_message("Select and Visualization")
     x$.feature <- list()
@@ -180,7 +180,7 @@ setMethod("step2", signature = c(x = "job_corgsea"),
 
 setClassUnion("job_gseaSet", c("job_corgsea", "job_gsea"))
 
-setMethod("vis", signature = c(x = "job_gseaSet"),
+setMethod_traceable("vis", signature = c(x = "job_gseaSet"),
   function(x, pattern, map = NULL, res.gsea = NULL, table_gsea = NULL,
     mode = c("kegg", "gsea"), pvalue = FALSE, .name = "", merge = TRUE)
   {

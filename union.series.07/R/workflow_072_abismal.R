@@ -22,18 +22,18 @@
 #   .job_abismal()
 # }
 
-# setMethod("step0", signature = c(x = "job_abismal"),
+# setMethod_traceable("step0", signature = c(x = "job_abismal"),
 #   function(x){
 #     step_message("Prepare your data with function `job_abismal`.")
 #   })
 
-# setMethod("step1", signature = c(x = "job_abismal"),
+# setMethod_traceable("step1", signature = c(x = "job_abismal"),
 #   function(x){
 #     step_message("Quality control (QC).")
 #     return(x)
 #   })
 
-# setMethod("set_remote", signature = c(x = "job_abismal"),
+# setMethod_traceable("set_remote", signature = c(x = "job_abismal"),
 #   function(x, wd, postfix = NULL, run_after_cd = NULL, tmpdir = NULL, remote = "remote")
 #   {
 #     x$wd <- wd

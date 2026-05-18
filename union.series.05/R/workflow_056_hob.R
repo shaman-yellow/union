@@ -31,17 +31,17 @@ job_hob <- function(smiles)
 setGeneric("asjob_hob",
   function(x, ...) standardGeneric("asjob_hob"))
 
-setMethod("asjob_hob", signature = c(x = "job_pubchemr"),
+setMethod_traceable("asjob_hob", signature = c(x = "job_pubchemr"),
   function(x){
     .job_hob(object = unlist(x$smiles))
   })
 
-setMethod("step0", signature = c(x = "job_hob"),
+setMethod_traceable("step0", signature = c(x = "job_hob"),
   function(x){
     step_message("Prepare your data with function `job_hob`.")
   })
 
-setMethod("step1", signature = c(x = "job_hob"),
+setMethod_traceable("step1", signature = c(x = "job_hob"),
   function(x, cutoff = c("20", "50"), wd = timeName("hob"),
     command = paste(pg("hobPython"), pg("hobPredict")), 
     hobEnv = pg("hobEnv"),
@@ -119,12 +119,12 @@ setMethod("step1", signature = c(x = "job_hob"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_pubchemr", ref = "job_hob"),
+setMethod_traceable("map", signature = c(x = "job_pubchemr", ref = "job_hob"),
   function(x, ref){
     object(x)[as.logical(res(ref)$prediction)]
   })
 
-setMethod("res", signature = c(x = "job_hob"),
+setMethod_traceable("res", signature = c(x = "job_hob"),
   function(x){
     if (x@step < 1L) {
       stop("x@step < 1L")

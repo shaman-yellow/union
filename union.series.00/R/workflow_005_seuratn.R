@@ -35,14 +35,14 @@
 #   .job_seuratn(object = object)
 # }
 #
-# setMethod("step0", signature = c(x = "job_seuratn"),
+# setMethod_traceable("step0", signature = c(x = "job_seuratn"),
 #   function(x){
 #     step_message("Prepare your data with function `job_seuratn`.
 #       "
 #     )
 #   })
 #
-# setMethod("step1", signature = c(x = "job_seuratn"),
+# setMethod_traceable("step1", signature = c(x = "job_seuratn"),
 #   function(x, min.features, max.features, max.percent.mt = 5, nfeatures = 2000){
 #     step_message("
 #       QC and Preparing integration on datasets normalized with SCTransform.
@@ -95,7 +95,7 @@
 #     return(x)
 #   })
 #
-# setMethod("step2", signature = c(x = "job_seuratn"),
+# setMethod_traceable("step2", signature = c(x = "job_seuratn"),
 #   function(x, workers = NULL){
 #     step_message("Perform integration (time-consumed).
 #       Prarameter red{{workers}} would call `future::plan`.

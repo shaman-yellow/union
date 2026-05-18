@@ -43,7 +43,7 @@ job_prr <- function(data, drug = prr_drug())
 setGeneric("asjob_prr",
   function(x, ...) standardGeneric("asjob_prr"))
 
-setMethod("asjob_prr", signature = c(x = "job_tcga"),
+setMethod_traceable("asjob_prr", signature = c(x = "job_tcga"),
   function(x, drug = prr_drug())
   {
     drug <- match.arg(drug)
@@ -70,7 +70,7 @@ setMethod("asjob_prr", signature = c(x = "job_tcga"),
     return(x)
   })
 
-setMethod("asjob_prr", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_prr", signature = c(x = "job_limma"),
   function(x, drug = prr_drug())
   {
     drug <- match.arg(drug)
@@ -88,7 +88,7 @@ setMethod("asjob_prr", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_prr"),
+setMethod_traceable("step0", signature = c(x = "job_prr"),
   function(x){
     step_message("Prepare your data with function `job_prr`.")
   })
@@ -107,7 +107,7 @@ setMethod("step0", signature = c(x = "job_prr"),
 # biomarker-negative patient will not have longer survival on TRUE rather than C. 
 # 
 
-setMethod("step1", signature = c(x = "job_prr"),
+setMethod_traceable("step1", signature = c(x = "job_prr"),
   function(x){
     step_message("Cross validation on a training set to estimate prediction accuracy.")
     x$cvOut <- cvOut <- e(pRRophetic::pRRopheticCV(x$drug, cvFold = 5, testExprData = object(x)))
@@ -118,7 +118,7 @@ setMethod("step1", signature = c(x = "job_prr"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_prr"),
+setMethod_traceable("step2", signature = c(x = "job_prr"),
   function(x, k = 3){
     step_message("Predicted the IC50, and perform k-means clustering.")
     predictedPtype <- e(pRRophetic::pRRopheticPredict(object(x), x$drug, selection = 1))
@@ -137,7 +137,7 @@ setMethod("step2", signature = c(x = "job_prr"),
   })
 
 
-setMethod("map", signature = c(x = "job_tcga", ref = "job_prr"),
+setMethod_traceable("map", signature = c(x = "job_tcga", ref = "job_prr"),
   function(x, ref, use = "protein")
   {
     use <- match.arg(use)
@@ -165,7 +165,7 @@ setMethod("map", signature = c(x = "job_tcga", ref = "job_prr"),
 setGeneric("do_limma", 
   function(x, ref, ...) standardGeneric("do_limma"))
 
-setMethod("do_limma", signature = c(x = "job_tcga", ref = "job_prr"),
+setMethod_traceable("do_limma", signature = c(x = "job_tcga", ref = "job_prr"),
   function(x, ref, use = list("resistance" = max, "non_resistance" = min))
   {
     lst <- map(x, ref)
@@ -188,7 +188,7 @@ setMethod("do_limma", signature = c(x = "job_tcga", ref = "job_prr"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_limma", ref = "job_prr"),
+setMethod_traceable("map", signature = c(x = "job_limma", ref = "job_prr"),
   function(x, ref, use = list("resistance" = max, "non_resistance" = min))
   {
     if (x@step != 1L) {
@@ -208,7 +208,7 @@ setMethod("map", signature = c(x = "job_limma", ref = "job_prr"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_limma", ref = "job_limma"),
+setMethod_traceable("map", signature = c(x = "job_limma", ref = "job_limma"),
   function(x, ref, from_tcga = TRUE)
   {
     message("This method mapped the metadata of `ref` into `x`")

@@ -23,12 +23,12 @@ job_plantdb <- function(query)
   .job_plantdb(object = query)
 }
 
-setMethod("step0", signature = c(x = "job_plantdb"),
+setMethod_traceable("step0", signature = c(x = "job_plantdb"),
   function(x){
     step_message("Prepare your data with function `job_plantdb`.")
   })
 
-setMethod("step1", signature = c(x = "job_plantdb"),
+setMethod_traceable("step1", signature = c(x = "job_plantdb"),
   function(x){
     step_message("Query plants.")
     res <- sapply(object(x), simplify = FALSE,
@@ -47,13 +47,13 @@ setMethod("step1", signature = c(x = "job_plantdb"),
     return(x)
   })
 
-setMethod("slice", signature = c(x = "job_plantdb"),
+setMethod_traceable("slice", signature = c(x = "job_plantdb"),
   function(x, ...){
     x@params$herbs_info <- dplyr::slice(x@params$herbs_info, ...)
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_plantdb"),
+setMethod_traceable("step2", signature = c(x = "job_plantdb"),
   function(x){
     step_message("Collating data from URLs.")
     t.data <- lapply(x$herbs_info$Result.link,
@@ -67,7 +67,7 @@ setMethod("step2", signature = c(x = "job_plantdb"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_plantdb"),
+setMethod_traceable("step3", signature = c(x = "job_plantdb"),
   function(x, hob_filter = FALSE, ...)
   {
     step_message("Use PubChemR to obtain compounds information.")
@@ -96,7 +96,7 @@ setMethod("step3", signature = c(x = "job_plantdb"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_plantdb"),
+setMethod_traceable("step4", signature = c(x = "job_plantdb"),
   function(x, db_file = .prefix("superPred/targets.rds", "db"), tempdir = "download", port = 4444)
   {
     step_message("Use Super-Pred to get compounds targets.")
@@ -106,7 +106,7 @@ setMethod("step4", signature = c(x = "job_plantdb"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_plantdb"),
+setMethod_traceable("step5", signature = c(x = "job_plantdb"),
   function(x, vis = FALSE){
     step_message("Network pharmacology preparation.")
     metadata <- dplyr::distinct(x@tables[[2]]$t.data, herb = .id, cid = `PubChem ID`)
@@ -114,7 +114,7 @@ setMethod("step5", signature = c(x = "job_plantdb"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_herb", ref = "job_plantdb"),
+setMethod_traceable("map", signature = c(x = "job_herb", ref = "job_plantdb"),
   function(x, ref){
     if (ref@step < 5L) {
       stop("ref@step < 5L")
@@ -131,7 +131,7 @@ setMethod("map", signature = c(x = "job_herb", ref = "job_plantdb"),
     return(x)
   })
 
-# setMethod("step2", signature = c(x = "job_plantdb"),
+# setMethod_traceable("step2", signature = c(x = "job_plantdb"),
 #   function(x){
 #     step_message("Obtaining targets.")
 #     # https://go.drugbank.com/releases/latest

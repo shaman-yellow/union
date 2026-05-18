@@ -23,7 +23,7 @@ job_iobr <- function(object, metadata)
 setGeneric("asjob_iobr",
    function(x, ...) standardGeneric("asjob_iobr"))
 
-setMethod("asjob_iobr", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_iobr", signature = c(x = "job_limma"),
   function(x, use = .guess_symbol(x), project = x$project, 
     levels = NULL, guess_which_level = 1L, ...)
   {
@@ -47,12 +47,12 @@ setMethod("asjob_iobr", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_iobr"),
+setMethod_traceable("step0", signature = c(x = "job_iobr"),
   function(x){
     step_message("Prepare your data with function `job_iobr`.")
   })
 
-setMethod("step1", signature = c(x = "job_iobr"),
+setMethod_traceable("step1", signature = c(x = "job_iobr"),
   function(x, method = "cibersort",
     run_all = FALSE, workers = 1,
     cache = "tmp", tumor = FALSE, ..., rerun = FALSE)
@@ -104,7 +104,7 @@ setMethod("step1", signature = c(x = "job_iobr"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_iobr"),
+setMethod_traceable("step2", signature = c(x = "job_iobr"),
   function(x, group.by = "group", cut.p = .05, cut.cor = .3, 
     add_noise = TRUE, keep_all = if (x$method == "xcell") FALSE else TRUE, method_cor = "spearman")
   {
@@ -319,7 +319,7 @@ add_noise <- function(mtx, level = 1e-6, seed = 12345) {
   return(mtx)
 }
 
-setMethod("step3", signature = c(x = "job_iobr"),
+setMethod_traceable("step3", signature = c(x = "job_iobr"),
   function(x, ref, recode = NULL, cut.p = .05, cut.cor = .3, 
     add_noise = TRUE, keep_all = FALSE, 
     use_vst = FALSE, method_cor = "spearman")
@@ -432,7 +432,7 @@ setMethod("step3", signature = c(x = "job_iobr"),
   glue::glue("{leader}{bind(snap)}")
 }
 
-setMethod("add_anno", signature = c(x = "df"),
+setMethod_traceable("add_anno", signature = c(x = "df"),
   function(x){
     if (!any(colnames(x) == "pvalue")) {
       stop('!any(colnames(x) == "pvalue").')
@@ -447,7 +447,7 @@ setMethod("add_anno", signature = c(x = "df"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_iobr"),
+setMethod_traceable("set_remote", signature = c(x = "job_iobr"),
   function(x, wd)
   {
     x$wd <- wd

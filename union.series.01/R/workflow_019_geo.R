@@ -31,14 +31,14 @@ job_geo <- function(id)
   .job_geo(object = strx(id, "GSE[0-9]+"))
 }
 
-setMethod("step0", signature = c(x = "job_geo"),
+setMethod_traceable("step0", signature = c(x = "job_geo"),
   function(x){
     step_message("Prepare your data with function `job_geo`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_geo"),
+setMethod_traceable("step1", signature = c(x = "job_geo"),
   function(x, getGPL = TRUE, dir_cache = .prefix("GEO", 
     "db"), force = FALSE)
   {
@@ -92,7 +92,7 @@ setMethod("step1", signature = c(x = "job_geo"),
   }
 }
 
-setMethod("step2", signature = c(x = "job_geo"),
+setMethod_traceable("step2", signature = c(x = "job_geo"),
   function(x, filter_regex = NULL, baseDir = .prefix("GEO", "db"), 
     rna = TRUE, get_supp = FALSE, hasFile = FALSE)
   {
@@ -171,14 +171,14 @@ setMethod("step2", signature = c(x = "job_geo"),
     return(x)
   })
 
-setMethod("meta", signature = c(x = "job_geo"),
+setMethod_traceable("meta", signature = c(x = "job_geo"),
   function(x, use = 1L){
     counts <- as_tibble(x@params$about[[ use ]]@assayData$exprs)
     genes <- as_tibble(x@params$about[[ use ]]@featureData@data)
     namel(counts, genes)
   })
 
-setMethod("map", signature = c(x = "job_limma", ref = "job_geo"),
+setMethod_traceable("map", signature = c(x = "job_limma", ref = "job_geo"),
   function(x, ref, which = 1L, type = "pipe", ...)
   {
     message("Get extra annotation (Symbol) if possible.")
@@ -199,7 +199,7 @@ setMethod("map", signature = c(x = "job_limma", ref = "job_geo"),
     return(x)
   })
 
-setMethod("asjob_limma", signature = c(x = "job_geo"),
+setMethod_traceable("asjob_limma", signature = c(x = "job_geo"),
   function(x, metadata, rna = NULL, use = 1L, normed = "guess",
     use.col = NULL, use_as_id = TRUE, split = "\\s*///\\s*|,\\s*",
     filter_split_symbol = c("---")
@@ -342,7 +342,7 @@ setMethod("asjob_limma", signature = c(x = "job_geo"),
     return(x)
   })
 
-setMethod("expect", signature = c(x = "job_geo", ref = "ANY"),
+setMethod_traceable("expect", signature = c(x = "job_geo", ref = "ANY"),
   function(x, ref, force = ref@default, id = x@object, ret = c("meta", "job")){
     ret <- match.arg(ret)
     if (missing(ref)) {
@@ -516,7 +516,7 @@ geo_cols <- function(
       dplyr::relocate(x, sample, group)
     }))
 
-setMethod("initialize", "expect_cols_geo", 
+setMethod_traceable("initialize", "expect_cols_geo", 
   function(.Object, ...) {
     .Object <- callNextMethod()
     if (!length(.Object@db_file)) {

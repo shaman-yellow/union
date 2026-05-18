@@ -98,12 +98,12 @@ job_venn <- function(..., mode = c("key", "candidates", "ck"),
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_venn"),
+setMethod_traceable("step0", signature = c(x = "job_venn"),
   function(x){
     step_message("Prepare your data with function `job_venn`.")
   })
 
-setMethod("step1", signature = c(x = "job_venn"),
+setMethod_traceable("step1", signature = c(x = "job_venn"),
   function(x, ...){
     step_message("Intersection.")
     p.venn <- new_venn(lst = object(x), force_upset = FALSE, ...)
@@ -202,7 +202,7 @@ new_venn <- function(..., lst = NULL, wrap = TRUE,
   p
 }
 
-setMethod("meta", signature = c(x = "job_vennDEGs"),
+setMethod_traceable("meta", signature = c(x = "job_vennDEGs"),
   function(x, group = NULL, bind = TRUE, arrange = TRUE, get = "project")
   {
     if (is.null(x$metadata)) {
@@ -227,7 +227,7 @@ setMethod("meta", signature = c(x = "job_vennDEGs"),
     }
   })
 
-setMethod("feature", signature = c(x = "job_vennDEGs"),
+setMethod_traceable("feature", signature = c(x = "job_vennDEGs"),
   function(x, group, intersect = TRUE){
     if (missing(group)) {
       callNextMethod(x)

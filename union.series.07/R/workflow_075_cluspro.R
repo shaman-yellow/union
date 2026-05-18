@@ -41,12 +41,12 @@ job_cluspro <- function(symbols, .layout = NULL)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_cluspro"),
+setMethod_traceable("step0", signature = c(x = "job_cluspro"),
   function(x){
     step_message("Prepare your data with function `job_cluspro`.")
   })
 
-setMethod("step1", signature = c(x = "job_cluspro"),
+setMethod_traceable("step1", signature = c(x = "job_cluspro"),
   function(x, order = TRUE, each_target = 1, custom_pdbs = NULL){
     step_message("Found PDB.")
     x <- .find_proper_pdb(x, order, each_target, custom_pdbs)
@@ -87,7 +87,7 @@ setMethod("step1", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_cluspro"),
+setMethod_traceable("step2", signature = c(x = "job_cluspro"),
   function(x, port = 9999, ..., usr = getOption("cluspro_user"),
     psw = getOption("cluspro_password"))
   {
@@ -98,7 +98,7 @@ setMethod("step2", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_cluspro"),
+setMethod_traceable("step3", signature = c(x = "job_cluspro"),
   function(x, n = 10){
     step_message("Prepare groups for upload.")
     layout <- x$layouts
@@ -110,7 +110,7 @@ setMethod("step3", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_cluspro"),
+setMethod_traceable("step4", signature = c(x = "job_cluspro"),
   function(x, top = 3)
   {
     step_message("Plot scores and visualize models.")
@@ -165,7 +165,7 @@ setMethod("step4", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("login", signature = c(x = "job_cluspro"),
+setMethod_traceable("login", signature = c(x = "job_cluspro"),
   function(x, port = 9999, ..., usr = getOption("cluspro_user"), psw = getOption("cluspro_password")){
     message("Login")
     x$link <- start_drive(port = port, ...)
@@ -187,7 +187,7 @@ setMethod("login", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("pull", signature = c(x = "job_cluspro"),
+setMethod_traceable("pull", signature = c(x = "job_cluspro"),
   function(x, ref = NULL, dir = "cluspro", dir_download = "download")
   {
     message("Get the models and scores for finished job.")
@@ -302,7 +302,7 @@ setMethod("pull", signature = c(x = "job_cluspro"),
     return(x)
   })
 
-setMethod("upload", signature = c(x = "job_cluspro"),
+setMethod_traceable("upload", signature = c(x = "job_cluspro"),
   function(x, whichGroup = NULL, maxAllow = 15){
     message("Collate current status and upload jobs.")
     if (is.null(whichGroup)) {

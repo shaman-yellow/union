@@ -33,12 +33,12 @@ job_tcmsp <- function(herbs, db = get_tcmsp_data())
   x
 }
 
-setMethod("step0", signature = c(x = "job_tcmsp"),
+setMethod_traceable("step0", signature = c(x = "job_tcmsp"),
   function(x){
     step_message("Prepare your data with function `job_tcmsp`.")
   })
 
-setMethod("step1", signature = c(x = "job_tcmsp"),
+setMethod_traceable("step1", signature = c(x = "job_tcmsp"),
   function(x, savedir = .prefix("tcmsp/largedata", "db"))
   {
     step_message("Dowload detail information of herbs.")
@@ -116,7 +116,7 @@ setMethod("step1", signature = c(x = "job_tcmsp"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_tcmsp"),
+setMethod_traceable("step2", signature = c(x = "job_tcmsp"),
   function(x, mode = c("tcmsp", "pubchem")){
     step_message("Dowload detail information of compounds")
     data <- x@tables$step1$ingredients
@@ -137,7 +137,7 @@ setMethod("step2", signature = c(x = "job_tcmsp"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_tcmsp"),
+setMethod_traceable("step3", signature = c(x = "job_tcmsp"),
   function(x, disease = NULL, disease.score = 5, HLs = NULL,
     db_uniprot = .prefix("tcmsp/largedata/uniprotkb.rds", "db"), ...)
   {
@@ -186,7 +186,7 @@ setMethod("step3", signature = c(x = "job_tcmsp"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_tcmsp", ref = "job_classyfire"),
+setMethod_traceable("map", signature = c(x = "job_tcmsp", ref = "job_classyfire"),
   function(x, ref, ...) {
     if (x@step < 2L) {
       stop("x@step < 2L")
@@ -209,7 +209,7 @@ setMethod("map", signature = c(x = "job_tcmsp", ref = "job_classyfire"),
     return(x)
   })
 
-setMethod("asjob_classyfire", signature = c(x = "job_tcmsp"),
+setMethod_traceable("asjob_classyfire", signature = c(x = "job_tcmsp"),
   function(x){
     if (x@step < 2L) {
       stop("x@step < 2L")
@@ -436,7 +436,7 @@ tryGetLink.tcmsp <- function(x, sep = " ### ", ...) {
   lst
 }
 
-setMethod("filter", signature = c(x = "job_tcmsp"),
+setMethod_traceable("filter", signature = c(x = "job_tcmsp"),
   function(x, ..., cutoff = 30){
     if (x@step < 2L) {
       stop("x@step < 2L")

@@ -16,7 +16,7 @@
 setGeneric("asjob_ssgsea",
    function(x, ...) standardGeneric("asjob_ssgsea"))
 
-setMethod("asjob_ssgsea", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_ssgsea", signature = c(x = "job_limma"),
   function(x, use.filter = NULL, use = .guess_symbol(x), 
     use.format = TRUE, ...)
   {
@@ -61,7 +61,7 @@ job_ssgsea <- function(x)
   .job_ssgsea(object = x)
 }
 
-setMethod("step0", signature = c(x = "job_ssgsea"),
+setMethod_traceable("step0", signature = c(x = "job_ssgsea"),
   function(x){
     step_message("Prepare your data with function `job_ssgsea`.")
   })
@@ -83,7 +83,7 @@ as_collection <- function(sets) {
   e(GSEABase::GeneSetCollection(sets))
 }
 
-setMethod("step1", signature = c(x = "job_ssgsea"),
+setMethod_traceable("step1", signature = c(x = "job_ssgsea"),
   function(x, mode = c("matrisome"), org = c("human", "mouse"), sets)
   {
     step_message("Calculate ssGSEA enrichment score.")

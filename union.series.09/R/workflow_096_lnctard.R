@@ -31,12 +31,12 @@ job_lnctard <- function(dir_db = .prefix("lnctard", "db"))
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_lnctard"),
+setMethod_traceable("step0", signature = c(x = "job_lnctard"),
   function(x){
     step_message("Prepare your data with function `job_lnctard`.")
   })
 
-setMethod("step1", signature = c(x = "job_lnctard"),
+setMethod_traceable("step1", signature = c(x = "job_lnctard"),
   function(x, lnc){
     step_message("Find target genes.")
     t.regulate <- dplyr::filter(x@params$db, Regulator %in% !!lnc)

@@ -32,14 +32,14 @@ job_hybrid <- function(mirna, circrna, circFa = NULL)
   x
 }
 
-setMethod("step0", signature = c(x = "job_hybrid"),
+setMethod_traceable("step0", signature = c(x = "job_hybrid"),
   function(x){
     step_message("Prepare your data with function `job_hybrid`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_hybrid"),
+setMethod_traceable("step1", signature = c(x = "job_hybrid"),
   function(x, wd = timeName("hybrid")){
     step_message("Prepare computional files.")
     dir.create(wd, FALSE)
@@ -55,7 +55,7 @@ setMethod("step1", signature = c(x = "job_hybrid"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_hybrid"),
+setMethod_traceable("step2", signature = c(x = "job_hybrid"),
   function(x, command = "conda run -n base RNAhybrid"){
     step_message("Run RNAhybrid.")
     x$outfile <- paste0(x$wd, "/", "results.txt")

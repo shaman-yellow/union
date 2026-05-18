@@ -23,12 +23,12 @@ job_bowtie2 <- function(metadata, wd = ".", workers = 10, command = "bowtie2")
   .job_bowtie2(object = metadata, params = list(wd = wd, workers = workers), pg = command)
 }
 
-setMethod("step0", signature = c(x = "job_bowtie2"),
+setMethod_traceable("step0", signature = c(x = "job_bowtie2"),
   function(x){
     step_message("Prepare your data with function `job_bowtie2`.")
   })
 
-setMethod("step1", signature = c(x = "job_bowtie2"),
+setMethod_traceable("step1", signature = c(x = "job_bowtie2"),
   function(x, path_ref = .prefix("ref", "db"), file_ref = "hg38.fa", file_index = gs(file_ref, "\\.fa$", ""))
   {
     step_message("Prepare index file")
@@ -47,7 +47,7 @@ setMethod("step1", signature = c(x = "job_bowtie2"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_bowtie2"),
+setMethod_traceable("step2", signature = c(x = "job_bowtie2"),
   function(x, mode = c("notHost", "host")){
     step_message("Alignment to reference genome.")
     mode <- match.arg(mode)
@@ -81,7 +81,7 @@ setMethod("step2", signature = c(x = "job_bowtie2"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_bowtie2"),
+setMethod_traceable("set_remote", signature = c(x = "job_bowtie2"),
   function(x, wd)
   {
     x$wd <- wd
@@ -91,7 +91,7 @@ setMethod("set_remote", signature = c(x = "job_bowtie2"),
 setGeneric("asjob_bowtie2",
   function(x, ...) standardGeneric("asjob_bowtie2"))
 
-setMethod("asjob_bowtie2", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_bowtie2", signature = c(x = "job_fastp"),
   function(x, workers = 10){
     if (x@step < 2L) {
       stop("x@step < 2L")

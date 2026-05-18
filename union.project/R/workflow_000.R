@@ -36,7 +36,7 @@ gcols <- general_cols <- function(..., global = NULL,
   )
 }
 
-setMethod("show", signature = c(object = "expect_col"),
+setMethod_traceable("show", signature = c(object = "expect_col"),
   function(object){
     content <- c(
       paste(crayon::yellow("Name:"), object@name), 
@@ -64,7 +64,7 @@ setMethod("show", signature = c(object = "expect_col"),
   ),
   prototype = prototype(global = NULL, default = FALSE))
 
-setMethod("show", signature = c(object = "expect_cols"),
+setMethod_traceable("show", signature = c(object = "expect_cols"),
   function(object){
     if (length(object@uniqueness)) {
       writeLines(
@@ -86,12 +86,12 @@ setValidity("expect_cols",
   representation = representation(init = "logical"),
   prototype = prototype(TRUE, init = TRUE))
 
-setMethod("$", signature = c(x = "meth"),
+setMethod_traceable("$", signature = c(x = "meth"),
   function(x, name){
     x@.xData[[ name ]]
   })
 
-setMethod("$<-", signature = c(x = "meth"),
+setMethod_traceable("$<-", signature = c(x = "meth"),
   function(x, name, value){
     if (!is(value, "character")) {
       stop('!is(value, "character"), must be character.')
@@ -103,7 +103,7 @@ setMethod("$<-", signature = c(x = "meth"),
     return(x)
   })
 
-setMethod("[[", signature = c(x = "meth"),
+setMethod_traceable("[[", signature = c(x = "meth"),
   function(x, i, ...){
     if (is(i, "numeric")) {
       res <- x@.xData[[ x@.xData$.order[i] ]]
@@ -122,7 +122,7 @@ setMethod("[[", signature = c(x = "meth"),
     res
   })
 
-setMethod("[[<-", signature = c(x = "meth"),
+setMethod_traceable("[[<-", signature = c(x = "meth"),
   function(x, i, ..., value){
     if (!is(i, "character")) {
       stop('!is(i, "character"), `i` must be "character".')
@@ -142,7 +142,7 @@ setMethod("[[<-", signature = c(x = "meth"),
     return(x)
   })
 
-setMethod("initialize", "meth",
+setMethod_traceable("initialize", "meth",
   function(.Object, ...) {
     .Object <- callNextMethod()
     if (is.null(.Object@.xData)) {
@@ -152,7 +152,7 @@ setMethod("initialize", "meth",
     .Object
   })
 
-setMethod("length", signature = c(x = "meth"),
+setMethod_traceable("length", signature = c(x = "meth"),
   function(x){
     length(x@.xData$.order)
   })
@@ -190,7 +190,7 @@ setClassUnion("meth_or_NULL", c("meth", "NULL"))
     others = list()
     ))
 
-setMethod("initialize", "job",
+setMethod_traceable("initialize", "job",
   function(.Object, ...) {
     .Object <- callNextMethod()
     if (is.null(.Object@meth)) {
@@ -208,12 +208,12 @@ setClassUnion(
   "numeric_or_character_or_logical", c("numeric", "character", "logical")
 )
 
-setMethod("show", signature = c(object = "feature_char"),
+setMethod_traceable("show", signature = c(object = "feature_char"),
   function(object){
     message(glue::glue("{showStrings(object@.Data)}\n{crayon::silver(snap(object))}"))
   })
 
-setMethod("show", signature = c(object = "feature_list"),
+setMethod_traceable("show", signature = c(object = "feature_list"),
   function(object){
     lst <- object@.Data
     names(lst) <- names(object)
@@ -251,7 +251,7 @@ setValidity("sets_feature",
     all(vapply(object@.Data, is, logical(1), "feature"))
   })
 
-setMethod("show", signature = c(object = "sets_feature"),
+setMethod_traceable("show", signature = c(object = "sets_feature"),
   function(object){
     message(glue::glue("A object of 'sets_feature' length: {length(object)}."))
   })
@@ -263,7 +263,7 @@ sfea <- function(...) {
 setGeneric("join",
   function(x, ref, ...) standardGeneric("join"))
 
-setMethod("join", signature = c(x = "feature_list", ref = "character"),
+setMethod_traceable("join", signature = c(x = "feature_list", ref = "character"),
   function(x, ref){
     if (length(ref) != 1) {
       stop('length(ref) != 1.')
@@ -274,7 +274,7 @@ setMethod("join", signature = c(x = "feature_list", ref = "character"),
     return(x)
   })
 
-setMethod("+", signature = c(e1 = "feature_list", e2 = "feature_list"),
+setMethod_traceable("+", signature = c(e1 = "feature_list", e2 = "feature_list"),
   function(e1, e2){
     fun_mutate <- function(x) {
       if (is(x, "feature_join")) {
@@ -318,7 +318,7 @@ stat_features <- function(features, name, join = TRUE,
   return(snap)
 }
 
-setMethod("join", signature = c(x = "feature_char", ref = "character"),
+setMethod_traceable("join", signature = c(x = "feature_char", ref = "character"),
   function(x, ref){
     x@.Data <- list(x@.Data)
     y <- .feature_list(x)
@@ -331,7 +331,7 @@ setMethod("join", signature = c(x = "feature_char", ref = "character"),
     return(y)
   })
 
-setMethod("[[", signature = c(x = "feature"),
+setMethod_traceable("[[", signature = c(x = "feature"),
   function(x, i, ...) {
     if (is(i, "character")) {
       i <- which(names(x) == i)
@@ -349,7 +349,7 @@ setMethod("[[", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("[", signature = c(x = "refs"),
+setMethod_traceable("[", signature = c(x = "refs"),
   function(x, i, ...){
     if (length(i) == 1) {
       refs <- paste0("@", x@.Data[i])
@@ -359,7 +359,7 @@ setMethod("[", signature = c(x = "refs"),
     glue::glue("[{refs}]")
   })
 
-setMethod("[", signature = c(x = "feature"),
+setMethod_traceable("[", signature = c(x = "feature"),
   function(x, i, ...){
     if (is.character(i)) {
       i <- match(i, names(x))
@@ -382,7 +382,7 @@ setGeneric("feature",
 setGeneric("feature<-",
   function(x, value) standardGeneric("feature<-"))
 
-setMethod("feature", signature = c(x = "job"),
+setMethod_traceable("feature", signature = c(x = "job"),
   function(x, mode = .all_features(x), ..., snap = NULL){
     if (missing(mode)) {
       mode <- ".feature"
@@ -402,7 +402,7 @@ setMethod("feature", signature = c(x = "job"),
     feas
   })
 
-# setMethod("feature", signature = c(x = "job"),
+# setMethod_traceable("feature", signature = c(x = "job"),
 #   function(x, ...){
 #     feas <- x$.feature
 #     if (!is(feas, "feature")) {
@@ -423,7 +423,7 @@ setReplaceMethod("feature", signature = c(x = "wrap"),
     x
   })
 
-setMethod("feature", signature = c(x = "wrap"),
+setMethod_traceable("feature", signature = c(x = "wrap"),
   function(x){
     x$.feature
   })
@@ -445,7 +445,7 @@ setGeneric("as_feature",
   dplyr::recode(nature, !!!db)
 }
 
-setMethod("as_feature", signature = c(x = "ANY", ref = "character"),
+setMethod_traceable("as_feature", signature = c(x = "ANY", ref = "character"),
   function(x, ref, nature = names(.nature_feature()), type = "disease")
   {
     input <- nature[1]
@@ -468,7 +468,7 @@ setMethod("as_feature", signature = c(x = "ANY", ref = "character"),
     return(x)
   })
 
-setMethod("as_feature", signature = c(x = "ANY", ref = "job"),
+setMethod_traceable("as_feature", signature = c(x = "ANY", ref = "job"),
   function(x, ref, nature = names(.nature_feature()),
     type = "disease", analysis = NULL)
   {
@@ -516,12 +516,12 @@ setGeneric("snap",
 setGeneric("snap<-",
   function(x, value, ...) standardGeneric("snap<-"))
 
-setMethod("snap", signature = c(x = "ANY", ref = "missing"),
+setMethod_traceable("snap", signature = c(x = "ANY", ref = "missing"),
   function(x){
     attr(x, ".SNAP")
   })
 
-setMethod("snap", signature = c(x = "ANY", ref = "NULL"),
+setMethod_traceable("snap", signature = c(x = "ANY", ref = "NULL"),
   function(x, ref){
     attr(x, ".SNAP")
   })
@@ -542,7 +542,7 @@ setReplaceMethod("snap", signature = c(x = "ANY"),
     return(x)
   })
 
-setMethod("snap", signature = c(x = "job", ref = "missing"),
+setMethod_traceable("snap", signature = c(x = "job", ref = "missing"),
   function(x){
     x@snap
   })
@@ -553,12 +553,12 @@ setReplaceMethod("snap", signature = c(x = "job"),
     return(x)
   })
 
-setMethod("snap", signature = c(x = "feature", ref = "missing"),
+setMethod_traceable("snap", signature = c(x = "feature", ref = "missing"),
   function(x, ...){
     snap(x, FALSE, ...)
   })
 
-setMethod("snap", signature = c(x = "feature", ref = "logical"),
+setMethod_traceable("snap", signature = c(x = "feature", ref = "logical"),
   function(x, ref = FALSE, limit = 50, num = 10, simple = TRUE, 
     enumerate = TRUE, unlist = is(x, "feature_list") && length(x) == 1)
   {
@@ -644,7 +644,7 @@ setReplaceMethod("snap", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("snap", signature = c(x = "job", ref = "numeric_or_character_or_logical"),
+setMethod_traceable("snap", signature = c(x = "job", ref = "numeric_or_character_or_logical"),
   function(x, ref, methInto = getOption("autor_method_into_snap", FALSE))
   {
     if (is.logical(ref)) {
@@ -769,19 +769,19 @@ trace_filter <- function(data, ..., quosures = NULL) {
 setGeneric("try_snap",
   function(x, ...) standardGeneric("try_snap"))
 
-setMethod("try_snap", signature = c(x = "logical"),
+setMethod_traceable("try_snap", signature = c(x = "logical"),
   function(x){
     try_snap(as.character(x))
   })
 
-setMethod("try_snap", signature = c(x = "feature_list"),
+setMethod_traceable("try_snap", signature = c(x = "feature_list"),
   function(x){
     lst <- x@.Data
     names(lst) <- names(x)
     try_snap(lst)
   })
 
-setMethod("try_snap", signature = c(x = "data.frame"),
+setMethod_traceable("try_snap", signature = c(x = "data.frame"),
   function(x, main, sub){
     items <- split(x[[ sub ]], x[[ main ]])
     len <- vapply(items, function(x) length(unique(x)), integer(1))
@@ -791,7 +791,7 @@ setMethod("try_snap", signature = c(x = "data.frame"),
 setGeneric("try_summary",
   function(x, ...) standardGeneric("try_summary"))
 
-setMethod("try_summary", signature = c(x = "list"),
+setMethod_traceable("try_summary", signature = c(x = "list"),
   function(x, merge = TRUE){
     lens <- lengths(x)
     alls <- list(max = names(lens)[ lens == max(lens) ],
@@ -809,7 +809,7 @@ setMethod("try_summary", signature = c(x = "list"),
 
 setClassUnion("character_or_factor", c("character", "factor"))
 
-setMethod("try_snap", signature = c(x = "character_or_factor"),
+setMethod_traceable("try_snap", signature = c(x = "character_or_factor"),
   function(x){
     if (is(x, "factor")) {
       x <- as.character(x)
@@ -819,7 +819,7 @@ setMethod("try_snap", signature = c(x = "character_or_factor"),
     bind(paste0(names(items), " (n=", len, ") "))
   })
 
-setMethod("try_snap", signature = c(x = "list"),
+setMethod_traceable("try_snap", signature = c(x = "list"),
   function(x, col){
     len <- vapply(x,
       function(x) {
@@ -838,12 +838,12 @@ setGeneric("init",
 setGeneric("init<-",
   function(x, value) standardGeneric("init<-"))
 
-setMethod("init", signature = c(x = "meth"),
+setMethod_traceable("init", signature = c(x = "meth"),
   function(x){
     x@init
   })
 
-setMethod("init", signature = c(x = "NULL"),
+setMethod_traceable("init", signature = c(x = "NULL"),
   function(x){
     TRUE
   })
@@ -854,7 +854,7 @@ setReplaceMethod("init", signature = c(x = "meth"),
     return(x)
   })
 
-setMethod("init", signature = c(x = "job"),
+setMethod_traceable("init", signature = c(x = "job"),
   function(x){
     init(snap(x)) <- TRUE
     init(meth(x)) <- TRUE
@@ -873,12 +873,12 @@ end_init <- function(x) {
 
 setGeneric("meth",
   function(x, ref, ...) standardGeneric("meth"))
-setMethod("meth", signature = c(x = "ANY", ref = "missing"),
+setMethod_traceable("meth", signature = c(x = "ANY", ref = "missing"),
   function(x){
     x@meth
   })
 
-setMethod("meth", signature = c(x = "job", ref = "logical"),
+setMethod_traceable("meth", signature = c(x = "job", ref = "logical"),
   function(x, ref){
     x <- meth(x)
     if (ref) {
@@ -890,7 +890,7 @@ setMethod("meth", signature = c(x = "job", ref = "logical"),
     }
   })
 
-setMethod("meth", signature = c(x = "job", ref = "numeric_or_character"),
+setMethod_traceable("meth", signature = c(x = "job", ref = "numeric_or_character"),
   function(x, ref){
     fun <- function(ref) {
       if (!is.null(meth <- meth(x)[[ paste0("step", ref) ]])) {
@@ -959,7 +959,7 @@ get_meth <- function(x, setHeader = TRUE) {
   }
 }
 
-setMethod("show", signature = c(object = "meth"),
+setMethod_traceable("show", signature = c(object = "meth"),
   function(object){
     lapply(object@.xData$.order,
       function(name) {
@@ -985,13 +985,13 @@ setClass("hclust")
   representation = representation(level = "numeric", marker = "list"),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "marker_list"),
+setMethod_traceable("show", signature = c(object = "marker_list"),
   function(object){
     .show(object)
   })
 
 #' @exportMethod show
-setMethod("show", signature = c(object = "job"),
+setMethod_traceable("show", signature = c(object = "job"),
   function(object){
     message("A workflow of '", class(object), "' in step (done): ", object@step)
     message("Object size: ", obj.size(object))
@@ -1009,7 +1009,7 @@ setGeneric("upd",
   representation = representation(db_file = "character")
 )
 
-setMethod("show", signature = c(object = "db_expect"),
+setMethod_traceable("show", signature = c(object = "db_expect"),
   function(object){
     content <- c(
       paste(crayon::yellow("DB file:"), object@db_file), 
@@ -1039,7 +1039,7 @@ new_db_expect <- function(db_file, create_dir = TRUE) {
   representation = representation(hash = "character"),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "hash_expect"),
+setMethod_traceable("show", signature = c(object = "hash_expect"),
   function(object){
     writeLines(c(crayon::silver(object@hash), bind(object@.Data)))
   })
@@ -1048,7 +1048,7 @@ setGeneric("hash_expect",
   function(x, ...) standardGeneric("hash_expect"))
 setGeneric("hash_expect<-",
   function(x, value) standardGeneric("hash_expect<-"))
-setMethod("hash_expect", signature = c(x = "ANY"),
+setMethod_traceable("hash_expect", signature = c(x = "ANY"),
   function(x){
     attr(x, "__HASH_EXPECT__")
   })
@@ -1061,12 +1061,12 @@ setReplaceMethod("hash_expect", signature = c(x = "ANY"),
     return(x)
   })
 
-setMethod("hunt", signature = c(x = "expect_cols", ref = "ANY"),
+setMethod_traceable("hunt", signature = c(x = "expect_cols", ref = "ANY"),
   function(x, ref){
     hunt(suppressMessages(new_db_expect(x@db_file)), ref)
   })
 
-setMethod("hunt", signature = c(x = "db_expect", ref = "hash_expect"),
+setMethod_traceable("hunt", signature = c(x = "db_expect", ref = "hash_expect"),
   function(x, ref){
     if (!length(x)) {
       if (length(x@db_file) && file.exists(x@db_file)) {
@@ -1076,22 +1076,22 @@ setMethod("hunt", signature = c(x = "db_expect", ref = "hash_expect"),
     x[[ ref@hash ]]
   })
 
-setMethod("hunt", signature = c(x = "db_expect", ref = "ANY"),
+setMethod_traceable("hunt", signature = c(x = "db_expect", ref = "ANY"),
   function(x, ref){
     hunt(x, hash_expect(ref))
   })
 
-setMethod("hunt", signature = c(x = "db_expect", ref = "NULL"),
+setMethod_traceable("hunt", signature = c(x = "db_expect", ref = "NULL"),
   function(x, ref){
     stop("`ref` should not be NULL, or without 'hash_expect'.")
   })
 
-setMethod("upd", signature = c(x = "expect_cols"),
+setMethod_traceable("upd", signature = c(x = "expect_cols"),
   function(x, data, ...){
     upd(suppressMessages(new_db_expect(x@db_file)), data, ...)
   })
 
-setMethod("upd", signature = c(x = "db_expect"),
+setMethod_traceable("upd", signature = c(x = "db_expect"),
   function(x, data, save = TRUE){
     ref <- hash_expect(data)
     if (!is(ref, "hash_expect")) {
@@ -1184,7 +1184,7 @@ set_hash_expect <- function(x, ref, id = NULL) {
   return(x)
 }
 
-setMethod("expect", signature = c(x = "data.frame", ref = "expect_cols"),
+setMethod_traceable("expect", signature = c(x = "data.frame", ref = "expect_cols"),
   function(x, ref, force = FALSE, id = NULL, sleep = NULL,
     silent_select = TRUE, keep = TRUE)
   {
@@ -1396,7 +1396,7 @@ setGeneric("refine",
   representation = representation(object_names = "character"),
   prototype = NULL)
 
-setMethod("collate", signature = c(x = "character"),
+setMethod_traceable("collate", signature = c(x = "character"),
   function(x, fun_extract, exclude = NULL, job = TRUE, env = .GlobalEnv, reg = "(?<=\\.).*")
   {
     names <- ls(pattern = x, envir = env)
@@ -1428,12 +1428,12 @@ setMethod("collate", signature = c(x = "character"),
     return(res)
   })
 
-setMethod("less", signature = c(x = "feature"),
+setMethod_traceable("less", signature = c(x = "feature"),
   function(x, ...){
     less(unlist(x), ...)
   })
 
-setMethod("less", signature = c(x = "numeric_or_character"),
+setMethod_traceable("less", signature = c(x = "numeric_or_character"),
   function(x, n = 3, ..., quote = NULL){
     if (!is.null(snap(x))) {
       return(snap(x))
@@ -1452,7 +1452,7 @@ setMethod("less", signature = c(x = "numeric_or_character"),
     bind(out, ...)
   })
 
-setMethod("transmute", signature = c(x = "feature", ref = "missing"),
+setMethod_traceable("transmute", signature = c(x = "feature", ref = "missing"),
   function(x){
     generator <- .test_job_generator(sys.function(2))
     transmute(x, generator())
@@ -1472,12 +1472,12 @@ setMethod("transmute", signature = c(x = "feature", ref = "missing"),
   return(generator)
 }
 
-setMethod("transmute", signature = c(x = "feature", ref = "job"),
+setMethod_traceable("transmute", signature = c(x = "feature", ref = "job"),
   function(x, ref){
     glue::glue("对{snap(x)}进行{ref@analysis}。")
   })
 
-setMethod("transmute", signature = c(x = "feature", ref = "character"),
+setMethod_traceable("transmute", signature = c(x = "feature", ref = "character"),
   function(x, ref){
     glue::glue("对{snap(x)}进行{ref}。")
   })
@@ -1487,7 +1487,7 @@ setMethod("transmute", signature = c(x = "feature", ref = "character"),
   representation = representation(),
   prototype = NULL)
 
-setMethod("ref", signature = c(x = "character_ref"),
+setMethod_traceable("ref", signature = c(x = "character_ref"),
   function(x, add_internal_job = TRUE, ...){
     ref <- strx(x, "[A-Z][A-Za-z]{10,}[0-9]{4}")
     message("Extracted reference: ", ref)
@@ -1547,7 +1547,7 @@ aref <- function(x, ...) {
   }
 }
 
-setMethod("label", signature = c(x = "ANY"),
+setMethod_traceable("label", signature = c(x = "ANY"),
   function(x){
     if (is.null(lab(x))) {
       rlang::abort('is.null(lab(x)), no "lab" found, use `lab` to set it.')
@@ -1555,13 +1555,13 @@ setMethod("label", signature = c(x = "ANY"),
     as_chunk_label(lab(x))
   })
 
-setMethod("ref", signature = c(x = "ANY"),
+setMethod_traceable("ref", signature = c(x = "ANY"),
   function(x, render = TRUE, ...){
     label <- label(x)
     ref(label, obj = x, render = render, ...)
   })
 
-setMethod("ref", signature = c(x = "character"),
+setMethod_traceable("ref", signature = c(x = "character"),
   function(x, legend = FALSE, try = FALSE,
     visuable = getOption("autoLegendsVisuable", TRUE), 
     obj = NULL, render = TRUE, autoRef = NULL, ...)
@@ -1638,7 +1638,7 @@ setMethod("ref", signature = c(x = "character"),
     }
   })
 
-setMethod("lab", signature = c(x = "ANY"),
+setMethod_traceable("lab", signature = c(x = "ANY"),
   function(x, ...){
     if (is(x, "notshow")) {
       x <- x@data
@@ -1646,7 +1646,7 @@ setMethod("lab", signature = c(x = "ANY"),
     attr(x, ".LABEL")
   })
 
-setMethod("lab", signature = c(x = "feature"),
+setMethod_traceable("lab", signature = c(x = "feature"),
   function(x){
     nature <- .nature(x@nature, TRUE)
     snap <- stringi::stri_trans_general(x@snap, "Any-Latin")
@@ -1728,7 +1728,7 @@ as_chunk_label <- function(x) {
   return(x)
 }
 
-setMethod("sig", signature = c(x = "virtual_job"),
+setMethod_traceable("sig", signature = c(x = "virtual_job"),
   function(x){
     x@sig
   })
@@ -1739,7 +1739,7 @@ setReplaceMethod("sig", signature = c(x = "virtual_job"),
   })
 
 #' @exportMethod pg
-setMethod("pg", signature = c(x = "job"),
+setMethod_traceable("pg", signature = c(x = "job"),
   function(x,
     recode.remote = getOption("pg_remote_recode", pg_remote_recode()),
     recode.local = getOption("pg_local_recode", pg_local_recode()))
@@ -1747,7 +1747,7 @@ setMethod("pg", signature = c(x = "job"),
     pg(x@pg, is.remote(x), recode.remote, recode.local)
   })
 
-setMethod("pg", signature = c(x = "character"),
+setMethod_traceable("pg", signature = c(x = "character"),
   function(x, is.remote = FALSE,
     recode.remote = getOption("pg_remote_recode", pg_remote_recode()),
     recode.local = getOption("pg_local_recode", pg_local_recode()))
@@ -1845,7 +1845,7 @@ pg_remote_recode <- function() {
 }
 
 #' @exportMethod object
-setMethod("object", signature = c(x = "job"),
+setMethod_traceable("object", signature = c(x = "job"),
   function(x){
     x@object
   })
@@ -1856,13 +1856,13 @@ setReplaceMethod("object", signature = c(x = "job"),
   })
 
 #' @exportMethod plots
-setMethod("plots", signature = c(x = "job"),
+setMethod_traceable("plots", signature = c(x = "job"),
   function(x){
     x@plots[[ x@step ]]
   })
 
 #' @exportMethod plots
-setMethod("plots", signature = c(x = "job", step = "numeric"),
+setMethod_traceable("plots", signature = c(x = "job", step = "numeric"),
   function(x, step){
     x@plots[[ step ]]
   })
@@ -1879,7 +1879,7 @@ setGeneric("Legend",
 setGeneric("Legend<-",
   function(x, value) standardGeneric("Legend<-"))
 
-setMethod("Legend", signature = c(x = "ANY"),
+setMethod_traceable("Legend", signature = c(x = "ANY"),
   function(x, type = c("legend", "note", "all")){
     res <- attr(x, ".LEGEND")
     if (length(res)) {
@@ -2031,7 +2031,7 @@ jobSlotAdd <- function(x, name, ..., reset, step) {
 setGeneric("methodAdd",
   function(x, from, ...) standardGeneric("methodAdd"))
 
-setMethod("methodAdd", signature = c(x = "job", from = "character"),
+setMethod_traceable("methodAdd", signature = c(x = "job", from = "character"),
   function(x, from, add = FALSE, env = parent.frame(2), 
     step = NULL, after = TRUE)
   {
@@ -2074,12 +2074,12 @@ setMethod("methodAdd", signature = c(x = "job", from = "character"),
     return(x)
   })
 
-setMethod("methodAdd", signature = c(x = "job", from = "job"),
+setMethod_traceable("methodAdd", signature = c(x = "job", from = "job"),
   function(x, from, ...){
     methodAdd(x, meth(from), ...)
   })
 
-setMethod("methodAdd", signature = c(x = "job", from = "meth"),
+setMethod_traceable("methodAdd", signature = c(x = "job", from = "meth"),
   function(x, from, ...){
     for (name in from@.xData$.order) {
       x <- methodAdd(x, from[[ name ]], ...)
@@ -2090,12 +2090,12 @@ setMethod("methodAdd", signature = c(x = "job", from = "meth"),
 setGeneric("snapAdd",
   function(x, from, ...) standardGeneric("snapAdd"))
 
-setMethod("snapAdd", signature = c(x = "job", from = "NULL"),
+setMethod_traceable("snapAdd", signature = c(x = "job", from = "NULL"),
   function(x, from, ...){
     return(x)
   })
 
-setMethod("snapAdd", signature = c(x = "job", from = "character"),
+setMethod_traceable("snapAdd", signature = c(x = "job", from = "character"),
   function(x, from, add = FALSE, env = parent.frame(2), 
     step = NULL, after = TRUE)
   {
@@ -2146,12 +2146,12 @@ setMethod("snapAdd", signature = c(x = "job", from = "character"),
     return(x)
   })
 
-setMethod("snapAdd", signature = c(x = "job", from = "job"),
+setMethod_traceable("snapAdd", signature = c(x = "job", from = "job"),
   function(x, from, ...){
     snapAdd(x, snap(from), ...)
   })
 
-setMethod("snapAdd", signature = c(x = "job", from = "meth"),
+setMethod_traceable("snapAdd", signature = c(x = "job", from = "meth"),
   function(x, from, ...){
     for (name in from@.xData$.order) {
       x <- snapAdd(x, from[[ name ]], ...)
@@ -2253,19 +2253,19 @@ formatNames <- function(names) {
 }
 
 #' @exportMethod tables
-setMethod("tables", signature = c(x = "job"),
+setMethod_traceable("tables", signature = c(x = "job"),
   function(x){
     x@tables[[ x@step ]]
   })
 
 #' @exportMethod tables
-setMethod("tables", signature = c(x = "job", step = "double"),
+setMethod_traceable("tables", signature = c(x = "job", step = "double"),
   function(x, step){
     x@tables[[ step ]]
   })
 
 #' @exportMethod tables
-setMethod("tables", signature = c(x = "job", step = "double"),
+setMethod_traceable("tables", signature = c(x = "job", step = "double"),
   function(x, step){
     x@tables[[ step ]]
   })
@@ -2277,7 +2277,7 @@ setReplaceMethod("tables", signature = c(x = "job"),
 
 
 #' @exportMethod params
-setMethod("params", signature = c(x = "job"),
+setMethod_traceable("params", signature = c(x = "job"),
   function(x){
     x@params
   })
@@ -2289,7 +2289,7 @@ setReplaceMethod("params", signature = c(x = "job"),
 
 
 #' @exportMethod others
-setMethod("others", signature = c(x = "job"),
+setMethod_traceable("others", signature = c(x = "job"),
   function(x){
     x@others[[ x@step ]]
   })
@@ -2377,7 +2377,7 @@ set_remote_for_sub_jobs <- function(x, map_local = glue::glue("{class(x)}_batch_
   return(x)
 }
 
-setMethod("set_remote", signature = c(x = "job"),
+setMethod_traceable("set_remote", signature = c(x = "job"),
   function(x, wd){
     x$wd <- wd
     return(x)
@@ -2415,7 +2415,7 @@ setGeneric("step0",
     standardGeneric("step0")
   })
 
-setMethod("step0", signature = c(x = "missing"),
+setMethod_traceable("step0", signature = c(x = "missing"),
   function(x){
     message(crayon::blue("All available workflow for class:\n"))
     signatures <- available_signatures("step1")
@@ -2424,14 +2424,14 @@ setMethod("step0", signature = c(x = "missing"),
     message(crayon::silver("Example of show description: use `step0(1)`."))
   })
 
-setMethod("step0", signature = c(x = "numeric"),
+setMethod_traceable("step0", signature = c(x = "numeric"),
   function(x){
     signatures <- available_signatures("step1")
     fun <- get_fun(paste0(".", signatures[ x ]))
     step0(fun())
   })
 
-setMethod("step0", signature = c(x = "character"),
+setMethod_traceable("step0", signature = c(x = "character"),
   function(x){
     signatures <- available_signatures("step1")
     sig <- match.arg(x, sub("job_", "", signatures))
@@ -2542,6 +2542,8 @@ job_append_method <- function(x, step = NULL, append = FALSE, method = TRUE, ona
 setGeneric("step1",
   function(x, ...) {
     # if (identical(sig(x), character(0))) {
+    .is_s4_trace_root <- .run_start_s4_trace_root("step1")
+    on.exit(.run_end_s4_trace_root(.is_s4_trace_root), add = TRUE)
     legal <- TRUE
     if (!length(x@sig)) {
       if (identical(parent.frame(1), .GlobalEnv)) {
@@ -2810,7 +2812,7 @@ get_local_fun <- function(m) {
     })
 }
 
-setMethod("step1", signature = c(x = "job"),
+setMethod_traceable("step1", signature = c(x = "job"),
   function(x){
     step_message("Do nothing.")
     return(x)
@@ -3083,18 +3085,18 @@ match_pair <- function(str, left = "(", right = ")") {
   paste0(char, collapse = "")
 }
 
-setMethod("show", signature = c(object = "standardGeneric"),
+setMethod_traceable("show", signature = c(object = "standardGeneric"),
   function(object){
     .show_method(object, show_standardGeneric, FALSE)
   })
 
-setMethod("show", signature = c(object = "nonstandardGenericFunction"),
+setMethod_traceable("show", signature = c(object = "nonstandardGenericFunction"),
   function(object) {
     .show_method(object, show_nonstandardGenericFunction, TRUE)
   }
 )
 
-setMethod("print", signature = c(x = "nonstandardGenericFunction"),
+setMethod_traceable("print", signature = c(x = "nonstandardGenericFunction"),
   function(x){
     show(x)
   })
@@ -3102,7 +3104,7 @@ setMethod("print", signature = c(x = "nonstandardGenericFunction"),
 setGeneric("clear",
   function(x, ...) standardGeneric("clear"))
 
-setMethod("clear", signature = c(x = "job"),
+setMethod_traceable("clear", signature = c(x = "job"),
   function(x, save = TRUE, lite = TRUE, suffix = NULL,
     name = rlang::expr_text(substitute(x, parent.frame(1))),
     path_jobSave = getOption("path_jobSave", "."), 
@@ -3243,7 +3245,7 @@ setGeneric("upload",
 setGeneric("pull",
   function(x, ...) standardGeneric("pull"))
 
-setMethod("intersect", signature = c(x = "ANY", y = "ANY"),
+setMethod_traceable("intersect", signature = c(x = "ANY", y = "ANY"),
   function(x, y){
     base::intersect(x, y)
   })
@@ -3251,7 +3253,7 @@ setMethod("intersect", signature = c(x = "ANY", y = "ANY"),
 setGeneric("not",
   function(x, ...) standardGeneric("not"))
 
-setMethod("not", signature = c(x = "job"),
+setMethod_traceable("not", signature = c(x = "job"),
   function(x){
     options(method_name = class(x))
     invisible(x)
@@ -3260,7 +3262,7 @@ setMethod("not", signature = c(x = "job"),
 setGeneric("merge",
   function(x, y, ...) standardGeneric("merge"))
 
-setMethod("upd", signature = c(x = "job"),
+setMethod_traceable("upd", signature = c(x = "job"),
   function(x){
     new <- new(class(x))
     new@object <- x@object
@@ -3288,7 +3290,7 @@ setMethod("upd", signature = c(x = "job"),
     new
   })
 
-setMethod("add", signature = c(x = "wrap"),
+setMethod_traceable("add", signature = c(x = "wrap"),
   function(x, data, wrap_plots = NULL)
   {
     if ((is.null(wrap_plots) || wrap_plots) && is(data, "list")) {
@@ -3314,7 +3316,7 @@ setMethod("add", signature = c(x = "wrap"),
     return(x)
   })
 
-setMethod("fill", signature = c(x = "df"),
+setMethod_traceable("fill", signature = c(x = "df"),
   function(x, ref, fill, lst){
     for (i in seq_along(lst)) {
       x[x[[ref]] == names(lst[i]), ][[ fill ]] <- lst[[ i ]]
@@ -3353,7 +3355,7 @@ set_palette <- function(x, values = color_set()) {
 setGeneric("is.remote",
   function(x, ...) standardGeneric("is.remote"))
 
-setMethod("is.remote", signature = c(x = "job"),
+setMethod_traceable("is.remote", signature = c(x = "job"),
   function(x){
     !is.null(x$set_remote) && x$set_remote
   })
@@ -3361,7 +3363,7 @@ setMethod("is.remote", signature = c(x = "job"),
 setGeneric("is_workflow_object_exists",
   function(object, ...) standardGeneric("is_workflow_object_exists"))
 
-setMethod("[[", signature = c(x = "job"),
+setMethod_traceable("[[", signature = c(x = "job"),
   function(x, i, ...){
     if (identical(i, "project")) {
       if (!is.null(x@params$project)) {
@@ -3375,24 +3377,24 @@ setMethod("[[", signature = c(x = "job"),
     }
   })
 
-setMethod("[[<-", signature = c(x = "job"),
+setMethod_traceable("[[<-", signature = c(x = "job"),
   function(x, i, ..., value){
     x@params[[ i ]] <- value
     return(x)
   })
 
-setMethod("$", signature = c(x = "job"),
+setMethod_traceable("$", signature = c(x = "job"),
   function(x, name){
     x[[ name ]]
   })
 
-setMethod("$<-", signature = c(x = "job"),
+setMethod_traceable("$<-", signature = c(x = "job"),
   function(x, name, value){
     x[[ name ]] <- value
     return(x)
   })
 
-setMethod("map", signature = c(x = "df", ref = "character"),
+setMethod_traceable("map", signature = c(x = "df", ref = "character"),
   function(x, ref, y, y.ref, y.get, rename = TRUE, col = NULL)
   {
     if (any(!c(y.ref, y.get) %in% colnames(y))) {
@@ -3409,7 +3411,7 @@ setMethod("map", signature = c(x = "df", ref = "character"),
     x
   })
 
-setMethod("quantile", signature = c(x = "df"),
+setMethod_traceable("quantile", signature = c(x = "df"),
   function(x, cols, get, cut = .75, mode = c("gt", "lt"))
   {
     if (any(!cols %in% colnames(x))) {
@@ -3437,7 +3439,7 @@ setMethod("quantile", signature = c(x = "df"),
       })
   })
 
-# setMethod("map", signature = c(x = "list"),
+# setMethod_traceable("map", signature = c(x = "list"),
   # function(x, y, y.ref, y.get, ...)
   # {
   #   if (is(x, "df")) {
@@ -3449,7 +3451,7 @@ setMethod("quantile", signature = c(x = "df"),
   #     })
 #   })
 
-setMethod("gname", signature = c(x = "character"),
+setMethod_traceable("gname", signature = c(x = "character"),
   function(x){
     if (any(grpl(x, " |/"))) {
       message(
@@ -3501,7 +3503,7 @@ setValidity("job_comments",
     all(types %in% names(object@comments))
   })
 
-setMethod("upd", signature = c(x = "job"),
+setMethod_traceable("upd", signature = c(x = "job"),
   function(x, job_comments)
   {
     if (!is(job_comments, "job_comments")) {
@@ -3779,7 +3781,7 @@ copy_job <- function(x) {
   }
   if (isS4(f)) {
     sigs <- bind(signature, co = ".*")
-    pattern_fun <- glue::glue("^setMethod(.*{fname}.*{sigs}\\\\>")
+    pattern_fun <- glue::glue("^setMethod_traceable(.*{fname}.*{sigs}\\\\>")
   } else {
     pattern_fun <- glue::glue("^{fname}\\\\>")
   }
@@ -4408,7 +4410,7 @@ new_db <- function(db_file, idcol) {
   .local_db(db_file = db_file, idcol = idcol)
 }
 
-setMethod("not", signature = c(x = "local_db"),
+setMethod_traceable("not", signature = c(x = "local_db"),
   function(x, ids, force = FALSE){
     ids <- unique(ids)
     if (nrow(x@db) & !force) {
@@ -4426,7 +4428,7 @@ setMethod("not", signature = c(x = "local_db"),
     return(x)
   })
 
-setMethod("upd", signature = c(x = "local_db"),
+setMethod_traceable("upd", signature = c(x = "local_db"),
   function(x, data, ids = x@query){
     idcol <- x@idcol
     if (!is(data, "df")) {
@@ -4453,12 +4455,12 @@ setMethod("upd", signature = c(x = "local_db"),
     return(x)
   })
 
-setMethod("vis", signature = c(x = "df"),
+setMethod_traceable("vis", signature = c(x = "df"),
   function(x, n = 100, width = 200) {
     print(x, n = n, width = width)
   })
 
-setMethod("res", signature = c(x = "local_db"),
+setMethod_traceable("res", signature = c(x = "local_db"),
   function(x, what){
     dplyr::filter(as_tibble(x@db), !!rlang::sym(x@idcol) %in% !!what)
   })
@@ -4586,7 +4588,7 @@ stop_debug <- function(x) {
   stop("Stop for debugging. Use `Terror` to get data.")
 }
 
-setMethod("show", signature = c(object = "character"),
+setMethod_traceable("show", signature = c(object = "character"),
   function(object){
     if (length(object) > 200) {
       message(crayon::silver("Length: ", length(object)))
@@ -4626,7 +4628,7 @@ valid_job_list <- function(x, class, step = 0L) {
 
 setClass("merge_alias")
 
-setMethod("merge", signature = c(x = "character", y = "character"),
+setMethod_traceable("merge", signature = c(x = "character", y = "character"),
   function(x, y, type = "ALIAS", db = org.Hs.eg.db::org.Hs.eg.db, 
     unique = TRUE, omit.common = TRUE, ...)
   {
@@ -4685,7 +4687,7 @@ find_alias <- function(keys, type = "ALIAS", db = org.Hs.eg.db::org.Hs.eg.db) {
   return(anno)
 }
 
-setMethod("map", signature = c(x = "character", "merge_alias"),
+setMethod_traceable("map", signature = c(x = "character", "merge_alias"),
   function(x, ref, which = "x", to = "SYMBOL.x")
   {
     if (nrow(ref)) {
@@ -4696,7 +4698,7 @@ setMethod("map", signature = c(x = "character", "merge_alias"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "df", ref = "merge_alias"),
+setMethod_traceable("map", signature = c(x = "df", ref = "merge_alias"),
   function(x, ref, which = "x", to = "SYMBOL.x")
   {
     colnames(x) <- map(colnames(x), ref, which, to)

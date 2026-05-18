@@ -28,12 +28,12 @@ job_pubchemr <- function(cids)
   x
 }
 
-setMethod("step0", signature = c(x = "job_pubchemr"),
+setMethod_traceable("step0", signature = c(x = "job_pubchemr"),
   function(x){
     step_message("Prepare your data with function `job_pubchemr`.")
   })
 
-setMethod("step1", signature = c(x = "job_pubchemr"),
+setMethod_traceable("step1", signature = c(x = "job_pubchemr"),
   function(x){
     step_message("Get synonyms and smiles of compounds.")
     synonyms <- e(PubChemR::get_synonyms(object(x)))
@@ -58,7 +58,7 @@ setMethod("step1", signature = c(x = "job_pubchemr"),
     return(x)
   })
 
-setMethod("filter", signature = c(x = "job_pubchemr"),
+setMethod_traceable("filter", signature = c(x = "job_pubchemr"),
   function(x, log){
     if (length(object(x)) != length(log)) {
       stop("length(object(x)) != length(log)")
@@ -71,7 +71,7 @@ setMethod("filter", signature = c(x = "job_pubchemr"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_pubchemr", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_pubchemr", ref = "character"),
   function(x, ref, extra = NULL, only = TRUE){
     names <- c(unique(ref), extra)
     names <- tolower(names)
@@ -92,7 +92,7 @@ setMethod("map", signature = c(x = "job_pubchemr", ref = "character"),
     }
   })
 
-setMethod("map", signature = c(x = "job_tcmsp", ref = "job_pubchemr"),
+setMethod_traceable("map", signature = c(x = "job_tcmsp", ref = "job_pubchemr"),
   function(x, ref, name_recode = NULL, filter = TRUE, merge = TRUE)
   {
     if (x@step < 2L) {

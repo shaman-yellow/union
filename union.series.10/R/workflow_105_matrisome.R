@@ -18,12 +18,12 @@ job_matrisome <- function()
   .job_matrisome()
 }
 
-setMethod("step0", signature = c(x = "job_matrisome"),
+setMethod_traceable("step0", signature = c(x = "job_matrisome"),
   function(x){
     step_message("Prepare your data with function `job_matrisome`.")
   })
 
-setMethod("step1", signature = c(x = "job_matrisome"),
+setMethod_traceable("step1", signature = c(x = "job_matrisome"),
   function(x, type = c("human", "mouse")){
     step_message("Get data of matrisome.")
     type <- match.arg(type)

@@ -22,7 +22,7 @@
 setGeneric("do_survival",
   function(x, ref, ...) standardGeneric("do_survival"))
 
-setMethod("do_survival", signature = c(x = "job_limma", ref = "job_survival"),
+setMethod_traceable("do_survival", signature = c(x = "job_limma", ref = "job_survival"),
   function(x, ref, ...){
     cox <- asjob_lasso(x)
     cox <- step1(cox)
@@ -33,7 +33,7 @@ setMethod("do_survival", signature = c(x = "job_limma", ref = "job_survival"),
     surv
   })
 
-setMethod("do_survival", signature = c(x = "list", ref = "job_survival"),
+setMethod_traceable("do_survival", signature = c(x = "list", ref = "job_survival"),
   function(x, ref, ...){
     projects <- vapply(x, function(x) x$project, character(1))
     inst <- x[[1]]
@@ -79,7 +79,7 @@ setMethod("do_survival", signature = c(x = "list", ref = "job_survival"),
 setGeneric("asjob_survival",
   function(x, ...) standardGeneric("asjob_survival"))
 
-setMethod("asjob_survival", signature = c(x = "job_lasso"),
+setMethod_traceable("asjob_survival", signature = c(x = "job_lasso"),
   function(x, use.group = c("mul_cox", "uni_cox"), lambda = c("min", "1se"),
     base_method = c("surv_cutpoint", "median"), fea_coefs = NULL, force = FALSE,
     use_data = c("all", "train", "valid"), 
@@ -218,7 +218,7 @@ setMethod("asjob_survival", signature = c(x = "job_lasso"),
     return(y)
   })
 
-setMethod("asjob_survival", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_survival", signature = c(x = "job_limma"),
   function(x, genes_surv, use = .guess_symbol(x),
     time = "days_to_last_follow_up", scale = TRUE,
     status = "vital_status", base_method = c("surv_cutpoint", "median"))
@@ -306,7 +306,7 @@ setMethod("asjob_survival", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("regroup", signature = c(x = "job_limma", ref = "job_survival"),
+setMethod_traceable("regroup", signature = c(x = "job_limma", ref = "job_survival"),
   function(x, ref, feature = names(ref$data_group)[which], 
     which = 1L, ...)
   {
@@ -349,7 +349,7 @@ as_EList.DGEList <- function(object) {
       targets = object$samples, genes = object$genes))
 }
 
-setMethod("step0", signature = c(x = "job_survival"),
+setMethod_traceable("step0", signature = c(x = "job_survival"),
   function(x){
     step_message("Prepare your data with function `asjob_survival`.
       In general, job convert from 'job_tcga' to 'job_limma' were
@@ -358,7 +358,7 @@ setMethod("step0", signature = c(x = "job_survival"),
     )
   })
 
-setMethod("step1", signature = c(x = "job_survn"),
+setMethod_traceable("step1", signature = c(x = "job_survn"),
   function(x, ...){
     x <- callNextMethod(x, ...)
     message("For individuals ...")
@@ -369,7 +369,7 @@ setMethod("step1", signature = c(x = "job_survn"),
     return(x)
   })
 
-setMethod("step1", signature = c(x = "job_survival"),
+setMethod_traceable("step1", signature = c(x = "job_survival"),
   function(x, genes_surv = x$genes_surv, fun_group = x$fun_group,
     fun_status = x$fun_status, time = x$time, status = x$status, only_keep_sig = "guess",
     roc_time = c(1, 3, 5))
@@ -507,7 +507,7 @@ setMethod("step1", signature = c(x = "job_survival"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_survival"),
+setMethod_traceable("step2", signature = c(x = "job_survival"),
   function(x){
     step_message("Collate results.")
     plots <- x@plots$step1$p.surv
@@ -524,7 +524,7 @@ setMethod("step2", signature = c(x = "job_survival"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_survn"),
+setMethod_traceable("step2", signature = c(x = "job_survn"),
   function(x){
     step_message("Collate results.")
     fun_collate <- function(name) {

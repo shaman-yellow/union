@@ -29,12 +29,12 @@ job_biblio <- function(lst)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_biblio"),
+setMethod_traceable("step0", signature = c(x = "job_biblio"),
   function(x){
     step_message("Prepare your data with function `job_biblio`.")
   })
 
-setMethod("step1", signature = c(x = "job_biblio"),
+setMethod_traceable("step1", signature = c(x = "job_biblio"),
   function(x, num, from = "~/Downloads", to = timeName("wos"), pattern = "^savedrecs",
     filter_dup = TRUE, filter_nonEng = TRUE, filter_naAbs = TRUE, filter_AbsKey = TRUE)
   {
@@ -94,7 +94,7 @@ setMethod("step1", signature = c(x = "job_biblio"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_biblio"),
+setMethod_traceable("step2", signature = c(x = "job_biblio"),
   function(x, n = 10){
     step_message("Perform a descriptive analysis of the bibliographic data frame.")
     require(bibliometrix)
@@ -121,7 +121,7 @@ setMethod("step2", signature = c(x = "job_biblio"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_biblio"),
+setMethod_traceable("step3", signature = c(x = "job_biblio"),
   function(x, n = 30, rank.by = "C/Y", journal_info = fxlsx(.prefix("2022-if.xlsx")))
     {
     step_message("Network analysis.")
@@ -216,7 +216,7 @@ setMethod("step3", signature = c(x = "job_biblio"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_biblio"),
+setMethod_traceable("step4", signature = c(x = "job_biblio"),
   function(x, n = 20){
     step_message("Co-Word Analysis and Historical Direct Citation Network.")
     # ID: Keywords Plus associated by ISI or SCOPUS database

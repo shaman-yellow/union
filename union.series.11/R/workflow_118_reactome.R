@@ -16,7 +16,7 @@
 setGeneric("asjob_reactome",
   function(x, ...) standardGeneric("asjob_reactome"))
 
-setMethod("asjob_reactome", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_reactome", signature = c(x = "job_seurat"),
   function(x, ref = NULL, compare.by = "group", sample.by = "orig.ident",
     cellType = x$group.by, ids = c(compare.by, sample.by, cellType))
   {
@@ -54,12 +54,12 @@ setMethod("asjob_reactome", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_reactome"),
+setMethod_traceable("step0", signature = c(x = "job_reactome"),
   function(x){
     step_message("Prepare your data with function `job_reactome`.")
   })
 
-setMethod("step1", signature = c(x = "job_reactome"),
+setMethod_traceable("step1", signature = c(x = "job_reactome"),
   function(x, fallback = TRUE, verify = TRUE)
   {
     step_message("Send to reactome server.")
@@ -84,7 +84,7 @@ setMethod("step1", signature = c(x = "job_reactome"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_reactome"),
+setMethod_traceable("step2", signature = c(x = "job_reactome"),
   function(x, use = c("p.value", "p.adjust"), show = 10, 
     rerun = FALSE, mode = c("all", "pathway"))
   {
@@ -162,7 +162,7 @@ setMethod("step2", signature = c(x = "job_reactome"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_reactome"),
+setMethod_traceable("step3", signature = c(x = "job_reactome"),
   function(x, top = x$.args$step2$show)
   {
     step_message("")

@@ -23,14 +23,14 @@ job_fastp <- function(path)
   .job_fastp(object = path)
 }
 
-setMethod("step0", signature = c(x = "job_fastp"),
+setMethod_traceable("step0", signature = c(x = "job_fastp"),
   function(x){
     step_message("Prepare your data with function `job_fastp`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_fastp"),
+setMethod_traceable("step1", signature = c(x = "job_fastp"),
   function(x, f1_r2 = c("f1", "r2"), suffix = ".fastq.gz", workers = 7){
     step_message("Quality control (QC).")
     if (is.remote(x)) {
@@ -51,7 +51,7 @@ setMethod("step1", signature = c(x = "job_fastp"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_fastp"),
+setMethod_traceable("step2", signature = c(x = "job_fastp"),
   function(x, pattern_report = "html", pattern_fq = "QC.fastq.gz$"){
     step_message("Collate results which succeed with report as metadata.")
     if (is.remote(x)) {
@@ -89,7 +89,7 @@ setMethod("step2", signature = c(x = "job_fastp"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_fastp"),
+setMethod_traceable("set_remote", signature = c(x = "job_fastp"),
   function(x)
   {
     x@params$postfix <- function(x) {
@@ -179,7 +179,7 @@ fastp_pair.remote <- function(path, suffix = ".fastq.gz", pattern = paste0(".[1-
   message("Job finished.")
 }
 
-setMethod("asjob_qiime", signature = c(x = "job_fastp"),
+setMethod_traceable("asjob_qiime", signature = c(x = "job_fastp"),
   function(x, metadata = x@params$metadata, wd = "qiime_data", export = "qiime_export")
   {
     .check_columns(metadata, c("SampleName", "group"))

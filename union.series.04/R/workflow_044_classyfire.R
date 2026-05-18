@@ -22,7 +22,7 @@
 setGeneric("asjob_classyfire",
   function(x, ...) standardGeneric("asjob_classyfire"))
 
-setMethod("asjob_classyfire", signature = c(x = "job_herb"),
+setMethod_traceable("asjob_classyfire", signature = c(x = "job_herb"),
   function(x){
     if (x@step < 2L) {
       stop("x@step < 2L")
@@ -36,7 +36,7 @@ setMethod("asjob_classyfire", signature = c(x = "job_herb"),
     return(x)
   })
 
-setMethod("asjob_classyfire", signature = c(x = "job_vina"),
+setMethod_traceable("asjob_classyfire", signature = c(x = "job_vina"),
   function(x, which = NULL){
     cpds <- object(x)$cids
     if (!is.null(which)) {
@@ -62,12 +62,12 @@ job_classyfire <- function(query, type = NULL) {
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_classyfire"),
+setMethod_traceable("step0", signature = c(x = "job_classyfire"),
   function(x){
     step_message("Prepare your data with function `asjob_classyfire`.")
   })
 
-setMethod("step1", signature = c(x = "job_classyfire"),
+setMethod_traceable("step1", signature = c(x = "job_classyfire"),
   function(x, cl = 5, savedir = "inchikey")
   {
     step_message("Use inchikey2d or Pubchem CID query inchikey.")
@@ -81,7 +81,7 @@ setMethod("step1", signature = c(x = "job_classyfire"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_classyfire"),
+setMethod_traceable("step2", signature = c(x = "job_classyfire"),
   function(x, pattern_match = NULL, cl = 5, savedir = "classify"){
     step_message("Use inchikey query classification.")
     if (x$type == "inchikey") {

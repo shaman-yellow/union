@@ -22,7 +22,7 @@
 setGeneric("asjob_estimate",
   function(x, ...) standardGeneric("asjob_estimate"))
 
-setMethod("asjob_estimate", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_estimate", signature = c(x = "job_limma"),
   function(x, use = .guess_symbol(x), dir = "estimate")
   {
     if (x@step < 1) {
@@ -55,12 +55,12 @@ job_estimate <- function(data, dir = "estimate")
   .job_estimate(object = inputfile, params = list(dir = dir, meta = meta))
 }
 
-setMethod("step0", signature = c(x = "job_estimate"),
+setMethod_traceable("step0", signature = c(x = "job_estimate"),
   function(x){
     step_message("Prepare your data with function `job_estimate`.")
   })
 
-setMethod("step1", signature = c(x = "job_estimate"),
+setMethod_traceable("step1", signature = c(x = "job_estimate"),
   function(x, platform = c("illumina", "affymetrix", "agilent")){
     step_message("Estimate score.")
     require(estimate)
@@ -72,7 +72,7 @@ setMethod("step1", signature = c(x = "job_estimate"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_estimate"),
+setMethod_traceable("step2", signature = c(x = "job_estimate"),
   function(x, metadata = NULL, sig.test = "Group")
   {
     step_message("Collate results")
@@ -106,7 +106,7 @@ setMethod("step2", signature = c(x = "job_estimate"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_estimate"),
+setMethod_traceable("step3", signature = c(x = "job_estimate"),
   function(x, metadata, group = "group",
     file_tisidb = .prefix(file.path("TISIDB", "immunomodulator.txt"), "db"))
   {

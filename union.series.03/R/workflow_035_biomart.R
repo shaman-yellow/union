@@ -33,14 +33,14 @@ job_biomart <- function(mart_dataset, global = TRUE, clear = FALSE)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_biomart"),
+setMethod_traceable("step0", signature = c(x = "job_biomart"),
   function(x){
     step_message("Prepare your data with function `job_biomart`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_biomart"),
+setMethod_traceable("step1", signature = c(x = "job_biomart"),
   function(x, values,
     filters = c("ensembl_transcript_id", "ensembl_gene_id",
       "hgnc_symbol", "mgi_symbol", "entrezgene_id", "rgd_symbol", "refseq_mrna"),
@@ -65,7 +65,7 @@ setMethod("step1", signature = c(x = "job_biomart"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_biomart", ref = "job_edqtl"),
+setMethod_traceable("map", signature = c(x = "job_biomart", ref = "job_edqtl"),
   function(x, ref, use = "signif_variant_site_pairs", label.factor = 1){
     ## prepare for editing site
     db <- object(ref)[[ use ]]

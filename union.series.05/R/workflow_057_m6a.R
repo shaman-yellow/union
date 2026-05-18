@@ -23,12 +23,12 @@ job_m6a <- function(species = c("HomoSapiens", "MusMusculus"))
   .job_m6a(object = match.arg(species))
 }
 
-setMethod("step0", signature = c(x = "job_m6a"),
+setMethod_traceable("step0", signature = c(x = "job_m6a"),
   function(x){
     step_message("Prepare your data with function `job_m6a`.")
   })
 
-setMethod("step1", signature = c(x = "job_m6a"),
+setMethod_traceable("step1", signature = c(x = "job_m6a"),
   function(x, genes, save = .prefix("m6a_Atlas", "db"), sleep = .1)
   {
     step_message("Get data from the website.")

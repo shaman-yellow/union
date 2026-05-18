@@ -21,14 +21,14 @@
 setGeneric("asjob_annova",
   function(x, ...) standardGeneric("asjob_annova"))
 
-setMethod("step0", signature = c(x = "job_annova"),
+setMethod_traceable("step0", signature = c(x = "job_annova"),
   function(x){
     step_message("Prepare your data with function `job_annova`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_annova"),
+setMethod_traceable("step1", signature = c(x = "job_annova"),
   function(x){
     step_message("Quality control (QC).
       This do:

@@ -25,7 +25,7 @@
     ),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "mr_batch"),
+setMethod_traceable("show", signature = c(object = "mr_batch"),
   function(object){
     message(glue::glue("'mr_batch' object with {length(object)} MR pairs:"))
     fun_show <- function(x) stringr::str_wrap(less(x), exdent = 4L)
@@ -33,19 +33,19 @@ setMethod("show", signature = c(object = "mr_batch"),
     message(glue::glue("outcomes: {fun_show(object@outcomes)}"))
   })
 
-setMethod("[[", signature = c(x = "mr_batch"),
+setMethod_traceable("[[", signature = c(x = "mr_batch"),
   function(x, i, ...){
     x@.Data[[ i ]]
   })
 
-setMethod("[[<-", signature = c(x = "mr_batch"),
+setMethod_traceable("[[<-", signature = c(x = "mr_batch"),
   function(x, i, ..., value){
     x@.Data[[ i ]] <- value
     return(x)
   })
 
 
-setMethod("[", signature = c(x = "mr_batch"),
+setMethod_traceable("[", signature = c(x = "mr_batch"),
   function(x, i, ...){
     x@.Data <- x@.Data[ i ]
     fun_subset <- function(col) {
@@ -60,12 +60,12 @@ setMethod("[", signature = c(x = "mr_batch"),
     return(x)
   })
 
-setMethod("$", signature = c(x = "mr_batch"),
+setMethod_traceable("$", signature = c(x = "mr_batch"),
   function(x, name){
     x@params[[ name ]]
   })
 
-setMethod("$<-", signature = c(x = "mr_batch"),
+setMethod_traceable("$<-", signature = c(x = "mr_batch"),
   function(x, name, value){
     x@params[[ name ]] <- value
     return(x)
@@ -87,7 +87,7 @@ job_mr <- function(data_exposure, split_exposure = "SYMBOL") {
   return(x)
 }
 
-setMethod("step0", signature = "job_mr",
+setMethod_traceable("step0", signature = "job_mr",
   function(x) {
     step_message("Prepare data with `job_mr()`.")
   }
@@ -95,7 +95,7 @@ setMethod("step0", signature = "job_mr",
 setGeneric("asjob_mr",
   function(x, ...) standardGeneric("asjob_mr"))
 
-setMethod("asjob_mr", signature = c(x = "feature"),
+setMethod_traceable("asjob_mr", signature = c(x = "feature"),
   function(x, mode = "eqtlgen", strict = TRUE, ...)
   {
     mode <- match.arg(mode)
@@ -119,7 +119,7 @@ setMethod("asjob_mr", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("step1", signature = c(x = "job_mr"),
+setMethod_traceable("step1", signature = c(x = "job_mr"),
   function(x, templates = NULL,
     patterns = NULL, cut.p = 1e-05, top_n = 3L, ..., show_source = TRUE
   )
@@ -169,7 +169,7 @@ setMethod("step1", signature = c(x = "job_mr"),
     return(x)
   })
 
-setMethod("step2", signature = "job_mr",
+setMethod_traceable("step2", signature = "job_mr",
   function(x, mode = c("mbg", "general"), ids = NULL, outcome = NULL, ...)
   {
     step_message("Get outcome data.")
@@ -210,7 +210,7 @@ setMethod("step2", signature = "job_mr",
   }
 )
 
-setMethod("step3", signature = c(x = "job_mr"),
+setMethod_traceable("step3", signature = c(x = "job_mr"),
   function(x, filter_outcome = TRUE, cut.p = 1e-05, ...)
   {
     step_message("Filter snaps (outcome or F test).")
@@ -238,7 +238,7 @@ setMethod("step3", signature = c(x = "job_mr"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_mr"),
+setMethod_traceable("step4", signature = c(x = "job_mr"),
   function(x, min_nsnp = 3L, ..., rerun = FALSE, workers = 10L)
   {
     step_message("Run MR analysis and filter results.")
@@ -263,7 +263,7 @@ setMethod("step4", signature = c(x = "job_mr"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_mr"),
+setMethod_traceable("step5", signature = c(x = "job_mr"),
   function(x, ...)
   {
     step_message("Summry.")

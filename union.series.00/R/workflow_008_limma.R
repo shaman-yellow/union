@@ -66,7 +66,7 @@ job_limma_normed <- function(data, metadata, genes = NULL) {
   return(x)
 }
 
-setMethod("regroup", signature = c(x = "job_limma", ref = "missing"),
+setMethod_traceable("regroup", signature = c(x = "job_limma", ref = "missing"),
   function(x, ...){
     modify_job_limma_meta(x, ..., fun = dplyr::mutate)
   })
@@ -94,7 +94,7 @@ modify_job_limma_meta <- function (x, ..., fun, modify_object = FALSE) {
   x
 }
 
-setMethod("filter", signature = c(x = "job_limma"),
+setMethod_traceable("filter", signature = c(x = "job_limma"),
   function(x, ..., type = c("gene", "metadata"), add_snap = TRUE, force = FALSE){
     type <- match.arg(type)
     if (type == "gene") {
@@ -163,7 +163,7 @@ job_limma <- function(DGEList, rna = TRUE)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_limma"),
+setMethod_traceable("step0", signature = c(x = "job_limma"),
   function(x){
     step_message("Prepare your data with function `job_limma`.
       "
@@ -249,7 +249,7 @@ set_design <- function(x, formula = .guess_formula(),
   return(x)
 }
 
-setMethod("step1", signature = c(x = "job_limma"),
+setMethod_traceable("step1", signature = c(x = "job_limma"),
   function(x,
     group = .get_meta(x, "group"), batch = .get_meta(x, "batch"),
     pairs = .get_meta(x, "pairs"),
@@ -407,7 +407,7 @@ setMethod("step1", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_limma"),
+setMethod_traceable("step2", signature = c(x = "job_limma"),
   function(x, ..., contrasts = NULL, block = NULL, use = c("adj.P.Val", "P.Value"),
     use.cut = .05, cut.fc = 1,
     label = .guess_symbol(x), batch = FALSE, HLs = NULL)
@@ -486,7 +486,7 @@ setMethod("step2", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_limma"),
+setMethod_traceable("step3", signature = c(x = "job_limma"),
   function(x, group = "group", top = 10)
   {
     step_message("Draw plots.")
@@ -590,7 +590,7 @@ pattern_contrasts <- function(group, formula, pattern = paste0(signature, "$"),
   }
 }
 
-setMethod("group", signature = c(x = "job_limma"),
+setMethod_traceable("group", signature = c(x = "job_limma"),
   function(x, group)
   {
     stopifnot(x@step >= 1L)
@@ -642,7 +642,7 @@ plot_genes_heatmap <- function(data, metadata) {
       ))
 }
 
-setMethod("clear", signature = c(x = "job_limma"),
+setMethod_traceable("clear", signature = c(x = "job_limma"),
   function(x, save = TRUE, lite = TRUE, suffix = NULL, name = substitute(x, parent.frame(1))){
     eval(name)
     callNextMethod(
@@ -657,7 +657,7 @@ setMethod("clear", signature = c(x = "job_limma"),
   .get_group_from_contrast_character(names(x@tables$step2$tops)[which])
 }
 
-setMethod("focus", signature = c(x = "job_limma"),
+setMethod_traceable("focus", signature = c(x = "job_limma"),
   function(x, ref, ref.use = .guess_symbol(x), which = NULL,
     use = c("adj.P.Val", "P.Value"), 
     .name = NULL, sig = FALSE, test = "wilcox.test",
@@ -814,7 +814,7 @@ setMethod("focus", signature = c(x = "job_limma"),
   namel(p.roc, t.best_coords, auc, ci, roc, snap)
 }
 
-setMethod("map", signature = c(x = "job_limma"),
+setMethod_traceable("map", signature = c(x = "job_limma"),
   function(x, ref, ref.use = .guess_symbol(x),
     group = NULL, group.use = "group", pvalue = TRUE, 
     which = 1L,
@@ -1394,7 +1394,7 @@ plot_volcano <- function(top_table,
   p
 }
 
-setMethod("asjob_wgcna", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_wgcna", signature = c(x = "job_limma"),
   function(x, filter_genes = NULL, use = "hgnc_symbol"){
     step_message("Use `x@params$normed_data` converted as job_wgcna.")
     if (is.null(object <- x@params$normed_data))
@@ -1429,7 +1429,7 @@ setMethod("asjob_wgcna", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("meta", signature = c(x = "job_limma"),
+setMethod_traceable("meta", signature = c(x = "job_limma"),
   function(x, use = "group"){
     if (x@step < 1) {
       metadata <- object(x)$samples
@@ -1440,7 +1440,7 @@ setMethod("meta", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("tops", signature = c(x = "job_limma"),
+setMethod_traceable("tops", signature = c(x = "job_limma"),
   function(x, key = 1L, col = "hgnc_symbol"){
     features <- x@tables$step2$tops[[key]][[col]]
     features <- features[!is.na(features) & features != ""]
@@ -1448,7 +1448,7 @@ setMethod("tops", signature = c(x = "job_limma"),
     gs(features, "\\.[0-9]*$", "")
   })
 
-setMethod("cal_corp", signature = c(x = "job_limma", y = "job_limma"),
+setMethod_traceable("cal_corp", signature = c(x = "job_limma", y = "job_limma"),
   function(x, y, from, to, names = NULL, use.x = .guess_symbol(x), 
     use.y = .guess_symbol(y),
     theme = NULL, HLs = NULL, mode = c("heatmap", "linear"), 
@@ -1511,7 +1511,7 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "job_limma"),
     x
   })
 
-setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
+setMethod_traceable("cal_corp", signature = c(x = "job_limma", y = "NULL"),
   function(x, y, from, to, names = NULL, use = .guess_symbol(x),
     theme = NULL, HLs = NULL, mode = c("ggcor", "heatmap", "linear"), 
     cut.cor = .3, cut.p = .05, gname = TRUE, group = NULL, cut.r = cut.cor)
@@ -1677,7 +1677,7 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "NULL"),
   }
 }
 
-setMethod("vis", signature = c(x = "corp"),
+setMethod_traceable("vis", signature = c(x = "corp"),
   function(x, group = NULL, facet = ".id", lab.x = "Level", lab.y = "Level")
   {
     x <- as_tibble(x)
@@ -1724,7 +1724,7 @@ setMethod("vis", signature = c(x = "corp"),
     }
   })
 
-setMethod("getsub", signature = c(x = "job_limma"),
+setMethod_traceable("getsub", signature = c(x = "job_limma"),
   function(x, tnbc = FALSE){
     if (tnbc) {
       if (x$isTcga && identical(x$project, "TCGA-BRCA")) {
@@ -1946,7 +1946,7 @@ new_elist <- function(metadata, counts, genes, message = TRUE)
   elist(list(E = tibble::as_tibble(lst$counts), targets = lst$metadata, genes = lst$genes))
 }
 
-# setMethod("step3", signature = c(x = "job_limma"),
+# setMethod_traceable("step3", signature = c(x = "job_limma"),
 #   function(x, names = NULL, use = "all", use.gene = .guess_symbol(x),
 #     fun_filter = rm.no, trunc = NULL,
 #     signature = if (is.null(x$from_scfea)) "DEGs" else "DMFs",
@@ -2033,7 +2033,7 @@ new_elist <- function(metadata, counts, genes, message = TRUE)
 #     return(x)
 #   })
 
-# setMethod("snap", 
+# setMethod_traceable("snap", 
   # signature = c(x = "job_limma"),
   # function(x, ref, group = "group"){
   #   if (missing(ref) || ref == 1) {

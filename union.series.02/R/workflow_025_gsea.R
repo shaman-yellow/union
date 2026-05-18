@@ -21,7 +21,7 @@
 setGeneric("asjob_gsea",
   function(x, ...) standardGeneric("asjob_gsea"))
 
-setMethod("asjob_gsea", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_gsea", signature = c(x = "job_limma"),
   function(x, key = 1L, annotation = NULL,
     filter = NULL, from = .guess_symbol(x),
     data = NULL)
@@ -48,7 +48,7 @@ setMethod("asjob_gsea", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("asjob_gsea", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_gsea", signature = c(x = "job_seurat"),
   function(x, contrast.pattern = NULL, marker.list = x@params$contrasts)
   {
     if (!is.null(contrast.pattern)) {
@@ -118,12 +118,12 @@ job_gsea <- function(topTable, annotation, use)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_gsea"),
+setMethod_traceable("step0", signature = c(x = "job_gsea"),
   function(x){
     step_message("Prepare your data with function `job_gsea`.")
   })
 
-setMethod("step1", signature = c(x = "job_gsea"),
+setMethod_traceable("step1", signature = c(x = "job_gsea"),
   function(x, OrgDb = org.Hs.eg.db::org.Hs.eg.db, org = "hsa", show = 15,
     order = c("x", "p.adjust", "p.value"), keep_res_go = FALSE)
   {
@@ -216,7 +216,7 @@ setMethod("step1", signature = c(x = "job_gsea"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_gsea"),
+setMethod_traceable("step2", signature = c(x = "job_gsea"),
   function(x, key = res(x, "id", 1:3),
     highlight = key[1], use = "res.kegg", sig = TRUE, ...)
   {
@@ -254,7 +254,7 @@ setMethod("step2", signature = c(x = "job_gsea"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_gsea"),
+setMethod_traceable("step3", signature = c(x = "job_gsea"),
   function(x, db, cutoff = .05, pattern = NULL, pvalue = FALSE, 
     db_anno = NULL, db_filter = NULL, mode = c(
       "curated gene sets" = "C2",
@@ -341,7 +341,7 @@ setMethod("step3", signature = c(x = "job_gsea"),
   return(x)
 }
 
-# setMethod("filter", signature = c(x = "job_gsea"),
+# setMethod_traceable("filter", signature = c(x = "job_gsea"),
   # function(x, ref, use = c("entrezgene_id", "symbol")){
   #   use <- match.arg(use)
   #   isThat <- names(object(x)[[ use ]]) %in% ref
@@ -354,7 +354,7 @@ setMethod("step3", signature = c(x = "job_gsea"),
 
 setClassUnion("jobn_enrich", c("job_gsea", "job_enrich"))
 
-setMethod("filter", signature = c(x = "jobn_enrich"),
+setMethod_traceable("filter", signature = c(x = "jobn_enrich"),
   function(x, pattern, ..., use = c("kegg", "go", "gsea"), 
     which = 1, genes = NULL, return_type = c("job", "data.frame"), step = x@step)
   {
@@ -420,7 +420,7 @@ setMethod("filter", signature = c(x = "jobn_enrich"),
     }
   })
 
-setMethod("map", signature = c(x = "job_monocle", ref = "jobn_enrich"),
+setMethod_traceable("map", signature = c(x = "job_monocle", ref = "jobn_enrich"),
   function(x, ref, pathways,
     data = if (is(ref, "job_gsea")) ref@tables$step1$table_kegg else
       ref@tables$step1$res.kegg[[1]],
@@ -437,7 +437,7 @@ setMethod("map", signature = c(x = "job_monocle", ref = "jobn_enrich"),
     p
   })
 
-setMethod("res", signature = c(x = "job_gsea", ref = "character"),
+setMethod_traceable("res", signature = c(x = "job_gsea", ref = "character"),
   function(x, ref = c("id", "des", "p", "adj"),
     which = 1, from = c("kegg", "go"))
   {
@@ -539,7 +539,7 @@ color_set2 <- function() {
   unname(c(sample(ggsci:::ggsci_db$uchicago$dark, 1), sample(color_set()[1:5], 1)))
 }
 
-# setMethod("step3", signature = c(x = "job_gsea"),
+# setMethod_traceable("step3", signature = c(x = "job_gsea"),
 #   function(x, pathways, species = x$org,
 #     name = paste0("pathview", gs(Sys.time(), " |:", "_")),
 #     search = "pathview")

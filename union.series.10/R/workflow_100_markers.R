@@ -53,12 +53,12 @@ job_markers <- function(tissue = NULL, type = c("Normal cell", "Cancer cell"),
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_markers"),
+setMethod_traceable("step0", signature = c(x = "job_markers"),
   function(x){
     step_message("Prepare your data with function `job_markers`.")
   })
 
-setMethod("step1", signature = c(x = "job_markers"),
+setMethod_traceable("step1", signature = c(x = "job_markers"),
   function(x, cells = NULL, basic = c(
       "^T cell$", "^B cell$", "^Dendritic cell$", "^Monocyte$", "^Natural killer cell$"
     ), gather = TRUE, duplicated = FALSE, least = 2L)
@@ -107,7 +107,7 @@ setMethod("step1", signature = c(x = "job_markers"),
     return(x)
   })
 
-setMethod("ref", signature = c(x = "job_markers"),
+setMethod_traceable("ref", signature = c(x = "job_markers"),
   function(x, from = c("db", "data")){
     from <- match.arg(from)
     data <- x[[ from ]]
@@ -122,7 +122,7 @@ setMethod("ref", signature = c(x = "job_markers"),
     dplyr::distinct(data)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_markers"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_markers"),
   function(x, ref, show = NULL, extra.after = NULL, 
     max = 2, soft = TRUE, group.by = x$group.by, notShow = NULL,
     markers = feature(ref), ...)

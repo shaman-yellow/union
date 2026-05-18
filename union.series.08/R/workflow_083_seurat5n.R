@@ -50,7 +50,7 @@ job_seurat5n <- function(dirs, names = NULL, mode = c("sc", "st"),
 setGeneric("asjob_seurat5n",
   function(x, ...) standardGeneric("asjob_seurat5n"))
 
-setMethod("asjob_seurat5n", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_seurat5n", signature = c(x = "job_seurat"),
   function(x, split = "orig.ident", assay = "RNA")
   {
     object(x)[[assay]] <- split(object(x)[[assay]], f = object(x)@meta.data[[split]])
@@ -63,12 +63,12 @@ setMethod("asjob_seurat5n", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_seurat5n"),
+setMethod_traceable("step0", signature = c(x = "job_seurat5n"),
   function(x){
     step_message("Prepare your data with function `job_seurat5n`.")
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "df"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "df"),
   function(x, ref, by.x = "orig.ident", by.ref = "sample", 
     get = "group", col = get)
   {
@@ -78,7 +78,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "df"),
     return(x)
   })
 
-setMethod("step1", signature = c(x = "job_seurat5n"),
+setMethod_traceable("step1", signature = c(x = "job_seurat5n"),
   function(x, min.features, max.features, max.count, max.percent.mt = 5)
   {
     step_message("Quality control (QC).")
@@ -110,7 +110,7 @@ setMethod("step1", signature = c(x = "job_seurat5n"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_seurat5n"),
+setMethod_traceable("step2", signature = c(x = "job_seurat5n"),
   function(x, ndims = 20, sct = FALSE, jk = FALSE, workers = NULL){
     step_message("Run standard anlaysis workflow or `SCTransform`.")
     if (is.remote(x)) {
@@ -182,7 +182,7 @@ setMethod("step2", signature = c(x = "job_seurat5n"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_seurat5n"),
+setMethod_traceable("step3", signature = c(x = "job_seurat5n"),
   function(x, dims = 1:15, resolution = 1.2,
     use = c("HarmonyIntegration", "CCAIntegration", "RPCAIntegration"), ...)
   {
@@ -270,7 +270,7 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
     return(x)
   })
 
-setMethod("asjob_limma", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_limma", signature = c(x = "job_seurat"),
   function(x, features, cells, cell_groups, group.by = x$group.by,
     slot = "data", fun_norm = function(x) log2(x + 1), gname = TRUE)
   {

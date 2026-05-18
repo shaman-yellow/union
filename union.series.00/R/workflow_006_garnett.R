@@ -20,7 +20,7 @@
 setGeneric("asjob_garnett",
   function(x, ...) standardGeneric("asjob_garnett"))
 
-setMethod("asjob_garnett", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_garnett", signature = c(x = "job_seurat"),
   function(x){
     step_message("
       Transform as `cell_data_set` for train as classifier.
@@ -30,12 +30,12 @@ setMethod("asjob_garnett", signature = c(x = "job_seurat"),
     .job_garnett(object = object(x))
   })
 
-setMethod("step0", signature = c(x = "job_garnett"),
+setMethod_traceable("step0", signature = c(x = "job_garnett"),
   function(x){
     step_message("Prepare your data with function `job_garnett`.")
   })
 
-setMethod("step1", signature = c(x = "job_garnett"),
+setMethod_traceable("step1", signature = c(x = "job_garnett"),
   function(x, marker_file, db = org.Hs.eg.db::org.Hs.eg.db){
     step_message("
       Check the marker file.
@@ -53,7 +53,7 @@ setMethod("step1", signature = c(x = "job_garnett"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_garnett"),
+setMethod_traceable("step2", signature = c(x = "job_garnett"),
   function(x, seed = 1){
     step_message("Tran markers as  ")
     classifier <- e(garnett::train_cell_classifier(object(x),

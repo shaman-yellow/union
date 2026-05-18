@@ -72,7 +72,7 @@ new_qzv <- function(..., lst = NULL, path, x, pg = NULL) {
     })
 }
 
-setMethod("show", signature = c(object = "qzv"),
+setMethod_traceable("show", signature = c(object = "qzv"),
   function(object){
     cdRun(object@pg, " tools view ", as.character(object))
   })
@@ -87,14 +87,14 @@ job_qiime <- function(metadata, wd = "qiime_data", export = "qiime_export")
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_qiime"),
+setMethod_traceable("step0", signature = c(x = "job_qiime"),
   function(x){
     step_message("Prepare your data with function `job_qiime`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_qiime"),
+setMethod_traceable("step1", signature = c(x = "job_qiime"),
   function(x)
     # env_pattern = "qiime", env_path = "~/miniconda3/envs/", conda = "~/miniconda3/bin/conda"
   {
@@ -125,7 +125,7 @@ setMethod("step1", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_qiime"),
+setMethod_traceable("step2", signature = c(x = "job_qiime"),
   function(x, len_f, len_r, left_f = 0, left_r = 0, workers = 7){
     step_message("Time consumed running.")
     if (!is_qiime_file_exists("table.qza")) {
@@ -145,7 +145,7 @@ setMethod("step2", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_qiime"),
+setMethod_traceable("step3", signature = c(x = "job_qiime"),
   function(x){
     step_message("Some visualization and 'align-to-tree-mafft-fasttree'")
     E(x@params$cdRun(
@@ -179,7 +179,7 @@ setMethod("step3", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_qiime"),
+setMethod_traceable("step4", signature = c(x = "job_qiime"),
   function(x, min){
     step_message("Before diversity of alpha and beta.")
     x@params$min <- min
@@ -198,7 +198,7 @@ setMethod("step4", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_qiime"),
+setMethod_traceable("step5", signature = c(x = "job_qiime"),
   function(x, max, group = "group"){
     step_message("Alpha and Beta diversity.")
     x@params$max <- max
@@ -248,7 +248,7 @@ setMethod("step5", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_qiime"),
+setMethod_traceable("step6", signature = c(x = "job_qiime"),
   function(x, classifier = .prefix("weighted_silva_2023_07.qza", "db"))
   {
     step_message("Time consumed steps.")
@@ -287,7 +287,7 @@ setMethod("step6", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_qiime"),
+setMethod_traceable("step7", signature = c(x = "job_qiime"),
   function(x, levels = 2:6, table = "table.qza", force = FALSE)
   {
     step_message("Differential analysis.")
@@ -366,7 +366,7 @@ setMethod("step7", signature = c(x = "job_qiime"),
     return(x)
   })
 
-setMethod("res", signature = c(x = "job_qiime"),
+setMethod_traceable("res", signature = c(x = "job_qiime"),
   function(x, level = c("6", "5", "4", "3", "2"))
   {
     if (x@step < 7L) {
@@ -378,7 +378,7 @@ setMethod("res", signature = c(x = "job_qiime"),
     data$id
   })
 
-setMethod("pattern", signature = c(x = "job_qiime"),
+setMethod_traceable("pattern", signature = c(x = "job_qiime"),
   function(x, level = c("6", "5", "4", "3", "2"), not = c("GB", "^un$", "^bacterium$", "^bacteria$"))
   {
     if (x@step < 7L) {
@@ -408,7 +408,7 @@ plot_volcano.ancom <- function(data, res) {
   p
 }
 
-setMethod("write", signature = c(x = "qzv"),
+setMethod_traceable("write", signature = c(x = "qzv"),
   function(x, output = NULL, output_dir = "qiime_export", pg = get_fun("pg")("qiime", FALSE), overwrite = TRUE)
   {
     file <- as.character(x)
@@ -482,7 +482,7 @@ expr_sys.file.exists <- function(file) {
   paste0("if [ -e ", file, " ]; then echo TRUE; else echo FALSE; fi")
 }
 
-setMethod("set_remote", signature = c(x = "job_qiime"),
+setMethod_traceable("set_remote", signature = c(x = "job_qiime"),
   function(x, path, wd = path,
     pattern = if (is.null(x@params$pattern_fq)) "fastq\\.gz$" else x@params$pattern_fq)
   {

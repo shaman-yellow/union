@@ -13,7 +13,7 @@
     analysis = ""
     ))
 
-setMethod("step0", signature = c(x = "job_mlearn10"),
+setMethod_traceable("step0", signature = c(x = "job_mlearn10"),
   function(x){
     step_message("Prepare your data with function `job_mlearn10`.")
   })
@@ -21,13 +21,13 @@ setMethod("step0", signature = c(x = "job_mlearn10"),
 setGeneric("asjob_mlearn10",
   function(x, ...) standardGeneric("asjob_mlearn10"))
 
-setMethod("asjob_mlearn10", signature = c(x = "job_mlearn"),
+setMethod_traceable("asjob_mlearn10", signature = c(x = "job_mlearn"),
   function(x, ...)
   {
     .job_mlearn10(copy_job(x))
   })
 
-setMethod("step1", signature = c(x = "job_mlearn10"),
+setMethod_traceable("step1", signature = c(x = "job_mlearn10"),
   function(x, n = 10L, nthread = 1L, validate = NULL, 
     use_rfe = TRUE, nkeep = 10L, debug = FALSE, repeats = 10L,
     exclude = c("XGBoost"), sizes = NULL)
@@ -151,7 +151,7 @@ setMethod("step1", signature = c(x = "job_mlearn10"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mlearn10"),
+setMethod_traceable("step2", signature = c(x = "job_mlearn10"),
   function(x, which = 1L)
   {
     step_message("Select best model.")
@@ -173,7 +173,7 @@ setMethod("step2", signature = c(x = "job_mlearn10"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mlearn10"),
+setMethod_traceable("step3", signature = c(x = "job_mlearn10"),
   function(x, use = c("validate", "train"), model = x$comprehensive_summary$Model[1])
   {
     use <- match.arg(use)
@@ -624,7 +624,7 @@ map_factor <- function(x, template) {
   )
 }
 
-setMethod("clear", signature = c(x = "job_mlearn10"),
+setMethod_traceable("clear", signature = c(x = "job_mlearn10"),
   function(x, ..., name = substitute(x, parent.frame(1)))
   {
     eval(name)

@@ -21,7 +21,7 @@ job_diag <- function()
 setGeneric("asjob_diag",
    function(x, ...) standardGeneric("asjob_diag"))
 
-setMethod("asjob_diag", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_diag", signature = c(x = "job_limma"),
   function(x, use.filter = NULL, use = .guess_symbol(x), from_normed = TRUE,
     fun_scale = function(x) scale(x, TRUE, TRUE),
     dup_method = c("max", "min", "mean"), 
@@ -47,12 +47,12 @@ setMethod("asjob_diag", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_diag"),
+setMethod_traceable("step0", signature = c(x = "job_diag"),
   function(x){
     step_message("Prepare your data with function `job_diag`.")
   })
 
-setMethod("step1", signature = c(x = "job_diag"),
+setMethod_traceable("step1", signature = c(x = "job_diag"),
   function(x, pattern_control = x$pattern_control %||% "control|ctrl|normal|healthy",
     target = "group", levels = "guess",
     n.train = .8, seed = 555)
@@ -79,19 +79,19 @@ setMethod("step1", signature = c(x = "job_diag"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_diag"),
+setMethod_traceable("step2", signature = c(x = "job_diag"),
   function(x, use_data = c("all", "train"), top = 30, efs = FALSE){
     x <- callNextMethod()
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_diag"),
+setMethod_traceable("step3", signature = c(x = "job_diag"),
   function(x){
     step_message("Do nothing.")
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_diag"),
+setMethod_traceable("step4", signature = c(x = "job_diag"),
   function(x, use_data = x$use_data, use_valid = use_data,
     fun = c("cv.glmnet", "glmnet"), nfold = 10,
     alpha = 1, family = "binomial", type.measure = c("default"), ...)
@@ -191,7 +191,7 @@ setMethod("step4", signature = c(x = "job_diag"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_diag", ref = "job_diag"),
+setMethod_traceable("map", signature = c(x = "job_diag", ref = "job_diag"),
   function(x, ref, lambda = c("min", "1se"))
   {
     message("Validate the model using external dataset.")

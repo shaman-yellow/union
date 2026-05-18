@@ -44,12 +44,12 @@ job_ps <- function(dir = .prefix("llps", "db"), distinct = TRUE)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_ps"),
+setMethod_traceable("step0", signature = c(x = "job_ps"),
   function(x){
     step_message("Prepare your data with function `job_ps`.")
   })
 
-setMethod("step1", signature = c(x = "job_ps"),
+setMethod_traceable("step1", signature = c(x = "job_ps"),
   function(x, org = "Homo sapiens"){
     step_message("Quality control (QC).")
     org <- match.arg(org)
@@ -60,7 +60,7 @@ setMethod("step1", signature = c(x = "job_ps"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_ps"),
+setMethod_traceable("set_remote", signature = c(x = "job_ps"),
   function(x, wd)
   {
     x$wd <- wd

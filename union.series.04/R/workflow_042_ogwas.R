@@ -70,14 +70,14 @@ job_ogwas <- function(traits, api_token = NULL, dir = .prefix("ogwas", "db"),
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_ogwas"),
+setMethod_traceable("step0", signature = c(x = "job_ogwas"),
   function(x){
     step_message("Prepare your data with function `job_ogwas`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_ogwas"),
+setMethod_traceable("step1", signature = c(x = "job_ogwas"),
   function(x, ids, which = NULL, ref_genome = "GRCH38",
     vcf_dir = .prefix("ogwas_vcf", "db"),
     save_dir = .prefix("ogwas_data", "db"), try_catalog = TRUE)

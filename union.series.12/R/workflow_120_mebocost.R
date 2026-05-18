@@ -16,7 +16,7 @@
 setGeneric("asjob_mebocost",
   function(x, ...) standardGeneric("asjob_mebocost"))
 
-setMethod("asjob_mebocost", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_mebocost", signature = c(x = "job_seurat"),
   function(x, dir_cache = create_job_cache_dir(x, "mebocost"), 
     conda_env = pg("mebocostEnv"))
   {
@@ -57,12 +57,12 @@ setMethod("asjob_mebocost", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_mebocost"),
+setMethod_traceable("step0", signature = c(x = "job_mebocost"),
   function(x){
     step_message("Prepare your data with function `job_mebocost`.")
   })
 
-setMethod("activate", signature = c(x = "job_mebocost"),
+setMethod_traceable("activate", signature = c(x = "job_mebocost"),
   function(x){
     if (is.null(x$conda_env)) {
       stop('is.null(x$conda_env).')
@@ -73,7 +73,7 @@ setMethod("activate", signature = c(x = "job_mebocost"),
     return(x)
   })
 
-setMethod("step1", signature = c(x = "job_mebocost"),
+setMethod_traceable("step1", signature = c(x = "job_mebocost"),
   function(x, workers = 10, species = "human", path_mebocost = pg("path_mebocost"),
     try_compass = FALSE)
   {
@@ -133,7 +133,7 @@ setMethod("step1", signature = c(x = "job_mebocost"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mebocost"),
+setMethod_traceable("step2", signature = c(x = "job_mebocost"),
   function(x, species = "homo_sapiens", workers = 1L)
   {
     step_message("Run compass")
@@ -148,7 +148,7 @@ setMethod("step2", signature = c(x = "job_mebocost"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mebocost"),
+setMethod_traceable("step3", signature = c(x = "job_mebocost"),
   function(x, min_cell_number = 10L, cut.p = .05, use.p = "permutation_test_fdr", rerun = FALSE)
   {
     step_message("Infer communication.")
@@ -206,7 +206,7 @@ setMethod("step3", signature = c(x = "job_mebocost"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_mebocost"),
+setMethod_traceable("step4", signature = c(x = "job_mebocost"),
   function(x, flux_pass = TRUE, sig_mccc_only = TRUE, 
     cut.p = x$cut.p, cut.fc = .5, rerun = FALSE)
   {
@@ -270,7 +270,7 @@ setMethod("step4", signature = c(x = "job_mebocost"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_mebocost"),
+setMethod_traceable("step5", signature = c(x = "job_mebocost"),
   function(x, use.score = c("scale", "raw"), key = "Metabolite_Name",
     group_by = c("Metabolite_Name", "Receiver"),
     axis = c("Sender", "Metabolite_Name", "Sensor", "Receiver"))
@@ -372,7 +372,7 @@ glue_ex <- function(string, envir = parent.frame(1)) {
   dplyr::arrange(data, dplyr::desc(score))
 }
 
-setMethod("vis", signature = c(x = "job_mebocost"),
+setMethod_traceable("vis", signature = c(x = "job_mebocost"),
   function(x, mode = c("eventnum_bar", "diff_flow", "commu_dotmap"), ...){
     mode <- match.arg(mode)
     if (mode == "eventnum_bar") {
@@ -486,7 +486,7 @@ setMethod("vis", signature = c(x = "job_mebocost"),
 
 .mebocost_network_note <- "基于 MEBOCOST 的细胞间差异代谢通讯网络可视化，按照“发送细胞（Sender）–代谢物（Metabolite）–感受器（Sensor）–接收细胞（Receiver）”四层结构展示完整的通讯路径，其中左侧为分泌代谢物的细胞类型，中间依次为参与通讯的小分子及其对应的受体或转运蛋白，右侧为表达感受器并接收信号的细胞类型；连线表示一条代谢通讯关系，颜色根据组间差异分析的 log2FC 显示变化方向与幅度（红色表示上调，蓝色表示下调，颜色越深代表变化越显著），节点大小表示该节点参与的连接数量（即连接度），用于反映其在网络中的参与程度；该网络仅包含经过差异分析筛选后的显著代谢通讯关系，用于整体呈现不同细胞类型之间通过代谢物介导的通讯模式。"
 
-setMethod("set_remote", signature = c(x = "job_mebocost"),
+setMethod_traceable("set_remote", signature = c(x = "job_mebocost"),
   function(x, wd)
   {
     x$wd <- wd

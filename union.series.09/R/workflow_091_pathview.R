@@ -16,7 +16,7 @@
 setGeneric("asjob_pathview",
    function(x, ...) standardGeneric("asjob_pathview"))
 
-setMethod("asjob_pathview", signature = c(x = "job_gsea"),
+setMethod_traceable("asjob_pathview", signature = c(x = "job_gsea"),
   function(x, gene.level = x@object$symbol, 
     gene.level.name = "symbol", ...)
   {
@@ -30,7 +30,7 @@ setMethod("asjob_pathview", signature = c(x = "job_gsea"),
     return(x)
   })
 
-setMethod("asjob_pathview", signature = c(x = "job_enrich"),
+setMethod_traceable("asjob_pathview", signature = c(x = "job_enrich"),
   function(x, which = 1L, gene.level = NULL, gene.level.name = "hgnc_symbol", ...)
   {
     methodAdd_onExit("x", "以 R 包 `pathview` {cite_show('PathviewAnRLuoW2013')} 将 `clusterProfiler` 富集的 KEGG 通路可视化。")
@@ -43,7 +43,7 @@ setMethod("asjob_pathview", signature = c(x = "job_enrich"),
     return(x)
   })
 
-setMethod("asjob_pathview", signature = c(x = "job_pathview"),
+setMethod_traceable("asjob_pathview", signature = c(x = "job_pathview"),
   function(x, gene.level, gene.level.name = "hgnc_symbol", filter = TRUE, from_which = 1L, ...){
     message("Show pathway again, with extra genes.")
     if (is(gene.level, "job_limma")) {
@@ -98,12 +98,12 @@ job_pathview <- function(data, annotation = NULL,
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_pathview"),
+setMethod_traceable("step0", signature = c(x = "job_pathview"),
   function(x){
     step_message("Prepare your data with function `job_pathview`.")
   })
 
-setMethod("step1", signature = c(x = "job_pathview"),
+setMethod_traceable("step1", signature = c(x = "job_pathview"),
   function(x, pathways, external = FALSE)
   {
     step_message("Use pathview to visualize reults pathway.")
@@ -187,7 +187,7 @@ setMethod("step1", signature = c(x = "job_pathview"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_pathview"),
+setMethod_traceable("step2", signature = c(x = "job_pathview"),
   function(x, genes, f.size = 1.5, gp = gpar(col = "steelblue2", lty = "solid", lwd = 1.5))
   {
     genes <- resolve_feature(genes)
@@ -238,7 +238,7 @@ setMethod("step2", signature = c(x = "job_pathview"),
     return(x)
   })
 
-setMethod("feature", signature = c(x = "job_pathview"),
+setMethod_traceable("feature", signature = c(x = "job_pathview"),
   function(x, ref = "all"){
     if (identical(ref, "all")) {
       feas <- x$.feature

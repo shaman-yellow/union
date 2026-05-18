@@ -6,7 +6,7 @@ setGeneric("description",
   function(x, ref, ...) standardGeneric("description")
 )
 
-setMethod("description", signature = c(x = "genericFunction", ref = "character"),
+setMethod_traceable("description", signature = c(x = "genericFunction", ref = "character"),
   function(x, ref, ...)
   {
     method <- methods::selectMethod(x, ref, ...)

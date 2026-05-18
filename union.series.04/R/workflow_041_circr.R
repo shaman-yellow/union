@@ -21,14 +21,14 @@
 #   .job_circr()
 # }
 
-# setMethod("step0", signature = c(x = "job_circr"),
+# setMethod_traceable("step0", signature = c(x = "job_circr"),
 #   function(x){
 #     step_message("Prepare your data with function `job_circr`.
 #       "
 #     )
 #   })
 
-# setMethod("step1", signature = c(x = "job_circr"),
+# setMethod_traceable("step1", signature = c(x = "job_circr"),
 #   function(x){
 #     step_message("Quality control (QC).")
 #     return(x)

@@ -27,12 +27,12 @@ job_uniprotkb <- function(query, db_file = "uniprotkb/query.rds", organism_id = 
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_uniprotkb"),
+setMethod_traceable("step0", signature = c(x = "job_uniprotkb"),
   function(x){
     step_message("Prepare your data with function `job_uniprotkb`.")
   })
 
-setMethod("step1", signature = c(x = "job_uniprotkb"),
+setMethod_traceable("step1", signature = c(x = "job_uniprotkb"),
   function(x, cl = 1L){
     step_message("Query via UniProtKB API.")
     db <- new_db(x$db_file, ".id")

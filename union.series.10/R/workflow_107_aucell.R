@@ -16,7 +16,7 @@
 setGeneric("asjob_aucell",
    function(x, ...) standardGeneric("asjob_aucell"))
 
-setMethod("asjob_aucell", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_aucell", signature = c(x = "job_seurat"),
   function(x, sets, name = names(sets)[1], join = TRUE,
     sets_feature = NULL, assay = SeuratObject::DefaultAssay(object(x)), ...)
   {
@@ -65,12 +65,12 @@ job_aucell <- function(mtx, sets)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_aucell"),
+setMethod_traceable("step0", signature = c(x = "job_aucell"),
   function(x){
     step_message("Prepare your data with function `job_aucell`.")
   })
 
-setMethod("step1", signature = c(x = "job_aucell"),
+setMethod_traceable("step1", signature = c(x = "job_aucell"),
   function(x, workers = NULL, group.by = x$group.by,
     rerun = FALSE, fun_name = function(x) s(x, "^HALLMARK_", ""))
   {
@@ -155,7 +155,7 @@ setMethod("step1", signature = c(x = "job_aucell"),
     return(x)
   })
 
-setMethod("quantile", signature = c(x = "job_aucell"),
+setMethod_traceable("quantile", signature = c(x = "job_aucell"),
   function(x, cols = NULL, cut = .75,
     gather = c("merge", "intersect", "respective"), 
     name = x$name, group.by = x$group.by, ...)
@@ -192,7 +192,7 @@ setMethod("quantile", signature = c(x = "job_aucell"),
     }
   })
 
-setMethod("step2", signature = c(x = "job_aucell"),
+setMethod_traceable("step2", signature = c(x = "job_aucell"),
   function(x, group.by = "seurat_clusters")
   {
     step_message("Annotate for clusters.")
@@ -260,7 +260,7 @@ setMethod("step2", signature = c(x = "job_aucell"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_aucell"),
+setMethod_traceable("step3", signature = c(x = "job_aucell"),
   function(x, use.trait, data_trait = x$metadata, rerun = FALSE)
   {
     step_message("Correlation with trait data.")
@@ -300,7 +300,7 @@ setMethod("step3", signature = c(x = "job_aucell"),
   t(x$res_aucell)
 }
 
-setMethod("map", signature = c(x = "job_aucell", ref = "job_seurat"),
+setMethod_traceable("map", signature = c(x = "job_aucell", ref = "job_seurat"),
   function(x, ref, use.trait = NULL, use.function = NULL,
     group.by = ref$group.by, pal = NULL, .name = "seurat")
   {
@@ -410,7 +410,7 @@ setMethod("map", signature = c(x = "job_aucell", ref = "job_seurat"),
     return(x)
   })
 
-setMethod("clear", signature = c(x = "job_aucell"),
+setMethod_traceable("clear", signature = c(x = "job_aucell"),
   function(x, save = TRUE, lite = TRUE, suffix = NULL, name = substitute(x, parent.frame(1)))
   {
     eval(name)
@@ -429,7 +429,7 @@ setMethod("clear", signature = c(x = "job_aucell"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_aucell"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_aucell"),
   function(x, ref, type = "AUC", scale = FALSE){
     if (ref@step < 1L) {
       stop('ref@step < 1L.')
@@ -450,7 +450,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "job_aucell"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_aucell"),
+setMethod_traceable("set_remote", signature = c(x = "job_aucell"),
   function(x, wd = glue::glue("~/aucell_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

@@ -68,7 +68,7 @@ setGeneric("draw",
     standardGeneric("draw"))
 
 #' @exportMethod draw
-setMethod("draw", signature = c(x = "graph", content = "grob.obj"),
+setMethod_traceable("draw", signature = c(x = "graph", content = "grob.obj"),
   function(x, content){
     grid.draw(x@grob)
     pushViewport(x@cvp)
@@ -77,13 +77,13 @@ setMethod("draw", signature = c(x = "graph", content = "grob.obj"),
   })
 
 #' @exportMethod draw
-setMethod("draw", signature = c(x = "graph"),
+setMethod_traceable("draw", signature = c(x = "graph"),
   function(x){
     grid.draw(x@grob)
   })
 
 #' @exportMethod draw
-setMethod("draw", signature = c(x = "grob.obj"),
+setMethod_traceable("draw", signature = c(x = "grob.obj"),
   function(x){
     grid.draw(x)
   })
@@ -96,7 +96,7 @@ setGeneric("into",
   function(x, content) standardGeneric("into"))
 
 #' @exportMethod into
-setMethod("into", signature = c(x = "graph", content = "grob.obj"),
+setMethod_traceable("into", signature = c(x = "graph", content = "grob.obj"),
   function(x, content){
     if (is.null(content$vp)) {
       content$vp <- x@cvp
@@ -114,7 +114,7 @@ setGeneric("setvp",
   function(x, ...) standardGeneric("setvp"))
 
 #' @exportMethod setvp
-setMethod("setvp", signature = c(x = "ANY"),
+setMethod_traceable("setvp", signature = c(x = "ANY"),
   function(x, ...){
     viewport(grobX(x, 90), grobY(x, 0),
       grobWidth(x), grobHeight(x), ...)
@@ -123,7 +123,7 @@ setMethod("setvp", signature = c(x = "ANY"),
 #' @exportMethod weight
 setGeneric("weight", 
   function(x, sub) standardGeneric("weight"))
-setMethod("weight", signature = c(x = "ANY", sub = "character"),
+setMethod_traceable("weight", signature = c(x = "ANY", sub = "character"),
   function(x, sub){
     if (isS4(x)) {
       weight <-
@@ -142,7 +142,7 @@ setGeneric("as_grob",
   function(x, ...) standardGeneric("as_grob"))
 
 #' @exportMethod as_grob
-setMethod("as_grob", signature = c(x = "gg.obj"),
+setMethod_traceable("as_grob", signature = c(x = "gg.obj"),
   function(x){
     ggplot2::ggplot_gtable(ggplot2::ggplot_build(x))
   })
@@ -152,7 +152,7 @@ setMethod("as_grob", signature = c(x = "gg.obj"),
 }
 
 #' @exportMethod as_grob
-setMethod("as_grob", signature = c(x = "patchwork"),
+setMethod_traceable("as_grob", signature = c(x = "patchwork"),
   function(x){
     patchwork::patchworkGrob(x)
   })
@@ -225,7 +225,7 @@ setGeneric("frame_place",
     standardGeneric("frame_place"))
 
 #' @exportMethod frame_place
-setMethod("frame_place", signature = setMissing("frame_place",
+setMethod_traceable("frame_place", signature = setMissing("frame_place",
     weight = "vector",
     data = "list",
     type = "character"),
@@ -254,7 +254,7 @@ setMethod("frame_place", signature = setMissing("frame_place",
     frame
   })
 
-setMethod("frame_place", signature = setMissing("frame_place",
+setMethod_traceable("frame_place", signature = setMissing("frame_place",
     weight = "vector",
     data = "list",
     type = "character",
@@ -450,7 +450,7 @@ setGeneric("garrow",
     standardGeneric("garrow"))
 
 #' @exportMethod garrow
-setMethod("garrow", signature = setMissing("garrow"),
+setMethod_traceable("garrow", signature = setMissing("garrow"),
   function(){
     args_line <- list(square = FALSE, ncp = 10, curvature = .3,
       gp = gpar(fill = "black"))
@@ -464,7 +464,7 @@ setMethod("garrow", signature = setMissing("garrow"),
   })
 
 #' @exportMethod garrow
-setMethod("garrow", signature = c(p1 = "maybe_p1p2", p2 = "maybe_p1p2"),
+setMethod_traceable("garrow", signature = c(p1 = "maybe_p1p2", p2 = "maybe_p1p2"),
   function(p1, p2, args_line, args_arrow,
     fun_line, fun_arrow, city){
     args <- as.list(environment())
@@ -476,7 +476,7 @@ setMethod("garrow", signature = c(p1 = "maybe_p1p2", p2 = "maybe_p1p2"),
   })
 
 #' @exportMethod garrow
-setMethod("garrow", signature = c(p1 = "null", p2 = "null",
+setMethod_traceable("garrow", signature = c(p1 = "null", p2 = "null",
     args_line = "list",
     args_arrow = "list",
     fun_line = "maybe_function",
@@ -491,7 +491,7 @@ setMethod("garrow", signature = c(p1 = "null", p2 = "null",
   })
 
 #' @exportMethod garrow
-setMethod("garrow", signature = c(p1 = "list", p2 = "list",
+setMethod_traceable("garrow", signature = c(p1 = "list", p2 = "list",
     args_line = "list",
     args_arrow = "list",
     fun_line = "maybe_function",
@@ -1260,7 +1260,7 @@ nebulae_as_grob <- function(x) {
   vis
 }
 
-setMethod("as_grob", signature = c(x = "expression"),
+setMethod_traceable("as_grob", signature = c(x = "expression"),
   function(x, envir = parent.frame(2)){
     ggplotify::base2grob(x, envir)
   })

@@ -16,7 +16,7 @@
 setGeneric("asjob_mime",
   function(x, ...) standardGeneric("asjob_mime"))
 
-setMethod("asjob_mime", signature = c(x = "job_lasso"),
+setMethod_traceable("asjob_mime", signature = c(x = "job_lasso"),
   function(x){
     train_data <- as_tibble(x$train)
     train_data <- dplyr::rename(train_data, ID = rownames)
@@ -36,12 +36,12 @@ setMethod("asjob_mime", signature = c(x = "job_lasso"),
     .job_mime(object = object)
   })
 
-setMethod("step0", signature = c(x = "job_mime"),
+setMethod_traceable("step0", signature = c(x = "job_mime"),
   function(x){
     step_message("Prepare your data with function `job_mime`.")
   })
 
-setMethod("step1", signature = c(x = "job_mime"),
+setMethod_traceable("step1", signature = c(x = "job_mime"),
   function(x, unicox = TRUE, mode = c("all", "single", "double"), seed = 555, ...){
     step_message("Predict results.")
     if (is.null(x$res)) {
@@ -67,7 +67,7 @@ setMethod("step1", signature = c(x = "job_mime"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_mime"),
+setMethod_traceable("set_remote", signature = c(x = "job_mime"),
   function(x, wd)
   {
     x$wd <- wd

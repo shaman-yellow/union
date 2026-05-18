@@ -16,7 +16,7 @@
 setGeneric("asjob_diagn",
    function(x, ...) standardGeneric("asjob_diagn"))
 
-setMethod("asjob_diagn", signature = c(x = "job_vennDEGs"),
+setMethod_traceable("asjob_diagn", signature = c(x = "job_vennDEGs"),
   function(x, genes = feature(x), names = x$degs_versus@object_names,
     pattern_control = "guess", env = .GlobalEnv, hasAll = TRUE)
   {
@@ -64,12 +64,12 @@ job_diagn <- function(x, genes = NULL, hasAll = TRUE, ...)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_diagn"),
+setMethod_traceable("step0", signature = c(x = "job_diagn"),
   function(x){
     step_message("Prepare your data with function `job_diagn`.")
   })
 
-setMethod("step1", signature = c(x = "job_diagn"),
+setMethod_traceable("step1", signature = c(x = "job_diagn"),
   function(x, pattern_control = x$pattern_control %||% "control|ctrl|normal",
     target = "group", levels = "guess", ...)
   {
@@ -104,7 +104,7 @@ setMethod("step1", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_diagn"),
+setMethod_traceable("step2", signature = c(x = "job_diagn"),
   function(x, use_data = c("all", "train"), top = 30, 
     efs = FALSE, ...)
   {
@@ -116,7 +116,7 @@ setMethod("step2", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_diagn"),
+setMethod_traceable("step3", signature = c(x = "job_diagn"),
   function(x, ...){
     step_message("Do nothing.")
     object(x) <- lapply(object(x), 
@@ -126,7 +126,7 @@ setMethod("step3", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_diagn"),
+setMethod_traceable("step4", signature = c(x = "job_diagn"),
   function(x, fun = c("cv.glmnet", "glmnet"), nfold = 10,
     alpha = 1, family = "binomial", type.measure = c("default"), ...)
   {
@@ -141,7 +141,7 @@ setMethod("step4", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_diagn"),
+setMethod_traceable("step5", signature = c(x = "job_diagn"),
   function(x){
     step_message("Integration")
     t.res <- lapply(object(x), 
@@ -164,7 +164,7 @@ setMethod("step5", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_diagn"),
+setMethod_traceable("step6", signature = c(x = "job_diagn"),
   function(x, mode = c("maxSamples", "custom"), project = NULL, self = TRUE){
     step_message("")
     mode <- match.arg(mode)
@@ -207,7 +207,7 @@ setMethod("step6", signature = c(x = "job_diagn"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_diagn", ref = "job_diag"),
+setMethod_traceable("map", signature = c(x = "job_diagn", ref = "job_diag"),
   function(x, ref, ...){
     object(x) <- lapply(object(x), 
       function(x) {
@@ -243,7 +243,7 @@ setMethod("map", signature = c(x = "job_diagn", ref = "job_diag"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_diag", ref = "job_diagn"),
+setMethod_traceable("map", signature = c(x = "job_diag", ref = "job_diagn"),
   function(x, ref, lambda = c("min", "1se"))
   {
     if (is.null(ref$projModel)) {

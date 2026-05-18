@@ -29,12 +29,12 @@ job_sirius <- function(mgf, ion = c("mix", "pos", "neg"), pg = "sirius")
   x
 }
 
-setMethod("step0", signature = c(x = "job_sirius"),
+setMethod_traceable("step0", signature = c(x = "job_sirius"),
   function(x){
     step_message("Prepare your data with function `job_sirius`.")
   })
 
-setMethod("step1", signature = c(x = "job_sirius"),
+setMethod_traceable("step1", signature = c(x = "job_sirius"),
   function(x, tryLog = TRUE, account = getOption("sirius_account", NULL),
     password = getOption("sirius_password", NULL))
   {
@@ -45,7 +45,7 @@ setMethod("step1", signature = c(x = "job_sirius"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_sirius"),
+setMethod_traceable("step2", signature = c(x = "job_sirius"),
   function(x, savepath, dir = paste0(x$ion, "_sirius"), workers = 5, maxmz = 900)
   {
     step_message("Run sirius 5 and output.")
@@ -75,7 +75,7 @@ setMethod("step2", signature = c(x = "job_sirius"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_sirius"),
+setMethod_traceable("step3", signature = c(x = "job_sirius"),
   function(x, local)
   {
     step_message("If is runing remote, copy the output to local.")
@@ -87,7 +87,7 @@ setMethod("step3", signature = c(x = "job_sirius"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_sirius"),
+setMethod_traceable("set_remote", signature = c(x = "job_sirius"),
   function(x, wd)
   {
     x$wd <- wd
@@ -110,7 +110,7 @@ setMethod("set_remote", signature = c(x = "job_sirius"),
 setGeneric("asjob_sirius",
   function(x, ...) standardGeneric("asjob_sirius"))
 
-setMethod("asjob_sirius", signature = c(x = "job_xcms"),
+setMethod_traceable("asjob_sirius", signature = c(x = "job_xcms"),
   function(x, pg = "sirius")
   {
     params <- x@params
@@ -118,7 +118,7 @@ setMethod("asjob_sirius", signature = c(x = "job_xcms"),
     return(x)
   })
 
-setMethod("login", signature = c(x = "job_sirius"),
+setMethod_traceable("login", signature = c(x = "job_sirius"),
   function(x, account = getOption("sirius_account", NULL),
     password = getOption("sirius_password", NULL))
   {
@@ -130,7 +130,7 @@ setMethod("login", signature = c(x = "job_sirius"),
     return(x)
   })
 
-setMethod("ping", signature = c(x = "job_sirius"),
+setMethod_traceable("ping", signature = c(x = "job_sirius"),
   function(x, logout = FALSE){
     if (logout) {
       rem_run(pg(x), " login --logout")

@@ -40,12 +40,12 @@ job_genecard <- function(disease)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_genecard"),
+setMethod_traceable("step0", signature = c(x = "job_genecard"),
   function(x){
     step_message("Prepare your data with function `job_genecard`.")
   })
 
-setMethod("step1", signature = c(x = "job_genecard"),
+setMethod_traceable("step1", signature = c(x = "job_genecard"),
   function(x, score = NULL, restrict = TRUE)
   {
     step_message("Get from GeneCards website.")
@@ -125,14 +125,14 @@ get_from_genecards <- function(query, score = 5, keep_drive = FALSE, restrict = 
   return(table)
 }
 
-setMethod("map", signature = c(x = "job_genecard", ref = "job_genecard"),
+setMethod_traceable("map", signature = c(x = "job_genecard", ref = "job_genecard"),
   function(x, ref, names = c(x@object, ref@object)){
     lst <- lapply(list(x, ref), function(x) x@tables$step1$t.genecards$Symbol)
     names(lst) <- names
     new_venn(lst = lst)
   })
 
-setMethod("cal_corp", signature = c(x = "job_limma", y = "job_genecardn"),
+setMethod_traceable("cal_corp", signature = c(x = "job_limma", y = "job_genecardn"),
   function(x, y, from, names = NULL, use = if (x$isTcga) "gene_name" else "hgnc_symbol",
     HLs = NULL, ..., top = NULL, tidyheatmap = TRUE, linear = FALSE)
   {
@@ -181,7 +181,7 @@ setMethod("cal_corp", signature = c(x = "job_limma", y = "job_genecardn"),
     lst.cor
   })
 
-setMethod("res", signature = c(x = "job_genecard"),
+setMethod_traceable("res", signature = c(x = "job_genecard"),
   function(x){
     x@tables$step1$t.genecards
   })

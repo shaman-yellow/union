@@ -24,12 +24,12 @@ job_tcmsp2 <- function(herbs)
   .job_tcmsp2(params = list(herbs = rm.no(herbs)))
 }
 
-setMethod("step0", signature = c(x = "job_tcmsp2"),
+setMethod_traceable("step0", signature = c(x = "job_tcmsp2"),
   function(x){
     step_message("Prepare your data with function `job_tcmsp2`.")
   })
 
-setMethod("step1", signature = c(x = "job_tcmsp2"),
+setMethod_traceable("step1", signature = c(x = "job_tcmsp2"),
   function(x, forceGetHerbInfo = FALSE, dir = .prefix("tcmsp2", "db"), port = 8888, ...){
     step_message("Check local database.")
     dir.create(dir, FALSE)
@@ -59,7 +59,7 @@ setMethod("step1", signature = c(x = "job_tcmsp2"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_tcmsp2"),
+setMethod_traceable("step2", signature = c(x = "job_tcmsp2"),
   function(x, forceGetHerbInfo = FALSE)
   {
     step_message("Download data.")
@@ -283,7 +283,7 @@ setMethod("step2", signature = c(x = "job_tcmsp2"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_tcmsp2"),
+setMethod_traceable("step3", signature = c(x = "job_tcmsp2"),
   function(x, filter = TRUE, cutoff.ob = 30, cutoff.dl = 0.18, ...)
   {
     step_message("Call next method.")

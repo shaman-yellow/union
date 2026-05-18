@@ -50,14 +50,14 @@ job_edqtl <- function(mode = c("edqtl", "eqtl"))
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_edqtl"),
+setMethod_traceable("step0", signature = c(x = "job_edqtl"),
   function(x){
     step_message("Prepare your data with function `job_edqtl`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_edqtl"),
+setMethod_traceable("step1", signature = c(x = "job_edqtl"),
   function(x, tissue){
     step_message("Read the tissue QRL files.")
     db <- sapply(x$patterns,
@@ -76,7 +76,7 @@ setMethod("step1", signature = c(x = "job_edqtl"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_edqtl"),
+setMethod_traceable("step2", signature = c(x = "job_edqtl"),
   function(x, job_biomart = NULL, use = "signif_variant_gene_pairs"){
     step_message("Get hgnc_symbol for `gene_id`.")
     if (is.null(job_biomart)) {
@@ -93,7 +93,7 @@ setMethod("step2", signature = c(x = "job_edqtl"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_edqtl"),
+setMethod_traceable("step3", signature = c(x = "job_edqtl"),
   function(x, filter, label = "DEGs", use.filter = "hgnc_symbol", data = x@params$use.eq){
     step_message("Filter the edqtl data.")
     lst <- c(nl(label, list(filter)), list(DB_edQTL = data[[ use.filter ]]))
@@ -106,7 +106,7 @@ setMethod("step3", signature = c(x = "job_edqtl"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_edqtl", ref = "job_publish"),
+setMethod_traceable("map", signature = c(x = "job_edqtl", ref = "job_publish"),
   function(x, ref, label = "Filtered_edQTL", data = x@tables$step3$filtered.eq){
     if (ref@cite == "[@MendelianRandoLiuX2022]") {
       data <- dplyr::select(data, variant_id, hgnc_symbol)
@@ -136,7 +136,7 @@ setMethod("map", signature = c(x = "job_edqtl", ref = "job_publish"),
   }
 }
 
-setMethod("anno", signature = c(x = "job_edqtl"),
+setMethod_traceable("anno", signature = c(x = "job_edqtl"),
   function(x, file = x$anno_file){
     system(paste0("vim ", file))
   })

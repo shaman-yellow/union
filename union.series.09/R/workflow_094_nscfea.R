@@ -16,7 +16,7 @@
 setGeneric("asjob_nscfea",
    function(x, ...) standardGeneric("asjob_nscfea"))
 
-setMethod("asjob_nscfea", signature = c(x = "job_seurat5n"),
+setMethod_traceable("asjob_nscfea", signature = c(x = "job_seurat5n"),
   function(x, org = c("mouse", "human"), sample = "orig.ident", 
     dir = "nscfea", testWhich = NULL, ...)
   {
@@ -47,12 +47,12 @@ setMethod("asjob_nscfea", signature = c(x = "job_seurat5n"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_nscfea"),
+setMethod_traceable("step0", signature = c(x = "job_nscfea"),
   function(x){
     step_message("Prepare your data with function `job_nscfea`.")
   })
 
-setMethod("step1", signature = c(x = "job_nscfea"),
+setMethod_traceable("step1", signature = c(x = "job_nscfea"),
   function(x){
     step_message("Run remote in batch.")
     if (!is.remote(x)) {
@@ -65,7 +65,7 @@ setMethod("step1", signature = c(x = "job_nscfea"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_nscfea"),
+setMethod_traceable("step2", signature = c(x = "job_nscfea"),
   function(x){
     step_message("Collate results")
     object(x) <- lapply(object(x), 
@@ -75,7 +75,7 @@ setMethod("step2", signature = c(x = "job_nscfea"),
     return(x)
   })
 
-setMethod("set_remote", signature = c(x = "job_nscfea"),
+setMethod_traceable("set_remote", signature = c(x = "job_nscfea"),
   function(x, wd = "nscfea")
   {
     x$wd <- "."

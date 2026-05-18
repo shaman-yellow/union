@@ -19,7 +19,7 @@
     analysis = "GSE 数据搜索"
     ))
 
-# setMethod("snap", signature = c(x = "job_gds"),
+# setMethod_traceable("snap", signature = c(x = "job_gds"),
   # function(x, patterns)
   # {
   #   if (is.null(names(patterns))) {
@@ -39,7 +39,7 @@
   #   paste0(paste0("- ", texts), collapse = "\n")
   # })
 
-setMethod("focus", signature = c(x = "job_gds"),
+setMethod_traceable("focus", signature = c(x = "job_gds"),
   function(x, patterns)
   {
     if (is.null(names(patterns))) {
@@ -93,7 +93,7 @@ job_gds <- function(keys,
   x
 }
 
-setMethod("step1", signature = c(x = "job_gds"),
+setMethod_traceable("step1", signature = c(x = "job_gds"),
   function(x, ..., single_cell = FALSE, clinical = TRUE, 
     rna_or_array = TRUE, mRNA = TRUE,
     excludes = paste0(
@@ -228,7 +228,7 @@ setMethod("step1", signature = c(x = "job_gds"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_gds"),
+setMethod_traceable("step2", signature = c(x = "job_gds"),
   function(x, which = "all", force = FALSE, ...)
   {
     step_message("Try get metadata of GSE dataset.")
@@ -253,7 +253,7 @@ setMethod("step2", signature = c(x = "job_gds"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_gds"),
+setMethod_traceable("step3", signature = c(x = "job_gds"),
   function(x, ref, mode = c("survival", "control"), from_backup = TRUE, not = FALSE)
   {
     step_message("Search in metadata.")
@@ -277,7 +277,7 @@ setMethod("step3", signature = c(x = "job_gds"),
     return(x)
   })
 
-setMethod("expect", signature = c(x = "job_gds", ref = "ANY"),
+setMethod_traceable("expect", signature = c(x = "job_gds", ref = "ANY"),
   function(x, ref, force = FALSE, ids = names(x$res$metas),
     sleep = NULL, return_type = c("self", "data.frame"), ...)
   {
@@ -318,7 +318,7 @@ setMethod("expect", signature = c(x = "job_gds", ref = "ANY"),
     }
   })
 
-setMethod("anno", signature = c(x = "job_gds"),
+setMethod_traceable("anno", signature = c(x = "job_gds"),
   function(x, col = "group", group_limit = 8) {
     if (x@step < 2L) {
       stop('x@step < 2L, should have metadata of all dataset.')
@@ -400,7 +400,7 @@ edirect_db <- function(db, query, elements,
   object
 }
 
-setMethod("active", signature = c(x = "job_gds"),
+setMethod_traceable("active", signature = c(x = "job_gds"),
   function(x, ids = NULL, which = NULL, n = 10)
   {
     if (is.null(ids)) {
@@ -414,7 +414,7 @@ setMethod("active", signature = c(x = "job_gds"),
     lapply(urls, browseURL)
   })
 
-setMethod("hunt", signature = c(x = "job_gds", ref = "character"),
+setMethod_traceable("hunt", signature = c(x = "job_gds", ref = "character"),
   function(x, ref, get = c("meta", "gse", "summary", "which"), not = FALSE){
     if (is.null(x$res$metas)) {
       stop('is.null(x$res$metas), has not run "step2" ?')
@@ -448,7 +448,7 @@ setMethod("hunt", signature = c(x = "job_gds", ref = "character"),
     }
   })
 
-setMethod("vis", signature = c(x = "job_gds"),
+setMethod_traceable("vis", signature = c(x = "job_gds"),
   function(x, ref = NULL, n = 10){
     data <- object(x)
     if (!is.null(ref)) {
@@ -457,7 +457,7 @@ setMethod("vis", signature = c(x = "job_gds"),
     print(data, n = n)
   })
 
-setMethod("step0", signature = c(x = "job_gds"),
+setMethod_traceable("step0", signature = c(x = "job_gds"),
   function(x){
     step_message("Prepare your data with function `job_gds`.")
   })

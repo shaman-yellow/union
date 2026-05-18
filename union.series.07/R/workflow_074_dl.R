@@ -68,12 +68,12 @@ job_dl <- function(smiles, force_cpu = TRUE)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_dl"),
+setMethod_traceable("step0", signature = c(x = "job_dl"),
   function(x){
     step_message("Prepare your data with function `job_dl`.")
   })
 
-setMethod("step1", signature = c(x = "job_dl"),
+setMethod_traceable("step1", signature = c(x = "job_dl"),
   function(x, batch_size = 3L) {
     step_message("Prepare the trained model.")
     file_model <- file.path(pg("dl"), "model", "model.pth")
@@ -102,7 +102,7 @@ setMethod("step1", signature = c(x = "job_dl"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_dl"),
+setMethod_traceable("step2", signature = c(x = "job_dl"),
   function(x){
     step_message("Use Model to predict.")
     file_smiles <- tempfile("smiles", fileext = ".txt")
@@ -135,7 +135,7 @@ setMethod("step2", signature = c(x = "job_dl"),
     return(x)
   })
 
-setMethod("res", signature = c(x = "job_dl"),
+setMethod_traceable("res", signature = c(x = "job_dl"),
   function(x){
     if (x@step < 2L) {
       stop("x@step < 2L")

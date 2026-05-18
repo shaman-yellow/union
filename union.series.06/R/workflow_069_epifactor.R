@@ -27,12 +27,12 @@ job_epifactor <- function(use = c("protein"), version = "v2.0")
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_epifactor"),
+setMethod_traceable("step0", signature = c(x = "job_epifactor"),
   function(x){
     step_message("Prepare your data with function `job_epifactor`.")
   })
 
-setMethod("step1", signature = c(x = "job_epifactor"),
+setMethod_traceable("step1", signature = c(x = "job_epifactor"),
   function(x, dir = .prefix("epifactor", "db")){
     step_message("Obtain epigenetic regulators.")
     file <- switch(x$use, protein = "EpiGenes_main.csv")
@@ -53,7 +53,7 @@ setMethod("step1", signature = c(x = "job_epifactor"),
     return(x)
   })
 
-setMethod("filter", signature = c(x = "job_epifactor"),
+setMethod_traceable("filter", signature = c(x = "job_epifactor"),
   function(x, types = c("RNA methylation"), ...)
   {
     types <- paste0(types, collapse = "|")

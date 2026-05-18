@@ -25,14 +25,14 @@ job_seuratSp <- function(dir, ...)
   .job_seuratSp(object = obj)
 }
 
-setMethod("step0", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step0", signature = c(x = "job_seuratSp"),
   function(x){
     step_message("Prepare your data with function `job_seuratSp`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step1", signature = c(x = "job_seuratSp"),
   function(x) {
     step_message("Quality control (QC).")
     x <- callNextMethod(x)
@@ -43,7 +43,7 @@ setMethod("step1", signature = c(x = "job_seuratSp"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step2", signature = c(x = "job_seuratSp"),
   function(x, min.features, max.features, max.percent.mt = 5, nfeatures = 2000,
     use = "nFeature_Spatial")
   {
@@ -51,7 +51,7 @@ setMethod("step2", signature = c(x = "job_seuratSp"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step3", signature = c(x = "job_seuratSp"),
   function(x, dims, resolution){
     x <- callNextMethod(x, dims, resolution)
     palette <- .setPaletteForSpatialJob(x, "seurat_clusters")
@@ -62,7 +62,7 @@ setMethod("step3", signature = c(x = "job_seuratSp"),
     return(x)
   })
 
-setMethod("vis", signature = c(x = "job_seuratSp"),
+setMethod_traceable("vis", signature = c(x = "job_seuratSp"),
   function(x, group.by = x@params$group.by, pt.size = .7){
     p.umap <- e(Seurat::DimPlot(
         object(x), reduction = "umap", label = FALSE, pt.size = pt.size,
@@ -77,7 +77,7 @@ setMethod("vis", signature = c(x = "job_seuratSp"),
     .set_lab(p, sig(x), "The", gs(group.by, "_", "-"))
   })
 
-setMethod("focus", signature = c(x = "job_seuratSp"),
+setMethod_traceable("focus", signature = c(x = "job_seuratSp"),
   function(x, features, names = NULL){
     if (!is.null(names)) {
       names(object(x)@images) <- names
@@ -87,13 +87,13 @@ setMethod("focus", signature = c(x = "job_seuratSp"),
     p.spatial
   })
 
-setMethod("step4", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step4", signature = c(x = "job_seuratSp"),
   function(x, ...){
     x <- callNextMethod(x, ...)
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_seuratSp"),
+setMethod_traceable("step5", signature = c(x = "job_seuratSp"),
   function(x, workers = NULL, spatial = FALSE){
     x <- callNextMethod(x, workers)
     if (spatial) {

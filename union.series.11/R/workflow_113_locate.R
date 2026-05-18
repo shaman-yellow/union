@@ -17,7 +17,7 @@
 setGeneric("asjob_locate",
   function(x, ...) standardGeneric("asjob_locate"))
 
-setMethod("asjob_locate", signature = c(x = "feature"),
+setMethod_traceable("asjob_locate", signature = c(x = "feature"),
   function(x, ...){
     fea <- resolve_feature_snapAdd_onExit("x", x)
     x <- .job_locate(object = fea)
@@ -28,12 +28,12 @@ setMethod("asjob_locate", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_locate"),
+setMethod_traceable("step0", signature = c(x = "job_locate"),
   function(x){
     step_message("Prepare your data with function `job_locate`.")
   })
 
-setMethod("step1", signature = c(x = "job_locate"),
+setMethod_traceable("step1", signature = c(x = "job_locate"),
   function(x){
     step_message("Quality control (QC).")
     p.locateChr <- funPlot(plot_genes_in_RCircos, list(gene_data = x$gene_data))
@@ -51,7 +51,7 @@ setMethod("step1", signature = c(x = "job_locate"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_locate"),
+setMethod_traceable("step2", signature = c(x = "job_locate"),
   function(x, org = "Homo sapiens"){
     step_message("Get location data.")
     data <- get_mRNA_subcellular_data(org = org)

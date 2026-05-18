@@ -51,14 +51,14 @@ job_tcga <- function(project)
   x
 }
 
-setMethod("step0", signature = c(x = "job_tcga"),
+setMethod_traceable("step0", signature = c(x = "job_tcga"),
   function(x){
     step_message("Prepare your data with function `job_tcga`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_tcga"),
+setMethod_traceable("step1", signature = c(x = "job_tcga"),
   function(x, query = c("RNA", "clinical"), keep_consensus = FALSE)
   {
     step_message("Get information in TCGA.")
@@ -109,7 +109,7 @@ setMethod("step1", signature = c(x = "job_tcga"),
     return(x)
   })
 
-setMethod("filter", signature = c(x = "job_tcga"),
+setMethod_traceable("filter", signature = c(x = "job_tcga"),
   function(x, ids, type = "RNA", use.tnbc = FALSE){
     message("Filter the 'query' before downloading the data.")
     if (x@step != 1) {
@@ -134,7 +134,7 @@ setMethod("filter", signature = c(x = "job_tcga"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_tcga"),
+setMethod_traceable("step2", signature = c(x = "job_tcga"),
   function(x, dir = .prefix("GDCdata", "db")){
     step_message("Download data from TCGA.")
     e(lapply(object(x),
@@ -146,7 +146,7 @@ setMethod("step2", signature = c(x = "job_tcga"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_tcga"),
+setMethod_traceable("step3", signature = c(x = "job_tcga"),
   function(x, query = names(object(x))[1], use = "vital_status",
     clinical.info = c(
       "follow_up", "patient", "drug", "admin", "radiation"
@@ -194,7 +194,7 @@ setMethod("step3", signature = c(x = "job_tcga"),
     return(x)
   })
 
-setMethod("merge", signature = c(x = "job_tcga", y = "job_tcga"),
+setMethod_traceable("merge", signature = c(x = "job_tcga", y = "job_tcga"),
   function(x, y, ...){
     if (!identical(object(x)@rowRanges, object(y)@rowRanges)) {
       stop("object(x) and object(y) do not has the same feature data.")
@@ -220,7 +220,7 @@ setMethod("merge", signature = c(x = "job_tcga", y = "job_tcga"),
 setGeneric("asjob_limma",
   function(x, ...) standardGeneric("asjob_limma"))
 
-setMethod("asjob_limma", signature = c(x = "job_tcga"),
+setMethod_traceable("asjob_limma", signature = c(x = "job_tcga"),
   function(x, ..., col_id = "sample", row_id = "gene_id", group = "vital_status",
     get_treatment = FALSE, mutate_follow = TRUE)
   {

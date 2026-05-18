@@ -19,7 +19,7 @@
 setGeneric("asjob_hdwgcna",
   function(x, ...) standardGeneric("asjob_hdwgcna"))
 
-setMethod("asjob_hdwgcna", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_hdwgcna", signature = c(x = "job_seurat"),
   function(x, workers = 5, assay = SeuratObject::DefaultAssay(object(x)),
     name = "wgcna")
   {
@@ -43,12 +43,12 @@ setMethod("asjob_hdwgcna", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step0", signature = c(x = "job_hdwgcna"),
   function(x){
     step_message("Prepare your data with function `job_hdwgcna`.")
   })
 
-setMethod("step1", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step1", signature = c(x = "job_hdwgcna"),
   function(x, min_cells = 100, k = 25, max_shared = 15,
     reduction = NULL, group.by = x$group.by, auto = FALSE, 
     ..., debug = FALSE)
@@ -83,7 +83,7 @@ setMethod("step1", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step2", signature = c(x = "job_hdwgcna"),
   function(x, celltypes = NULL, cut.r = .8, group.by = x$group.by, debug = FALSE){
     step_message("Soft power.")
     if (is.null(celltypes)) {
@@ -118,7 +118,7 @@ setMethod("step2", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step3", signature = c(x = "job_hdwgcna"),
   function(x, min.gene = 50, cut.height = .2, debug = FALSE){
     step_message("Network")
     message(glue::glue("Use power: {x$use.power}"))
@@ -152,7 +152,7 @@ setMethod("step3", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step4", signature = c(x = "job_hdwgcna"),
   function(x, sample.by = "orig.ident", debug = FALSE)
   {
     step_message("Module eigen")
@@ -182,7 +182,7 @@ setMethod("step4", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step5", signature = c(x = "job_hdwgcna"),
   function(x, top = NULL, global = TRUE, debug = FALSE)
   {
     step_message("Module membership.")
@@ -253,7 +253,7 @@ setMethod("step5", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step6", signature = c(x = "job_hdwgcna"),
   function(x, use.trait = c("group"),
     celltypes = x$celltypes,
     group.by = x$group.by, debug = FALSE, show = 5)
@@ -344,7 +344,7 @@ setMethod("step6", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_hdwgcna"),
+setMethod_traceable("step7", signature = c(x = "job_hdwgcna"),
   function(x, cut.r = NULL, cut.mm = NULL,
     celltypes = x$celltypes, use.module = NULL,
     range_mm = c(100, 300), range_gs = c(100, 400),

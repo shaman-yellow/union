@@ -18,7 +18,7 @@ setClassUnion("job_DEG", c("job_limma", "job_deseq2"))
 setGeneric("asjob_deseq2",
   function(x, ...) standardGeneric("asjob_deseq2"))
 
-setMethod("asjob_deseq2", signature = c(x = "job_geo"),
+setMethod_traceable("asjob_deseq2", signature = c(x = "job_geo"),
   function(x, metadata, use.col = NULL, use_as_id = TRUE, 
     use = 1L, ...)
   {
@@ -99,12 +99,12 @@ job_deseq2 <- function(counts, metadata, genes, project = NULL,
 #     }
 #   })
 
-setMethod("step0", signature = c(x = "job_deseq2"),
+setMethod_traceable("step0", signature = c(x = "job_deseq2"),
   function(x){
     step_message("Prepare your data with function `job_deseq2`.")
   })
 
-setMethod("step1", signature = c(x = "job_deseq2"),
+setMethod_traceable("step1", signature = c(x = "job_deseq2"),
   function(x, show_qc = FALSE)
   {
     step_message("Quality control (QC).")
@@ -132,7 +132,7 @@ setMethod("step1", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_deseq2"),
+setMethod_traceable("step2", signature = c(x = "job_deseq2"),
   function(x, ..., cut.p = .05, cut.fc = .5, use = c("padj", "pvalue"), 
     order.by = "log2FoldChange")
   {
@@ -177,7 +177,7 @@ setMethod("step2", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_deseq2"),
+setMethod_traceable("step3", signature = c(x = "job_deseq2"),
   function(x, top = 10, group = "group", use = x$.args$step2$use[1])
   {
     step_message("Draw plots.")
@@ -245,7 +245,7 @@ setMethod("step3", signature = c(x = "job_deseq2"),
   return(x)
 }
 
-setMethod("filter", signature = c(x = "job_deseq2"),
+setMethod_traceable("filter", signature = c(x = "job_deseq2"),
   function(x, ..., trace = FALSE){
     # filter sample
     data <- data.frame(object(x)@colData)
@@ -260,7 +260,7 @@ setMethod("filter", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("regroup", signature = c(x = "job_deseq2", ref = "job_deseq2"),
+setMethod_traceable("regroup", signature = c(x = "job_deseq2", ref = "job_deseq2"),
   function(x, ref, sample = "sample", group = "group", formula = x$formula, sort = TRUE)
   {
     meta.x <- object(x)@colData
@@ -279,7 +279,7 @@ setMethod("regroup", signature = c(x = "job_deseq2", ref = "job_deseq2"),
     return(x)
   })
 
-setMethod("regroup", signature = c(x = "job_deseq2", ref = "character"),
+setMethod_traceable("regroup", signature = c(x = "job_deseq2", ref = "character"),
   function(x, ref, mode = "median", names = c("High", "Low"), col = "group", .add = FALSE)
   {
     data <- DESeq2::counts(object(x), normalized = TRUE)
@@ -305,7 +305,7 @@ setMethod("regroup", signature = c(x = "job_deseq2", ref = "character"),
   .get_group_from_contrast_character(names(x@tables$step2$t.results)[which])
 }
 
-setMethod("focus", signature = c(x = "job_deseq2"),
+setMethod_traceable("focus", signature = c(x = "job_deseq2"),
   function(x, ref, ref.use = "guess", which = NULL, run_roc = TRUE,
     which.roc = 1L, level.roc = .guess_compare_deseq2(x, which.roc),
     .name = "m", use = c("adj.P.Val", "P.Value"), 
@@ -338,7 +338,7 @@ setMethod("focus", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("cal_corp", signature = c(x = "job_deseq2", y = "NULL"),
+setMethod_traceable("cal_corp", signature = c(x = "job_deseq2", y = "NULL"),
   function(x, y, from, to, use = "symbol", group = NULL, ...)
   {
     fakeLmJob <- .as_job_limma.job_deseq2(x)
@@ -369,7 +369,7 @@ setMethod("cal_corp", signature = c(x = "job_deseq2", y = "NULL"),
   fakeLmJob
 }
 
-setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
+setMethod_traceable("asjob_iobr", signature = c(x = "job_deseq2"),
   function(x, idType = "Symbol", source = c("local", "biomart"),
     levels = NULL, guess_which_level = 1L, ...)
   {
@@ -443,7 +443,7 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
   return(list(snap = snap, sets = sets))
 }
 
-setMethod("refine", signature = c(x = "job_DEG"),
+setMethod_traceable("refine", signature = c(x = "job_DEG"),
   function(x, ..., name = NULL, use.p = c("pvalue", "padj"), ref = "key", cut.auc = .7)
   {
     fun_extract <- function(x) {

@@ -23,12 +23,12 @@ job_catr <- function(protein, rna)
   .job_catr(object = list(protein = gname(protein), rna = gname(rna)))
 }
 
-setMethod("step0", signature = c(x = "job_catr"),
+setMethod_traceable("step0", signature = c(x = "job_catr"),
   function(x){
     step_message("Prepare your data with function `job_catr`. ")
   })
 
-setMethod("step1", signature = c(x = "job_catr"),
+setMethod_traceable("step1", signature = c(x = "job_catr"),
   function(x, wd = "catRapid", rna_type = c("transcript_exon_intron", "gene_exon_intron")){
     step_message("Prepare upload files.")
     if (is.null(x$mart)) {
@@ -56,7 +56,7 @@ setMethod("step1", signature = c(x = "job_catr"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_catr"),
+setMethod_traceable("step2", signature = c(x = "job_catr"),
   function(x, num = 1, dir = "~/Downloads/", pattern = "output_full.*\\.zip"){
     step_message("Deparse the results files. red{{Make sure the results files exists in the `dir`.}}")
     collateFiles(paste0("candidate_", num), pattern, from = dir, to = x$wd, suffix = ".zip")
@@ -98,7 +98,7 @@ setMethod("step2", signature = c(x = "job_catr"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_catr"),
+setMethod_traceable("step3", signature = c(x = "job_catr"),
   function(x, ref = NULL, top = NULL, group = NULL, group.use = 1, label.auto = TRUE, label.freq = NULL)
   {
     step_message("Select data for Sankey plot.")

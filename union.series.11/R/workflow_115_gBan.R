@@ -21,7 +21,7 @@ job_gBan <- function()
 setGeneric("asjob_gBan",
   function(x, ...) standardGeneric("asjob_gBan"))
 
-setMethod("asjob_gBan", signature = c(x = "feature"),
+setMethod_traceable("asjob_gBan", signature = c(x = "feature"),
   function(x){
     fea <- resolve_feature_snapAdd_onExit("x", x)
     x <- .job_gBan(object = fea)
@@ -29,12 +29,12 @@ setMethod("asjob_gBan", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_gBan"),
+setMethod_traceable("step0", signature = c(x = "job_gBan"),
   function(x){
     step_message("Prepare your data with function `job_gBan`.")
   })
 
-setMethod("step1", signature = c(x = "job_gBan"),
+setMethod_traceable("step1", signature = c(x = "job_gBan"),
   function(x, dir_save = paste0("GraphBAN_", x@sig),
     db = c("batman", "zinc", "cmnpd", "dgidb", "drugbank"),
     batman = FALSE, zinc = FALSE, cmnpd = FALSE, dgidb = FALSE, 
@@ -157,7 +157,7 @@ setMethod("step1", signature = c(x = "job_gBan"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_gBan"),
+setMethod_traceable("step2", signature = c(x = "job_gBan"),
   function(x, cl = 10, mem = 1000, w.cutoff = 1000, 
     rerun = FALSE, filter_by = c("rcdk", "rdkit"))
   {
@@ -209,13 +209,13 @@ setMethod("step2", signature = c(x = "job_gBan"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_gBan"),
+setMethod_traceable("step3", signature = c(x = "job_gBan"),
   function(x){
     step_message("Do nothing")
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_gBan"),
+setMethod_traceable("step4", signature = c(x = "job_gBan"),
   function(x, pattern = "graphBan_res_", cutoff = .95, 
     reRead = FALSE, method_keep = c("all", "respective"))
   {
@@ -292,7 +292,7 @@ setMethod("step4", signature = c(x = "job_gBan"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_gBan"),
+setMethod_traceable("step5", signature = c(x = "job_gBan"),
   function(x, file_admet = NULL, cutoff = .7, skip = FALSE)
   {
     step_message("ADMET ...")
@@ -333,7 +333,7 @@ setMethod("step5", signature = c(x = "job_gBan"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_gBan"),
+setMethod_traceable("step6", signature = c(x = "job_gBan"),
   function(x, file_swiss = NULL, n_pass = 4, method = "linpinski", skip = FALSE){
     step_message("swissADME.")
     if (skip) {
@@ -383,7 +383,7 @@ setMethod("step6", signature = c(x = "job_gBan"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_gBan"),
+setMethod_traceable("step7", signature = c(x = "job_gBan"),
   function(x){
     expect_package("PubChemR", "3.0.0")
     smiles <- x$smiles_keep
@@ -445,7 +445,7 @@ setMethod("step7", signature = c(x = "job_gBan"),
   })
 
 
-setMethod("asjob_vina", signature = c(x = "job_gBan"),
+setMethod_traceable("asjob_vina", signature = c(x = "job_gBan"),
   function(x){
     # resolve_feature_snapAdd_onExit("x", feature(x))
     cpds <- map(x$synos, "CID", x$cids, "CID", "SMILES", col = "SMILES")

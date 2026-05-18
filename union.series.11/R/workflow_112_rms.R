@@ -16,7 +16,7 @@
 setGeneric("asjob_rms",
   function(x, ...) standardGeneric("asjob_rms"))
 
-setMethod("asjob_rms", signature = c(x = "job_deseq2"),
+setMethod_traceable("asjob_rms", signature = c(x = "job_deseq2"),
   function(x, ref, target = "group", format_name = TRUE, levels = rev(.guess_compare_deseq2(x, 1L)))
   {
     if (x@step < 1L) {
@@ -46,7 +46,7 @@ setMethod("asjob_rms", signature = c(x = "job_deseq2"),
     return(x)
   })
 
-setMethod("asjob_rms", signature = c(x = "job_limma"),
+setMethod_traceable("asjob_rms", signature = c(x = "job_limma"),
   function(x, ref, target = "group", format_name = TRUE, levels = rev(.guess_compare_limma(x, 1L)))
   {
     if (x@step < 1L) {
@@ -76,12 +76,12 @@ setMethod("asjob_rms", signature = c(x = "job_limma"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_rms"),
+setMethod_traceable("step0", signature = c(x = "job_rms"),
   function(x){
     step_message("Prepare your data with function `job_rms`.")
   })
 
-setMethod("step1", signature = c(x = "job_rms"),
+setMethod_traceable("step1", signature = c(x = "job_rms"),
   function(x, target = x$target, seed = x$seed, penalty = 1, 
     loocv = "auto", ...)
   {
@@ -139,7 +139,7 @@ setMethod("step1", signature = c(x = "job_rms"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_rms"),
+setMethod_traceable("step2", signature = c(x = "job_rms"),
   function(x, B = 500, ...){
     step_message("rmda.")
     data <- x$res_lrm$data

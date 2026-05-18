@@ -45,7 +45,7 @@ select_pdb <- function(id, chain, resi) {
 setGeneric("asjob_vina",
   function(x, ...) standardGeneric("asjob_vina"))
 
-setMethod("asjob_vina", signature = c(x = "job_stringdb"),
+setMethod_traceable("asjob_vina", signature = c(x = "job_stringdb"),
   function(x, cids, job_herb = NULL, compounds = NULL, hubs = 10)
   {
     hgnc_symbols <- head(x@tables$step1$hub_genes$hgnc_symbol, n = hubs)
@@ -66,12 +66,12 @@ setMethod("asjob_vina", signature = c(x = "job_stringdb"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_vina"),
+setMethod_traceable("step0", signature = c(x = "job_vina"),
   function(x){
     step_message("Prepare your data with function `job_vina`. ")
   })
 
-setMethod("step1", signature = c(x = "job_vina"),
+setMethod_traceable("step1", signature = c(x = "job_vina"),
   function(x, order = TRUE, each_target = 1, custom_pdbs = NULL, 
     bdb_file = .prefix("BindingDB_All_202401.tsv", "db"), 
     forceAF = FALSE, exclude_pdb = NULL, recode = NULL)
@@ -188,7 +188,7 @@ setMethod("step1", signature = c(x = "job_vina"),
   return(x)
 }
 
-setMethod("step2", signature = c(x = "job_vina"),
+setMethod_traceable("step2", signature = c(x = "job_vina"),
   function(x, try_cluster_random = FALSE, nGroup = 100, 
     nMember = 3, cl = 5, sdf.3d = NULL, dir_save = paste0(x@sig, "_cpd"), conda_env = "base")
   {
@@ -292,7 +292,7 @@ setMethod("step2", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_vina"),
+setMethod_traceable("step3", signature = c(x = "job_vina"),
   function(x, cl = 10, pattern = NULL,
     # extra_pdb.files: hgnc_symbol = **pdb ID** file
     extra_pdb.files = NULL, extra_layouts = NULL,
@@ -572,7 +572,7 @@ get_pdb_from_alphaFold <- function(symbols, dir = "protein_pdb")
   lst
 }
 
-setMethod("filter", signature = c(x = "job_vina"),
+setMethod_traceable("filter", signature = c(x = "job_vina"),
   function(x, cpd, symbol, cid = NULL)
   {
     message("Custom specified docking.")
@@ -591,7 +591,7 @@ setMethod("filter", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_vina"),
+setMethod_traceable("step4", signature = c(x = "job_vina"),
   function(x, time = 3600 * 2, savedir = paste0(x@sig, "_vina_space"),
     log = "~/vina.log", save.object = "vn3.rds", scoring = c("vina", "ad4"),
     exhaustiveness = 32,
@@ -665,7 +665,7 @@ setMethod("step4", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_vina"),
+setMethod_traceable("step5", signature = c(x = "job_vina"),
   function(x, compounds, by.y, axis = "Ingredient_name", excludes = NULL, top = NULL,
     cutoff.af = NULL, sig.af = -5, maxShow = 20)
   {
@@ -779,7 +779,7 @@ setMethod("step5", signature = c(x = "job_vina"),
   bind(snaps)
 }
 
-setMethod("step6", signature = c(x = "job_vina"),
+setMethod_traceable("step6", signature = c(x = "job_vina"),
   function(x, time = 30, top = 1, save = TRUE, unique = FALSE, 
     symbol = NULL, cpd = NULL, rerun = FALSE)
   {
@@ -838,7 +838,7 @@ setMethod("step6", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_vina"),
+setMethod_traceable("step7", signature = c(x = "job_vina"),
   function(x, save = TRUE, rerun = FALSE){
     step_message("Show docking results in deep and in detail.")
     data <- x$data_selectVis
@@ -875,7 +875,7 @@ setMethod("step7", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("step8", signature = c(x = "job_vina"),
+setMethod_traceable("step8", signature = c(x = "job_vina"),
   function(x){
     step_message("Merge as pdb for molecular dynamics simulation")
     x@tables$step5$res_dock
@@ -923,7 +923,7 @@ setMethod("step8", signature = c(x = "job_vina"),
   res_dock
 }
 
-setMethod("upload", signature = c(x = "job_vina"),
+setMethod_traceable("upload", signature = c(x = "job_vina"),
   function(x, ..., testFinish = TRUE){
     if (!is.remote(x)) {
       stop('!is.remote(x).')
@@ -953,7 +953,7 @@ setMethod("upload", signature = c(x = "job_vina"),
     return(x)
   })
 
-setMethod("pull", signature = c(x = "job_vina"),
+setMethod_traceable("pull", signature = c(x = "job_vina"),
   function(x, force = FALSE){
     if (!is.remote(x)) {
       stop('!is.remote(x).')
@@ -1283,7 +1283,7 @@ prepare_receptor <- function(files, mkdir.pdbqt = "protein_pdbqt",
   file[ vapply(file, file.exists, logical(1)) ]
 }
 
-setMethod("set_remote", signature = c(x = "job_vina"),
+setMethod_traceable("set_remote", signature = c(x = "job_vina"),
   function(x, wd = paste0("~/", x@sig, "_vina_space"))
   {
     if (!grpl(wd, "^[~/]")) {
@@ -1361,7 +1361,7 @@ cal_3d_sdf <- function(sdf, group = 10, cl = NULL) {
   cdRun(glue::glue("{pg('pymol')} -c -Q -d 'load {file}; {cmd}; quit'"))
 }
 
-setMethod("res", signature = c(x = "job_vina"),
+setMethod_traceable("res", signature = c(x = "job_vina"),
   function(x, meta,
     use = "Ingredient_name", target = "Ingredient.name", get = "Herb_pinyin_name")
   {

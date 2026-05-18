@@ -20,7 +20,7 @@
 setGeneric("do_scissor",
   function(x, ref, ...) standardGeneric("do_scissor"))
 
-setMethod("do_scissor", signature = c(x = "job_seurat", ref = "job_deseq2"),
+setMethod_traceable("do_scissor", signature = c(x = "job_seurat", ref = "job_deseq2"),
   function(x, ref, group = "group", family = "binomial", label = group,
     assay = SeuratObject::DefaultAssay(object(x)))
   {
@@ -74,7 +74,7 @@ setMethod("do_scissor", signature = c(x = "job_seurat", ref = "job_deseq2"),
   }
 )
 
-setMethod("step1", signature = "job_scissor",
+setMethod_traceable("step1", signature = "job_scissor",
   function(x, mode = c("normal", "small", "middle"), workers = 4L,
     file_save = file.path(create_job_cache_dir(x), "scissor_inputs.qs"),
     rerun = FALSE, ...)
@@ -100,7 +100,7 @@ setMethod("step1", signature = "job_scissor",
   }
 )
 
-setMethod("step2", signature = c(x = "job_scissor"),
+setMethod_traceable("step2", signature = c(x = "job_scissor"),
   function(x, alpha_range, k = 8L, alphas = NULL, workers = x$.args$step1$workers, 
     rerun = FALSE, ...)
   {
@@ -140,7 +140,7 @@ setMethod("step2", signature = c(x = "job_scissor"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_scissor"),
+setMethod_traceable("step3", signature = c(x = "job_scissor"),
   function(x, focus = NULL, alpha = NULL, cell_num = NULL, n = 10L, 
     nfold = 10L, qs_nthreads = 5L)
   {
@@ -216,7 +216,7 @@ setMethod("step3", signature = c(x = "job_scissor"),
     return(x)
   })
 
-setMethod("quantile", signature = c(x = "job_scissor"),
+setMethod_traceable("quantile", signature = c(x = "job_scissor"),
   function(x, cut = .75, type = "ratio_pos_vs_all_by_")
   {
     if (is.null(x$stat_alphas_all)) {
@@ -246,7 +246,7 @@ setMethod("quantile", signature = c(x = "job_scissor"),
     as_feature(as.character(celltypes), snap, nature = "cell")
   })
 
-setMethod("map", signature = c(x = "job_scissor", ref = "job_seurat"),
+setMethod_traceable("map", signature = c(x = "job_scissor", ref = "job_seurat"),
   function(x, ref, .name = "seurat")
   {
     if (is.null(x$metadata$scissor_cell)) {
@@ -319,7 +319,7 @@ setMethod("map", signature = c(x = "job_scissor", ref = "job_seurat"),
     return(x)
   })
 
-setMethod("pal", signature = c(x = "job_scissor"),
+setMethod_traceable("pal", signature = c(x = "job_scissor"),
   function(x){
     c(
       "scissor_null" = "Grey70",
@@ -328,7 +328,7 @@ setMethod("pal", signature = c(x = "job_scissor"),
     )
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_scissor"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_scissor"),
   function(x, ref)
   {
     if (is.null(ref$metadata$scissor_cell)) {

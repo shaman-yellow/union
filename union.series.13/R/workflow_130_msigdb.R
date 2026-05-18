@@ -21,12 +21,12 @@ job_msigdb <- function(mode)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_msigdb"),
+setMethod_traceable("step0", signature = c(x = "job_msigdb"),
   function(x){
     step_message("Prepare your data with function `job_msigdb`.")
   })
 
-setMethod("step1", signature = c(x = "job_msigdb"),
+setMethod_traceable("step1", signature = c(x = "job_msigdb"),
   function(x, pattern = NULL, name = pattern, join = TRUE, mode = x$mode,
     sub = NULL, species = "Homo sapiens")
   {
@@ -85,7 +85,7 @@ setMethod("step1", signature = c(x = "job_msigdb"),
   return(x)
 }
 
-setMethod("clear", signature = c(x = "job_msigdb"),
+setMethod_traceable("clear", signature = c(x = "job_msigdb"),
   function(x, save = FALSE, lite = TRUE, suffix = NULL, name = substitute(x, parent.frame(1)))
   {
     eval(name)

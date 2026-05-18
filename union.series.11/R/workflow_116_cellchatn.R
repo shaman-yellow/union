@@ -15,7 +15,7 @@
 setGeneric("asjob_cellchatn",
   function(x, ...) standardGeneric("asjob_cellchatn"))
 
-setMethod("asjob_cellchatn", signature = c(x = "list"),
+setMethod_traceable("asjob_cellchatn", signature = c(x = "list"),
   function(x, nms = names(x))
   {
     if (any(!vapply(x, is, logical(1), "job_cellchat"))) {
@@ -55,12 +55,12 @@ setMethod("asjob_cellchatn", signature = c(x = "list"),
   })
 
 
-setMethod("step0", signature = c(x = "job_cellchatn"),
+setMethod_traceable("step0", signature = c(x = "job_cellchatn"),
   function(x){
     step_message("Prepare your data with function `job_cellchatn`.")
   })
 
-setMethod("step1", signature = c(x = "job_cellchatn"),
+setMethod_traceable("step1", signature = c(x = "job_cellchatn"),
   function(x){
     step_message("Plot group comparison.")
     p.inters_counts <- funPlot(
@@ -85,7 +85,7 @@ setMethod("step1", signature = c(x = "job_cellchatn"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_cellchatn"),
+setMethod_traceable("step2", signature = c(x = "job_cellchatn"),
   function(x, cell){
     step_message("Cell as source or target interactions with other cells.")
     allCells <- levels(object(x)@meta[[ x$group.by ]])

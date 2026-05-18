@@ -27,12 +27,12 @@ job_methy <- function()
   .job_methy()
 }
 
-setMethod("step0", signature = c(x = "job_methy"),
+setMethod_traceable("step0", signature = c(x = "job_methy"),
   function(x){
     step_message("Prepare your data with function `job_methy`.")
   })
 
-setMethod("step1", signature = c(x = "job_methy"),
+setMethod_traceable("step1", signature = c(x = "job_methy"),
   function(x){
     step_message("")
     return(x)

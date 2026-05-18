@@ -20,7 +20,7 @@
 setGeneric("asjob_cellchat",
   function(x, ...) standardGeneric("asjob_cellchat"))
 
-setMethod("asjob_cellchat", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_cellchat", signature = c(x = "job_seurat"),
   function(x, group.by = x$group.by, assay = SeuratObject::DefaultAssay(object(x)), 
     sample = .5, force = TRUE, ...)
   {
@@ -54,14 +54,14 @@ setMethod("asjob_cellchat", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_cellchat"),
+setMethod_traceable("step0", signature = c(x = "job_cellchat"),
   function(x){
     step_message("Prepare your data with methods `asjob_cellchat`. ",
       "A processed 'Seurat' object is needed."
     )
   })
 
-setMethod("step1", signature = c(x = "job_cellchat"),
+setMethod_traceable("step1", signature = c(x = "job_cellchat"),
   function(x, workers = 4, python = pg("cellchat_python"),
     py_config = FALSE, debug = FALSE, 
     org = c("human", "mouse"), smooth = FALSE, ...)
@@ -171,7 +171,7 @@ setMethod("step1", signature = c(x = "job_cellchat"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_cellchat"),
+setMethod_traceable("step2", signature = c(x = "job_cellchat"),
   function(x, pathways = NULL){
     step_message("This step visualize all results computed in previous step.
       These are:
@@ -267,7 +267,7 @@ setMethod("step2", signature = c(x = "job_cellchat"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_cellchat"),
+setMethod_traceable("step3", signature = c(x = "job_cellchat"),
   function(x){
     step_message("Select pattern number for identify communication patterns.")
     require(NMF)
@@ -280,7 +280,7 @@ setMethod("step3", signature = c(x = "job_cellchat"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_cellchat"),
+setMethod_traceable("step4", signature = c(x = "job_cellchat"),
   function(x, k.out, k.in){
     step_message("Identification of major signals for specific
       cell groups and general communication
@@ -338,7 +338,7 @@ cal_panelScale <- function(num) {
   c(nrow, ncol)
 }
 
-setMethod("map", signature = c(x = "job_cellchat", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_cellchat", ref = "character"),
   function(x, ref, ref2, width = 20, height = 5, cap = 5, layout = "sugiyama"){
     data <- select_pathway(x, ref, "lps")
     data <- dplyr::filter(data, grepl(ref2, source) | grepl(ref2, target))
@@ -394,7 +394,7 @@ plot_lps_interaction <- function(edges, cap = 5, layout = "sugiyama") {
 setGeneric("select_pathway", 
   function(x, ...) standardGeneric("select_pathway"))
 
-setMethod("select_pathway", signature = c(x = "job_cellchat"),
+setMethod_traceable("select_pathway", signature = c(x = "job_cellchat"),
   function(x, pattern.x, pattern.y = pattern.x, get = c("lps", "pathways", "intersect")){
     message("`Pattern` used for match cells.")
     get <- match.arg(get)
@@ -435,7 +435,7 @@ unique.lps <- function(x, use = c("ligand", "receptor")) {
   unique(unlist(stringr::str_extract_all(x, "[^_]+")))
 }
 
-setMethod("set_remote", signature = c(x = "job_cellchat"),
+setMethod_traceable("set_remote", signature = c(x = "job_cellchat"),
   function(x, wd = glue::glue("~/cellchat_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

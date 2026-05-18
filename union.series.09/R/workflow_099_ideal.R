@@ -21,7 +21,7 @@ job_ideal <- function(mode = c("high", "low"))
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_ideal"),
+setMethod_traceable("step0", signature = c(x = "job_ideal"),
   function(x){
     step_message("Prepare your data with function `job_ideal`.")
   })
@@ -36,7 +36,7 @@ validCollates <- function(args) {
   }
 }
 
-setMethod("step1", signature = c(x = "job_ideal"),
+setMethod_traceable("step1", signature = c(x = "job_ideal"),
   function(x, ..., pattern_dataset = ".*(GSE[0-9]+).")
   {
     step_message("Collate DEGs results.")
@@ -62,7 +62,7 @@ setMethod("step1", signature = c(x = "job_ideal"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_ideal"),
+setMethod_traceable("step2", signature = c(x = "job_ideal"),
   function(x, ..., pattern_dataset = ".*(GSE[0-9]+).")
   {
     step_message("Collate survival results.")
@@ -85,7 +85,7 @@ setMethod("step2", signature = c(x = "job_ideal"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_ideal"),
+setMethod_traceable("step3", signature = c(x = "job_ideal"),
   function(x){
     step_message("Gather results.")
     if (TRUE) {

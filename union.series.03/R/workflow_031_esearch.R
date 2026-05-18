@@ -24,7 +24,7 @@ job_esearch <- function(key, jour = .jour_bioinf(), in_title_and_abstract = TRUE
   .job_esearch(object = data)
 }
 
-setMethod("vis", signature = c(x = "job_esearch"),
+setMethod_traceable("vis", signature = c(x = "job_esearch"),
   function(x, ref = NULL, n = 100, col = c(".id", "Title")){
     data <- object(x)
     if (!is.null(ref)) {
@@ -34,7 +34,7 @@ setMethod("vis", signature = c(x = "job_esearch"),
     print(data, n = n)
   })
 
-setMethod("step0", signature = c(x = "job_esearch"),
+setMethod_traceable("step0", signature = c(x = "job_esearch"),
   function(x){
     step_message("Prepare your data with function `job_esearch`.
       "

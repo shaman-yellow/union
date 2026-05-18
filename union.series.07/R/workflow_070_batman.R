@@ -65,12 +65,12 @@ job_batman <- function(herbs, db = get_batman_data(), cpd_cid = NULL)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_batman"),
+setMethod_traceable("step0", signature = c(x = "job_batman"),
   function(x){
     step_message("Prepare your data with function `job_batman`.")
   })
 
-setMethod("step1", signature = c(x = "job_batman"),
+setMethod_traceable("step1", signature = c(x = "job_batman"),
   function(x, anno = FALSE, filter.hob = TRUE, filter.dl = FALSE, test = FALSE)
   {
     step_message("Filter and format the compounds and targets.")
@@ -133,7 +133,7 @@ setMethod("step1", signature = c(x = "job_batman"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_batman"),
+setMethod_traceable("step2", signature = c(x = "job_batman"),
   function(x, use.predicted = TRUE, cutoff = .5)
   {
     step_message("Format target genes symbol")
@@ -173,7 +173,7 @@ setMethod("step2", signature = c(x = "job_batman"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_batman"),
+setMethod_traceable("step3", signature = c(x = "job_batman"),
   function(x, HLs = NULL, disease = NULL, shortName = TRUE, test = FALSE)
   {
     step_message("Network pharmacology.")
@@ -272,7 +272,7 @@ get_batman_data <- function(savedir = .prefix("batman", "db"), reload = FALSE) {
   }
 }
 
-setMethod("anno", signature = c(x = "job_batman"),
+setMethod_traceable("anno", signature = c(x = "job_batman"),
   function(x, use = "LiteratureCount")
   {
     message("Add annotation into `x@params$compounds_info`")
@@ -301,7 +301,7 @@ setMethod("anno", signature = c(x = "job_batman"),
     return(x)
   })
 
-setMethod("asjob_vina", signature = c(x = "job_batman"),
+setMethod_traceable("asjob_vina", signature = c(x = "job_batman"),
   function(x, ref, ...){
     ref <- resolve_feature_snapAdd_onExit("x", ref)
     ref <- unlist(ref)

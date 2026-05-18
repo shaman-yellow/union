@@ -16,7 +16,7 @@
 setGeneric("asjob_scMeta",
   function(x, ...) standardGeneric("asjob_scMeta"))
 
-setMethod("asjob_scMeta", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_scMeta", signature = c(x = "job_seurat"),
   function(x, ref = NULL, workers = 5, method = "AUCell", type = "KEGG")
   {
     if (is.null(ref)) {
@@ -45,12 +45,12 @@ setMethod("asjob_scMeta", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_scMeta"),
+setMethod_traceable("step0", signature = c(x = "job_scMeta"),
   function(x){
     step_message("Prepare your data with function `job_scMeta`.")
   })
 
-setMethod("step1", signature = c(x = "job_scMeta"),
+setMethod_traceable("step1", signature = c(x = "job_scMeta"),
   function(x, use.p = c("p.value", "p.adjust"), show = 10L){
     step_message("Draw plot.")
     use.p <- match.arg(use.p)
@@ -80,7 +80,7 @@ setMethod("step1", signature = c(x = "job_scMeta"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_scMeta"),
+setMethod_traceable("step2", signature = c(x = "job_scMeta"),
   function(x){
     step_message("")
     
@@ -158,7 +158,7 @@ setMethod("step2", signature = c(x = "job_scMeta"),
   dplyr::arrange(data, p.value)
 }
 
-setMethod("set_remote", signature = c(x = "job_scMeta"),
+setMethod_traceable("set_remote", signature = c(x = "job_scMeta"),
   function(x, wd)
   {
     x$wd <- wd

@@ -37,12 +37,12 @@ job_mimedb <- function(patterns)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_mimedb"),
+setMethod_traceable("step0", signature = c(x = "job_mimedb"),
   function(x){
     step_message("Prepare your data with function `job_mimedb`.")
   })
 
-setMethod("step1", signature = c(x = "job_mimedb"),
+setMethod_traceable("step1", signature = c(x = "job_mimedb"),
   function(x, dir = "~/Downloads", which = 1L)
   {
     step_message("Collate data.")

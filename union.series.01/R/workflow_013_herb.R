@@ -32,14 +32,14 @@ job_herb <- function(herbs, db = get_herb_data())
   x
 }
 
-setMethod("step0", signature = c(x = "job_herb"),
+setMethod_traceable("step0", signature = c(x = "job_herb"),
   function(x){
     step_message("Prepare your data with function `job_herb`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_herb"),
+setMethod_traceable("step1", signature = c(x = "job_herb"),
   function(x, filter.hob = TRUE, filter.dl = TRUE, ...,
     tempdir = "download", db = .prefix("herb/herbs_ingredient.rds", "db"))
   {
@@ -91,7 +91,7 @@ setMethod("step1", signature = c(x = "job_herb"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_herb"),
+setMethod_traceable("step2", signature = c(x = "job_herb"),
   function(x, group_number = 50, group_sleep = 3,
     searchDir = .prefix(), db = .prefix("herb/compounds_target.rds", "db"),
     removeExistsTemp = FALSE)
@@ -161,7 +161,7 @@ setMethod("step2", signature = c(x = "job_herb"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_herb"),
+setMethod_traceable("step3", signature = c(x = "job_herb"),
   function(x, disease = NULL, disease.score = 5,
     mart_dataset = "hsapiens_gene_ensembl", HLs = NULL)
   {
@@ -260,7 +260,7 @@ setMethod("step3", signature = c(x = "job_herb"),
     return(x)
   })
 
-# setMethod("merge", signature = c(x = "job_herb", y = "list"),
+# setMethod_traceable("merge", signature = c(x = "job_herb", y = "list"),
 #   function(x, y){
 #   })
 

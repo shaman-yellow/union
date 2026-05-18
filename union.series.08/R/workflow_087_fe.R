@@ -24,12 +24,12 @@ job_fe <- function()
   .job_fe()
 }
 
-setMethod("step0", signature = c(x = "job_fe"),
+setMethod_traceable("step0", signature = c(x = "job_fe"),
   function(x){
     step_message("Prepare your data with function `job_fe`.")
   })
 
-setMethod("step1", signature = c(x = "job_fe"),
+setMethod_traceable("step1", signature = c(x = "job_fe"),
   function(x, ...){
     step_message("Get Ferroptosis data.")
     t.ferroptosisRegulators <- get_fe_data(...)
@@ -47,7 +47,7 @@ setMethod("step1", signature = c(x = "job_fe"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_fe", ref = "feature"),
+setMethod_traceable("map", signature = c(x = "job_fe", ref = "feature"),
   function(x, ref, use = c("all", "sep")){
     use <- match.arg(use)
     feas <- ref@.Data

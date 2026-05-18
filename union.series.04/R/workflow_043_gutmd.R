@@ -32,12 +32,12 @@ job_gutmd <- function(db = .prefix("Gut Microbe and Metabolite-human.txt", "db")
   .job_gutmd(object = db_data)
 }
 
-setMethod("step0", signature = c(x = "job_gutmd"),
+setMethod_traceable("step0", signature = c(x = "job_gutmd"),
   function(x){
     step_message("Prepare your data with function `job_gutmd`.")
   })
 
-setMethod("step1", signature = c(x = "job_gutmd"),
+setMethod_traceable("step1", signature = c(x = "job_gutmd"),
   function(x, micro_patterns = NULL, metab_patterns = NULL, label = NULL, label.auto = TRUE)
   {
     step_message("Match microbiota or metabolite in database")
@@ -81,7 +81,7 @@ setMethod("step1", signature = c(x = "job_gutmd"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_gutmd", ref = "job_publish"),
+setMethod_traceable("map", signature = c(x = "job_gutmd", ref = "job_publish"),
   function(x, ref)
   {
     if (ref@cite == "[@ProteinMetabolBenson2023]") {
@@ -129,7 +129,7 @@ setMethod("map", signature = c(x = "job_gutmd", ref = "job_publish"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_limma", ref = "job_gutmd"),
+setMethod_traceable("map", signature = c(x = "job_limma", ref = "job_gutmd"),
   function(x, ref, tops, use = "hgnc_symbol", plot_max = 1000)
   {
     if (is.null(data <- ref$ProteinMetabolBenson2023$matched)) {

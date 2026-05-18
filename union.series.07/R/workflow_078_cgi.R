@@ -24,12 +24,12 @@ job_cgi <- function()
   .job_cgi()
 }
 
-setMethod("step0", signature = c(x = "job_cgi"),
+setMethod_traceable("step0", signature = c(x = "job_cgi"),
   function(x){
     step_message("Prepare your data with function `job_cgi`.")
   })
 
-setMethod("step1", signature = c(x = "job_cgi"),
+setMethod_traceable("step1", signature = c(x = "job_cgi"),
   function(x){
     step_message("")
     return(x)

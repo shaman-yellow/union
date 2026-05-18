@@ -67,7 +67,7 @@ read_kall_quant <- function(path) {
   representation = representation(),
   prototype = NULL)
 
-setMethod("show", 
+setMethod_traceable("show", 
   signature = c(object = "fasta"),
   function(object){
     print(stringr::str_trunc(head(object, n = 10), 40))
@@ -77,7 +77,7 @@ setMethod("show",
 setGeneric("group", 
   function(x, ...) standardGeneric("group"))
 
-setMethod("group", signature = c(x = "fasta"),
+setMethod_traceable("group", signature = c(x = "fasta"),
   function(x, each = 500){
     n <- -1
     group <- vapply(x, FUN.VALUE = numeric(1),
@@ -100,7 +100,7 @@ setGeneric("write",
 setGeneric("Read",
   function(x, ...) standardGeneric("Read"))
 
-setMethod("write", signature = c(x = "fasta"),
+setMethod_traceable("write", signature = c(x = "fasta"),
   function(x, name, max = 500, dir = "fasta") {
     dir.create(dir, FALSE)
     if (is.null(max)) {
@@ -119,7 +119,7 @@ setMethod("write", signature = c(x = "fasta"),
     }
   })
 
-setMethod("write", signature = c(x = "grob.obj"),
+setMethod_traceable("write", signature = c(x = "grob.obj"),
   function(x, name, width, height, dev = "png", factor = 100){
     file <- paste0(get_savedir("figs"), "/", name, ".", dev)
     match.fun(dev)(file, width * factor, height * factor)
@@ -127,7 +127,7 @@ setMethod("write", signature = c(x = "grob.obj"),
     dev.off()
   })
 
-setMethod("Read", signature = c(x = "fasta"),
+setMethod_traceable("Read", signature = c(x = "fasta"),
   function(x){
     lst <- sep_list(as.character(x), "^>", TRUE)
     res <- lapply(lst, function(x) x[-1])
@@ -185,7 +185,7 @@ setValidity("columns",
     if (all(allif)) TRUE else stop("Object must be 'column'.")
   })
 
-setMethod("show", signature = c(object = "column"),
+setMethod_traceable("show", signature = c(object = "column"),
   function(object){
     message("Object: ", length(object), "\n",
       "Relative width: ", object@rel.width, "\n",
@@ -193,7 +193,7 @@ setMethod("show", signature = c(object = "column"),
     )
   })
 
-setMethod("show", signature = c(object = "columns"),
+setMethod_traceable("show", signature = c(object = "columns"),
   function(object){
     message("Object: ", length(object), "\n",
       "Relative width: ", object@rel.width, "\n",
@@ -203,14 +203,14 @@ setMethod("show", signature = c(object = "columns"),
     )
   })
 
-setMethod("show", signature = c(object = "fig_frame"),
+setMethod_traceable("show", signature = c(object = "fig_frame"),
   function(object){
     message(object@file, "\n",
       "Width: ", object@width, "\nHeight: ", round(object@height, 2)
     )
   })
 
-setMethod("show", signature = c(object = "figs_frame"),
+setMethod_traceable("show", signature = c(object = "figs_frame"),
   function(object){
     message(paste0(object@file, collapse = ", "), "\n",
       "Width: ", object@width, "\nHeight: ", round(object@height, 2),
@@ -278,7 +278,7 @@ cls <- function(...) {
 setGeneric("render", 
   function(x, ...) standardGeneric("render"))
 
-setMethod("render", signature = c(x = "columns"),
+setMethod_traceable("render", signature = c(x = "columns"),
   function(x, name, engine = "xelatex"){
     lines <- astex(x)
     if (missing(name))
@@ -296,7 +296,7 @@ setMethod("render", signature = c(x = "columns"),
     res
   })
 
-setMethod("render", signature = c(x = "column"),
+setMethod_traceable("render", signature = c(x = "column"),
   function(x, name, engine = "xelatex"){
     if (missing(name))
       name <- paste0(substitute(x, parent.frame(1)), ".tex")
@@ -320,7 +320,7 @@ rapply_get_frame_files <- function(x) {
 setGeneric("astex", 
   function(x, ...) standardGeneric("astex"))
 
-setMethod("astex", signature = c(x = "columns"),
+setMethod_traceable("astex", signature = c(x = "columns"),
   function(x, width = 20, fun_head = pictureMergeHead){
     head <- fun_head(width, width * x@rel.height)
     contents <- unlist(mapply(astex, x, x@rel.cl.widths, SIMPLIFY = FALSE))
@@ -332,14 +332,14 @@ setMethod("astex", signature = c(x = "columns"),
       "", "\\end{document}")
   })
 
-setMethod("astex", signature = c(x = "column"),
+setMethod_traceable("astex", signature = c(x = "column"),
   function(x, width){
     contents <- unlist(lapply(x, astex))
     c(paste0("\\begin{col}{", width, "\\textwidth}"), contents,
     "\\end{col}")
   })
 
-setMethod("astex", signature = c(x = "fig_frame"),
+setMethod_traceable("astex", signature = c(x = "fig_frame"),
   function(x){
     c("\\begin{minipage}[t]{.95\\linewidth}",
       paste0("\\sidesubfloat[]{\\includegraphics[width=", x@panel.width,
@@ -348,7 +348,7 @@ setMethod("astex", signature = c(x = "fig_frame"),
     )
   })
 
-setMethod("astex", signature = c(x = "figs_frame"),
+setMethod_traceable("astex", signature = c(x = "figs_frame"),
   function(x){
     lines <- lapply(seq_along(x@file), 
       function(n) {
@@ -374,7 +374,7 @@ pictureMergeHead <- function(width = 20, height = 20) {
 setGeneric("re", 
   function(x, ...) standardGeneric("re"))
 
-setMethod("re", signature = c(x = "character"),
+setMethod_traceable("re", signature = c(x = "character"),
   function(x, f.width = 1, f.height = 1){
     cache <- getOption("cache", "cache")
     if (dir.exists(cache)) {
@@ -541,7 +541,7 @@ clearNodePropertyBypass <- function (node.names, visual.property, network = NULL
 # setGeneric("convert", 
 #   function(x, ...) standardGeneric("convert"))
 
-# setMethod("convert", signature = c(x = "character"),
+# setMethod_traceable("convert", signature = c(x = "character"),
 #   function(x){
 #     y <- gs(x, "\\.pdf$", ".png")
 #     pdf_convert(x, filenames = y)

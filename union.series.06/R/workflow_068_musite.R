@@ -29,12 +29,12 @@ job_musite <- function(symbols)
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_musite"),
+setMethod_traceable("step0", signature = c(x = "job_musite"),
   function(x){
     step_message("Prepare your data with function `job_musite`.")
   })
 
-setMethod("step1", signature = c(x = "job_musite"),
+setMethod_traceable("step1", signature = c(x = "job_musite"),
   function(x, org = c("hsa", "mmu"), dir_save = "Seq")
   {
     step_message("Prepare protein sequences.")
@@ -47,7 +47,7 @@ setMethod("step1", signature = c(x = "job_musite"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_musite"),
+setMethod_traceable("step2", signature = c(x = "job_musite"),
   function(x,
     type = c("Hydroxylysine", "Hydroxyproline", "Methylarginine",
       "Methyllysine", "N-linked_glycosylation", "N6-acetyllysine",
@@ -152,7 +152,7 @@ setMethod("step2", signature = c(x = "job_musite"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_musite"),
+setMethod_traceable("step3", signature = c(x = "job_musite"),
   function(x, n = 1)
   {
     step_message("Visualize the PDB structure")

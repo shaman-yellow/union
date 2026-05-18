@@ -34,7 +34,7 @@ setAs("feature_list", "feature_join",
   }
 )
 
-setMethod("show", signature = c(object = "notshow"),
+setMethod_traceable("show", signature = c(object = "notshow"),
   function(object){
     show(object@data)
   })
@@ -67,7 +67,7 @@ funPlot <- function(fun, args) {
   .funPlot(fun = fun, args = args)
 }
 
-setMethod("show", signature = c(object = "funPlot"),
+setMethod_traceable("show", signature = c(object = "funPlot"),
   function(object){
     show(do.call(object@fun, object@args))
   })
@@ -82,23 +82,23 @@ fig <- setClass("fig",
   representation = representation(),
   prototype = NULL)
 
-setMethod("$", signature = c(x = "fig"),
+setMethod_traceable("$", signature = c(x = "fig"),
   function(x, name){
     attr(x, name)
   })
 
-setMethod("$<-", signature = c(x = "fig"),
+setMethod_traceable("$<-", signature = c(x = "fig"),
   function(x, name, value){
     x[[ name ]] <- value
     return(x)
   })
 
-setMethod("[[", signature = c(x = "fig"),
+setMethod_traceable("[[", signature = c(x = "fig"),
   function(x, i, ...){
     attr(x, i)
   })
 
-setMethod("[[<-", signature = c(x = "fig"),
+setMethod_traceable("[[<-", signature = c(x = "fig"),
   function(x, i, ..., value){
     attr(x, i) <- value
     return(x)
@@ -117,7 +117,7 @@ file_fig <- function(name, file) {
   representation = representation(),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "files"),
+setMethod_traceable("show", signature = c(object = "files"),
   function(object){
     if (length(object) > 1) {
       lapply(object, function(x) browseURL(as.character(x)))
@@ -135,7 +135,7 @@ setMethod("show", signature = c(object = "files"),
   representation = representation(data = "ANY", filename = "character"),
   prototype = prototype(file = character(1)))
 
-setMethod("show", signature = c(object = "data_binary"),
+setMethod_traceable("show", signature = c(object = "data_binary"),
   function(object){
     if (!file.exists(object@filename)) {
       file <- tempfile(
@@ -734,7 +734,7 @@ split_lapply_rbind <- function(data, f, fun, ..., verbose = FALSE, args = list(u
   representation = representation(),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "data_long"),
+setMethod_traceable("show", signature = c(object = "data_long"),
   function(object){
     suppressWarnings(print(tibble::as_tibble(object)))
   })
@@ -808,7 +808,7 @@ variance_analysis <- function(data.long){
 setGeneric("pal", 
   function(x) standardGeneric("pal"))
 
-setMethod("pal", signature = c(x = "andata"),
+setMethod_traceable("pal", signature = c(x = "andata"),
   function(x){ 
     pal <- x@palette
     if (is.null(pal)) {
@@ -876,7 +876,7 @@ opls_data.long <- function(data.long, combns, inter.fig = FALSE) {
 setGeneric("plot_andata", 
   function(x, ...) standardGeneric("plot_andata"))
 
-setMethod("plot_andata", signature = c(x = "andata_pca"),
+setMethod_traceable("plot_andata", signature = c(x = "andata_pca"),
   function(x){
     p <- ggplot(x@data, aes(x = PC1, y = PC2, fill = group)) +
       geom_point(size = 3, shape = 21, stroke = 0, color = "transparent") +
@@ -889,7 +889,7 @@ setMethod("plot_andata", signature = c(x = "andata_pca"),
     p
   })
 
-setMethod("plot_andata", signature = c(x = "andata_opls"),
+setMethod_traceable("plot_andata", signature = c(x = "andata_opls"),
   function(x){
     p <- ggplot(x@data, aes(x = h1, y = o1)) +
       geom_point(size = 3, shape = 21,
@@ -985,7 +985,7 @@ show_col.thp <- function(x) {
   scales::show_col(attr(x, "colors"))
 }
 
-setMethod("show", signature = c(object = "lich"),
+setMethod_traceable("show", signature = c(object = "lich"),
   function(object){
     show_lst.ch(object)
   })
@@ -1020,7 +1020,7 @@ setValidity("elist",
 setGeneric("as_data_long", 
   function(x, y, ...) standardGeneric("as_data_long"))
 
-setMethod("as_data_long", signature = c(x = "DGEList"),
+setMethod_traceable("as_data_long", signature = c(x = "DGEList"),
   function(x){
     data <- tibble::as_tibble(x$counts)
     data$gene <- x$genes[[ 1 ]]
@@ -1034,7 +1034,7 @@ setMethod("as_data_long", signature = c(x = "DGEList"),
     .data_long.eset(data)
   })
 
-setMethod("as_data_long", signature = c(x = "EList"),
+setMethod_traceable("as_data_long", signature = c(x = "EList"),
   function(x){
     data <- tibble::as_tibble(x$E)
     data$gene <- x$genes[[ 1 ]]
@@ -1046,7 +1046,7 @@ setMethod("as_data_long", signature = c(x = "EList"),
 setGeneric("pca_data.long", 
   function(x, fun_scale) standardGeneric("pca_data.long"))
 
-setMethod("pca_data.long", signature = c(x = "data_long.eset"),
+setMethod_traceable("pca_data.long", signature = c(x = "data_long.eset"),
   function(x){
     x <- dplyr::select(tibble::as_tibble(data.frame(x)), sample, group, gene, value)
     x <- tidyr::spread(x, gene, value)
@@ -1155,7 +1155,7 @@ get_fun <- function(name, envir = topenv(), mode = "function") {
       )
       ))
 
-setMethod("show", signature = c(object = "heatdata"),
+setMethod_traceable("show", signature = c(object = "heatdata"),
   function(object){
     if (!is.null(object@gg_main))
       print(draw(object))
@@ -1222,7 +1222,7 @@ heatdata_gene <- setClass("heatdata_gene",
 setGeneric("naviRaw", 
   function(x) standardGeneric("naviRaw"))
 
-setMethod("naviRaw", signature = c(x = "heatdata_gene"),
+setMethod_traceable("naviRaw", signature = c(x = "heatdata_gene"),
   function(x){
     data_long <- as_data_long(x@raw)
     x@data_long <- tibble::as_tibble(data_long)
@@ -1232,7 +1232,7 @@ setMethod("naviRaw", signature = c(x = "heatdata_gene"),
 setGeneric("new_heatdata", 
   function(x, y, ...) standardGeneric("new_heatdata"))
 
-setMethod("new_heatdata", signature = c(x = "EList"),
+setMethod_traceable("new_heatdata", signature = c(x = "EList"),
   function(x){
     x <- heatdata_gene(raw = x)
     naviRaw(x)
@@ -1241,7 +1241,7 @@ setMethod("new_heatdata", signature = c(x = "EList"),
 setGeneric("standby", 
   function(x) standardGeneric("standby"))
 
-setMethod("standby", signature = c(x = "heatdata"),
+setMethod_traceable("standby", signature = c(x = "heatdata"),
   function(x){
     cols <- unlist(x@aesn[ names(x@aesn) %in% c("x", "y", x@aesh) ])
     .check_columns(x@data_long, cols, "x@data_long")
@@ -1257,7 +1257,7 @@ setMethod("standby", signature = c(x = "heatdata"),
 setGeneric("set_xmeta", 
   function(x, metadata) standardGeneric("set_xmeta"))
 
-setMethod("set_xmeta", signature = c(x = "heatdata_gene"),
+setMethod_traceable("set_xmeta", signature = c(x = "heatdata_gene"),
   function(x){
     x@xmeta <- dplyr::distinct(x@data_long, sample, group)
     x
@@ -1269,12 +1269,12 @@ setGeneric("callheatmap",
 setGeneric("corheatmap", 
   function(x, y, ...) standardGeneric("corheatmap"))
 
-setMethod("corheatmap", signature = c(x = "df", y = "df"),
+setMethod_traceable("corheatmap", signature = c(x = "df", y = "df"),
   function(x, y, row_var = "row_var", col_var = "col_var"){
     callheatmap(new_heatdata(cal_corp(x, y, row_var, col_var)))
   })
 
-setMethod("callheatmap", signature = c(x = "heatdata"),
+setMethod_traceable("callheatmap", signature = c(x = "heatdata"),
   function(x, HLs = NULL){
     y.reformat <- x.reformat <- 0L
     if (!is.null(x@ymeta)) {
@@ -1324,7 +1324,7 @@ draw_genetree <- function(x) {
   aplot::insert_left(x@gg_ygroup, x@gg_ytree, width = 8)
 }
 
-setMethod("draw", signature = c(x = "heatdata"),
+setMethod_traceable("draw", signature = c(x = "heatdata"),
   function(x){
     p <- x@gg_main
     if (is.null(x@gg_xgroup)) {
@@ -1384,7 +1384,7 @@ as_edges.distframe <- function(data, threshold = NULL)
   representation = representation(),
     prototype = NULL)
 
-setMethod("show", signature = c(object = "wgcData"),
+setMethod_traceable("show", signature = c(object = "wgcData"),
   function(object){
     print(tibble::as_tibble(data.frame(object)))
     message(crayon::green("Rownames (Sample names):"))
@@ -1395,7 +1395,7 @@ setMethod("show", signature = c(object = "wgcData"),
 setGeneric("as_wgcData", 
   function(x) standardGeneric("as_wgcData"))
 
-setMethod("as_wgcData", signature = c(x = "EList"),
+setMethod_traceable("as_wgcData", signature = c(x = "EList"),
   function(x){
     data <- data.frame(t(x$E))
     colnames(data) <- x$genes[[ 1 ]]
@@ -1410,7 +1410,7 @@ setMethod("as_wgcData", signature = c(x = "EList"),
 setGeneric("as_wgcTrait", 
   function(x) standardGeneric("as_wgcTrait"))
 
-setMethod("as_wgcTrait", signature = c(x = "elist"),
+setMethod_traceable("as_wgcTrait", signature = c(x = "elist"),
   function(x){
     data <- dplyr::select_if(x$targets, is.numeric)
     data <- data.frame(data)
@@ -1421,7 +1421,7 @@ setMethod("as_wgcTrait", signature = c(x = "elist"),
 setGeneric("exclude", 
   function(x, y) standardGeneric("exclude"))
 
-setMethod("exclude", signature = c(x = "wgcData"),
+setMethod_traceable("exclude", signature = c(x = "wgcData"),
   function(x, y){
     .wgcData(x[y, ])
   })
@@ -1429,7 +1429,7 @@ setMethod("exclude", signature = c(x = "wgcData"),
 setGeneric("draw_sampletree", 
   function(x) standardGeneric("draw_sampletree"))
 
-setMethod("draw_sampletree", signature = c(x = "wgcData"),
+setMethod_traceable("draw_sampletree", signature = c(x = "wgcData"),
   function(x){
     x <- hclust(dist(x), method = "average")
     plot(x, main = "Sample clustering", sub = "", xlab = "", cex = .7)
@@ -1636,23 +1636,23 @@ wrap <- function(data, width = 10, height = 8, showtext = NULL,
   representation = representation(data = "ANY", width = "ANY", height = "ANY", showtext = "logical"),
   prototype = prototype(showtext = FALSE))
 
-setMethod("[[", signature = c(x = "wrap"),
+setMethod_traceable("[[", signature = c(x = "wrap"),
   function(x, i, ...){
     attr(x, i)
   })
 
-setMethod("[[<-", signature = c(x = "wrap"),
+setMethod_traceable("[[<-", signature = c(x = "wrap"),
   function(x, i, ..., value){
     attr(x, i) <- value
     return(x)
   })
 
-setMethod("$", signature = c(x = "wrap"),
+setMethod_traceable("$", signature = c(x = "wrap"),
   function(x, name){
     x[[ name ]]
   })
 
-setMethod("$<-", signature = c(x = "wrap"),
+setMethod_traceable("$<-", signature = c(x = "wrap"),
   function(x, name, value){
     x[[ name ]] <- value
     return(x)
@@ -1661,7 +1661,7 @@ setMethod("$<-", signature = c(x = "wrap"),
 setGeneric("zoom", 
   function(x, s.w, s.h, ...) standardGeneric("zoom"))
 
-setMethod("zoom", signature = c(x = "wrap"),
+setMethod_traceable("zoom", signature = c(x = "wrap"),
   function(x, s.w, s.h){
     x@width <- x@width * s.w
     x@height <- x@height * s.h
@@ -1672,7 +1672,7 @@ z7 <- function(x, s.w = .7, s.h = .7) {
   zoom(x, s.w, s.h)
 }
 
-setMethod("show", signature = c(object = "wrap"),
+setMethod_traceable("show", signature = c(object = "wrap"),
   function(object){
     setdev(width = object@width, height = object@height)
     if (is(object@data, "grob.obj")) {
@@ -1712,7 +1712,7 @@ setGeneric("cal_corp",
     return(x)
   })
 
-setMethod("cal_corp", signature = c(x = "df", y = "df"),
+setMethod_traceable("cal_corp", signature = c(x = "df", y = "df"),
   function(x, y, row_var = "row_var", col_var = "col_var",
     trans = FALSE, fast = TRUE, method = "pearson", ...)
   {
@@ -1759,7 +1759,7 @@ setMethod("cal_corp", signature = c(x = "df", y = "df"),
     }
   })
 
-setMethod("new_heatdata", signature = c(x = "df"),
+setMethod_traceable("new_heatdata", signature = c(x = "df"),
   function(x){
     if (is.character(x[[1]])) {
       x <- data.frame(x)
@@ -1770,7 +1770,7 @@ setMethod("new_heatdata", signature = c(x = "df"),
     new_heatdata(x)
   })
 
-setMethod("new_heatdata", signature = c(x = "data_long"),
+setMethod_traceable("new_heatdata", signature = c(x = "data_long"),
   function(x){
     object <- .heatdata()
     object@data_long <- tibble::as_tibble(x)
@@ -1782,7 +1782,7 @@ setMethod("new_heatdata", signature = c(x = "data_long"),
     object
   })
 
-setMethod("new_heatdata", signature = c(x = "corp"),
+setMethod_traceable("new_heatdata", signature = c(x = "corp"),
   function(x){
     object <- .heatdata_cor()
     object@data_long <- tibble::as_tibble(x)
@@ -1793,14 +1793,14 @@ setMethod("new_heatdata", signature = c(x = "corp"),
     object
   })
 
-setMethod("as_data_long", signature = c(x = "df"),
+setMethod_traceable("as_data_long", signature = c(x = "df"),
   function(x, row_var = "rname", col_var = "cname", x_value = "value"){
     x <- dplyr::mutate(tibble::as_tibble(x), !!!nl(row_var, list(rownames(x))))
     x <- tidyr::gather(x, !!col_var, !!x_value, -!!rlang::sym(row_var))
     .data_long(x)
   })
 
-setMethod("as_data_long", signature = c(x = "df", y = "df"),
+setMethod_traceable("as_data_long", signature = c(x = "df", y = "df"),
   function(x, y, row_var = "rname", col_var = "cname", 
     x_value = "x_value", y_value = "y_value")
   {
@@ -1814,7 +1814,7 @@ setMethod("as_data_long", signature = c(x = "df", y = "df"),
 setGeneric("add_anno",
   function(x, ...) standardGeneric("add_anno"))
 
-setMethod("add_anno", signature = c(x = "corp"),
+setMethod_traceable("add_anno", signature = c(x = "corp"),
   function(x){
     min <- min(x$pvalue[x$pvalue != 0], na.rm = TRUE)
     dplyr::mutate(tibble::as_tibble(data.frame(x)),
@@ -1829,7 +1829,7 @@ setMethod("add_anno", signature = c(x = "corp"),
     )
   })
 
-setMethod("new_heatdata", signature = c(x = "wgcEigen", y = "wgcTrait"),
+setMethod_traceable("new_heatdata", signature = c(x = "wgcEigen", y = "wgcTrait"),
   function(x, y){
     cor <- e(WGCNA::cor(x, y, use = "p"))
     pvalue <- e(WGCNA::corPvalueStudent(cor, nrow(x)))
@@ -1842,7 +1842,7 @@ setMethod("new_heatdata", signature = c(x = "wgcEigen", y = "wgcTrait"),
     )
   })
 
-setMethod("draw", signature = c(x = "heatdata_gene_cor"),
+setMethod_traceable("draw", signature = c(x = "heatdata_gene_cor"),
   function(x){
     if (!is.null(x@gg_xgroup)) {
       x@gg_xgroup <- x@gg_xgroup +
@@ -1864,7 +1864,7 @@ get_eigens <- function(net) {
   .wgcEigen(eigens, colors = color_data, members = members)
 }
 
-setMethod("show", signature = c(object = "wgcNet"),
+setMethod_traceable("show", signature = c(object = "wgcNet"),
   function(object){
     setdev(width = 12, height = 9)
     mergedColors = e(WGCNA::labels2colors(object$colors))
@@ -1876,7 +1876,7 @@ setMethod("show", signature = c(object = "wgcNet"),
 setGeneric("clip_data", 
   function(x, by) standardGeneric("clip_data"))
 
-setMethod("clip_data", signature = c(x = "elist", by = "wgcData"),
+setMethod_traceable("clip_data", signature = c(x = "elist", by = "wgcData"),
   function(x, by){
     ## filter sample in Counts data
     validObject(x)
@@ -2485,7 +2485,7 @@ setGeneric("autor",
 ## As there was no way to modify the chunk label by `name` in
 ## codes.
 
-setMethod("autor", signature = c(x = "ANY", name = "missing"),
+setMethod_traceable("autor", signature = c(x = "ANY", name = "missing"),
   function(x, ..., shownote = TRUE)
   {
     if (is.null(knitr::pandoc_to())) {
@@ -2540,13 +2540,13 @@ setMethod("autor", signature = c(x = "ANY", name = "missing"),
     invisible()
   })
 
-setMethod("autor", signature = c(x = "feature_char", name = "missing"),
+setMethod_traceable("autor", signature = c(x = "feature_char", name = "missing"),
   function(x, ...){
     data <- setNames(tibble::tibble(as.character(x)), .nature(x@nature, TRUE))
     autor(data, ..., notshow = TRUE, shownote = FALSE)
   })
 
-setMethod("autor", signature = c(x = "feature_list", name = "missing"),
+setMethod_traceable("autor", signature = c(x = "feature_list", name = "missing"),
   function(x, ...){
     if (length(x) == 1 && is(x[[1]], "feature_list")) {
       name <- names(x)
@@ -2557,18 +2557,18 @@ setMethod("autor", signature = c(x = "feature_list", name = "missing"),
     autor(tibble::as_tibble(data), ..., notshow = TRUE, shownote = FALSE)
   })
 
-setMethod("autor", signature = c(x = "notshow", name = "missing"),
+setMethod_traceable("autor", signature = c(x = "notshow", name = "missing"),
   function(x, ...){
     autor(x@data, ..., notshow = TRUE, shownote = FALSE)
   })
 
-setMethod("autor", signature = c(x = "list", name = "character"),
+setMethod_traceable("autor", signature = c(x = "list", name = "character"),
   function(x, name, ...){
     file <- autosv(x, name, ...)
     autor(file, name)
   })
 
-setMethod("autor", signature = c(x = "can_not_be_draw", name = "character"),
+setMethod_traceable("autor", signature = c(x = "can_not_be_draw", name = "character"),
   function(x, name, ...){
     file <- autosv(x, name, ...)
     if (getOption("autor_legend_as_caption", TRUE)) {
@@ -2585,7 +2585,7 @@ setMethod("autor", signature = c(x = "can_not_be_draw", name = "character"),
 
 setClassUnion("can_be_draw", c("gg.obj", "heatdata", "grob.obj"))
 ## autor for ggplot
-setMethod("autor", signature = c(x = "can_be_draw", name = "character"),
+setMethod_traceable("autor", signature = c(x = "can_be_draw", name = "character"),
   function(x, name, ...){
     file <- autosv(x, name, ...)
     if (getOption("autor_legend_as_caption", TRUE)) {
@@ -2595,13 +2595,13 @@ setMethod("autor", signature = c(x = "can_be_draw", name = "character"),
     }
   })
 
-suppressMessages(setMethod("autor", signature = c(x = "layout_tbl_graph"),
+suppressMessages(setMethod_traceable("autor", signature = c(x = "layout_tbl_graph"),
   function(x, ...){
     autor(dplyr::as_tibble(x), ...)
   }))
 
 ## autor for data.frame
-setMethod("autor", signature = c(x = "df", name = "character"),
+setMethod_traceable("autor", signature = c(x = "df", name = "character"),
   function(x, name, ..., asis = getOption("autor_asis", TRUE)){
     if (needTex()) {
       cat("\\begin{center}\\vspace{1.5cm}\\pgfornament[anchor=center,ydelta=0pt,width=9cm]{89}\\end{center}")
@@ -2634,7 +2634,7 @@ setMethod("autor", signature = c(x = "df", name = "character"),
   })
 
 ## autor for figures of file
-setMethod("autor", signature = c(x = "fig", name = "character"),
+setMethod_traceable("autor", signature = c(x = "fig", name = "character"),
   function(x, name, ..., asis = getOption("autor_asis", TRUE)){
     if (needTex()) {
       cat("\\begin{center}\\vspace{1.5cm}\\pgfornament[anchor=center,ydelta=0pt,width=9cm]{88}\\end{center}")
@@ -2658,7 +2658,7 @@ setMethod("autor", signature = c(x = "fig", name = "character"),
     }
   })
 
-setMethod("autor", signature = c(x = "files", name = "character"),
+setMethod_traceable("autor", signature = c(x = "files", name = "character"),
   function(x, name, ..., asis = getOption("autor_asis", FALSE)){
     file <- autosv(x, name, ...)
     if (needTex()) {
@@ -2672,14 +2672,14 @@ setMethod("autor", signature = c(x = "files", name = "character"),
     }
   })
 
-setMethod("autor", signature = c(x = "lich", name = "character"),
+setMethod_traceable("autor", signature = c(x = "lich", name = "character"),
   function(x, name, ...){
     abstract(x, name, ...)
     file <- autosv(x, name <- paste0(name, "-content"))
     locate_file(name, "见")
   })
 
-setMethod("autor", signature = c(x = "character", name = "character"),
+setMethod_traceable("autor", signature = c(x = "character", name = "character"),
   function(x, name, ...){
     if (length(x) > 1)
       stop("length(x) == 1")
@@ -2705,7 +2705,7 @@ setGeneric("include",
   function(x, name, ...) standardGeneric("include"))
 
 ## include for fig
-setMethod("include", signature = c(x = "fig"),
+setMethod_traceable("include", signature = c(x = "fig"),
   function(x, name, caption = NULL, notshow = FALSE, ...){
     if (notshow) {
       return(invisible())
@@ -2725,7 +2725,7 @@ setMethod("include", signature = c(x = "fig"),
     }
   })
 
-setMethod("include", signature = c(x = "df"),
+setMethod_traceable("include", signature = c(x = "df"),
   function(x, name, caption = NULL, footer = NULL, notshow = FALSE, ...){
     if (notshow) {
       return(invisible())
@@ -2815,7 +2815,7 @@ asis <- function(object) {
 setGeneric("select_savefun", 
   function(x, ...) standardGeneric("select_savefun"))
 
-setMethod("select_savefun", signature = c(x = "list"),
+setMethod_traceable("select_savefun", signature = c(x = "list"),
   function(x, ...){
     fun <- function(x, class) {
       vapply(x, function(obj) is(obj, class), logical(1))
@@ -2837,14 +2837,14 @@ setMethod("select_savefun", signature = c(x = "list"),
     }
   })
 
-setMethod("select_savefun", signature = c(x = "notshow"),
+setMethod_traceable("select_savefun", signature = c(x = "notshow"),
   function(x){
     function(x, ...) {
       select_savefun(x@data)(x@data, ...)
     }
   })
 
-setMethod("select_savefun", signature = c(x = "feature_char"),
+setMethod_traceable("select_savefun", signature = c(x = "feature_char"),
   function(x){
     function(x, ...) {
       data <- setNames(tibble::tibble(as.character(x)), .nature(x@nature, TRUE))
@@ -2852,7 +2852,7 @@ setMethod("select_savefun", signature = c(x = "feature_char"),
     }
   })
 
-setMethod("select_savefun", signature = c(x = "feature_list"),
+setMethod_traceable("select_savefun", signature = c(x = "feature_list"),
   function(x){
     function(x, ...) {
       lst <- setNames(x@.Data, names(x))
@@ -2862,12 +2862,12 @@ setMethod("select_savefun", signature = c(x = "feature_list"),
     }
   })
 
-setMethod("select_savefun", signature = c(x = "data_binary"),
+setMethod_traceable("select_savefun", signature = c(x = "data_binary"),
   function(x){
     get_fun(".write_data_binary")
   })
 
-setMethod("select_savefun", signature = c(x = "can_not_be_draw"),
+setMethod_traceable("select_savefun", signature = c(x = "can_not_be_draw"),
   function(x){
     # if (is(x, "wrap") && is(x@data, "funPlot")) {
     #   if (any(.type_must_record_then_write == environmentName(environment(x@data@fun)))) {
@@ -2878,29 +2878,29 @@ setMethod("select_savefun", signature = c(x = "can_not_be_draw"),
   })
 
 ## select_savefun for ggplot
-setMethod("select_savefun", signature = c(x = "gg.obj"),
+setMethod_traceable("select_savefun", signature = c(x = "gg.obj"),
   function(x){
     get_fun("write_gg")
   })
 
-setMethod("select_savefun", signature = c(x = "heatdata"),
+setMethod_traceable("select_savefun", signature = c(x = "heatdata"),
   function(x){
     function(x, ...) {
       write_gg(draw(x), ...)
     }
   })
 
-setMethod("select_savefun", signature = c(x = "character"),
+setMethod_traceable("select_savefun", signature = c(x = "character"),
   function(x){
     get_fun("write_character")
   })
 
-setMethod("select_savefun", signature = c(x = "grob.obj"),
+setMethod_traceable("select_savefun", signature = c(x = "grob.obj"),
   function(x){
     get_fun("write_grob")
   })
 
-setMethod("select_savefun", signature = c(x = "df"),
+setMethod_traceable("select_savefun", signature = c(x = "df"),
   function(x){
     get_fun("fwrite2")
     # if (!is(x, "data.frame")) {
@@ -2929,7 +2929,7 @@ setGeneric("abstract",
     standardGeneric("abstract")
   })
 
-setMethod("abstract", signature = c(x = "ANY", name = "character", latex = "missing"),
+setMethod_traceable("abstract", signature = c(x = "ANY", name = "character", latex = "missing"),
   function(x, name, ...){
     restype <- knitr::opts_current$get("results")
     if (is.null(restype)) {
@@ -2945,7 +2945,7 @@ setMethod("abstract", signature = c(x = "ANY", name = "character", latex = "miss
     reCallMethod("abstract", namel(x, name, latex), ...)
   })
 
-setMethod("abstract", signature = c(x = "df", name = "character", latex = "NULL"),
+setMethod_traceable("abstract", signature = c(x = "df", name = "character", latex = "NULL"),
   function(x, name, latex, ..., key = 1, abs = NULL, summary = TRUE, sum.ex = NULL){
     x <- tibble::as_tibble(x)
     if (!is.null(abs))
@@ -2953,7 +2953,7 @@ setMethod("abstract", signature = c(x = "df", name = "character", latex = "NULL"
     locate_file(name)
   })
 
-setMethod("abstract", signature = c(x = "character", name = "character", latex = "NULL"),
+setMethod_traceable("abstract", signature = c(x = "character", name = "character", latex = "NULL"),
   function(x, name, latex, ...)
   {
     note <- glue::glue("注：{x}")
@@ -2974,7 +2974,7 @@ setMethod("abstract", signature = c(x = "character", name = "character", latex =
 )
 
 ## abstract for table
-setMethod("abstract", signature = c(x = "df", name = "character", latex = "logical"),
+setMethod_traceable("abstract", signature = c(x = "df", name = "character", latex = "logical"),
   function(x, name, latex, ..., key = 1, abs = NULL, summary = TRUE, sum.ex = NULL){
     x <- tibble::as_tibble(x)
     cat("Table \\@ref(tab:", name, ")", " (下方表格) ",
@@ -3003,7 +3003,7 @@ setMethod("abstract", signature = c(x = "df", name = "character", latex = "logic
 }
 
 ## abstract for figure of file
-setMethod("abstract", signature = c(x = "fig", name = "character", latex = "logical"),
+setMethod_traceable("abstract", signature = c(x = "fig", name = "character", latex = "logical"),
   function(x, name, latex, ..., abs = NULL){
     cat("Figure \\@ref(fig:", name, ")", " (下方图) ",
       "为图", gsub("-", " ", name), "概览。\n", sep = "")
@@ -3012,14 +3012,14 @@ setMethod("abstract", signature = c(x = "fig", name = "character", latex = "logi
     locate_file(name)
   })
 
-setMethod("abstract", signature = c(x = "fig", name = "character", latex = "NULL"),
+setMethod_traceable("abstract", signature = c(x = "fig", name = "character", latex = "NULL"),
   function(x, name, latex, ..., abs = NULL){
     if (!is.null(abs))
       cat(abs, "\n")
     locate_file(name)
   })
 
-setMethod("abstract", signature = c(x = "lich", name = "character", latex = "NULL"),
+setMethod_traceable("abstract", signature = c(x = "lich", name = "character", latex = "NULL"),
   function(x, name, latex, ..., abs = NULL){
     if (!getOption("autor_show_lich", FALSE)) {
       return("")
@@ -3042,7 +3042,7 @@ setMethod("abstract", signature = c(x = "lich", name = "character", latex = "NUL
   })
 
 
-setMethod("abstract", signature = c(x = "lich", name = "character", latex = "logical"),
+setMethod_traceable("abstract", signature = c(x = "lich", name = "character", latex = "logical"),
   function(x, name, latex, ..., abs = NULL){
     if (length(x) > 5) {
       x <- head(x, n = 5)
@@ -3060,7 +3060,7 @@ setMethod("abstract", signature = c(x = "lich", name = "character", latex = "log
     cat(text_roundrect(paste0(unlist(str), collapse = "\n")))
   })
 
-setMethod("abstract", signature = c(x = "files", name = "character", latex = "NULL"),
+setMethod_traceable("abstract", signature = c(x = "files", name = "character", latex = "NULL"),
   function(x, name, latex, ..., abs = NULL, sum.ex = NULL){
     writeLines(
       text_roundrect(sumDir(autoRegisters[[ name ]], sum.ex), ...)
@@ -3069,7 +3069,7 @@ setMethod("abstract", signature = c(x = "files", name = "character", latex = "NU
   })
 
 
-setMethod("abstract", signature = c(x = "files", name = "character", latex = "logical"),
+setMethod_traceable("abstract", signature = c(x = "files", name = "character", latex = "logical"),
   function(x, name, latex, ..., abs = NULL, sum.ex = NULL){
     if (dir.exists(x)) {
       cat(abs, "\n")
@@ -3194,7 +3194,7 @@ text_roundrect <- function(str, type = NULL, collapse = "\n") {
 setGeneric("mutate", 
   function(x, ...) standardGeneric("mutate"))
 
-setMethod("mutate", signature = c(x = "df"),
+setMethod_traceable("mutate", signature = c(x = "df"),
   function(x, ...){
     dplyr::mutate(x, ...)
   })
@@ -3202,7 +3202,7 @@ setMethod("mutate", signature = c(x = "df"),
 setGeneric("filter", 
   function(x, ...) standardGeneric("filter"))
 
-setMethod("filter", signature = c(x = "df"),
+setMethod_traceable("filter", signature = c(x = "df"),
   function(x, ...){
     dplyr::filter(x, ...)
   })
@@ -3210,7 +3210,7 @@ setMethod("filter", signature = c(x = "df"),
 setGeneric("arrange", 
   function(x, ...) standardGeneric("arrange"))
 
-setMethod("arrange", signature = c(x = "df"),
+setMethod_traceable("arrange", signature = c(x = "df"),
   function(x, ...){
     dplyr::arrange(x, ...)
   })
@@ -3218,7 +3218,7 @@ setMethod("arrange", signature = c(x = "df"),
 setGeneric("distinct", 
   function(x, ...) standardGeneric("distinct"))
 
-setMethod("distinct", signature = c(x = "df"),
+setMethod_traceable("distinct", signature = c(x = "df"),
   function(x, ...){
     dplyr::distinct(x, ...)
   })
@@ -3226,7 +3226,7 @@ setMethod("distinct", signature = c(x = "df"),
 setGeneric("select", 
   function(x, ...) standardGeneric("select"))
 
-setMethod("select", signature = c(x = "df"),
+setMethod_traceable("select", signature = c(x = "df"),
   function(x, ...){
     dplyr::select(x, ...)
   })
@@ -3234,7 +3234,7 @@ setMethod("select", signature = c(x = "df"),
 setGeneric("rename", 
   function(x, ...) standardGeneric("rename"))
 
-setMethod("rename", signature = c(x = "df"),
+setMethod_traceable("rename", signature = c(x = "df"),
   function(x, ...){
     dplyr::rename(x, ...)
   })
@@ -3242,7 +3242,7 @@ setMethod("rename", signature = c(x = "df"),
 setGeneric("relocate", 
   function(x, ...) standardGeneric("relocate"))
 
-setMethod("relocate", signature = c(x = "df"),
+setMethod_traceable("relocate", signature = c(x = "df"),
   function(x, ...){
     dplyr::relocate(x, ...)
   })
@@ -3250,7 +3250,7 @@ setMethod("relocate", signature = c(x = "df"),
 setGeneric("slice", 
   function(x, ...) standardGeneric("slice"))
 
-setMethod("slice", signature = c(x = "df"),
+setMethod_traceable("slice", signature = c(x = "df"),
   function(x, ...){
     dplyr::slice(x, ...)
   })
@@ -3260,7 +3260,7 @@ setMethod("slice", signature = c(x = "df"),
 #     "slice_min", "group_by"),
 #   function(name) {
 #     setGeneric(name, function(DF_object, ...) DF_object)
-#     setMethod(name, signature = c(DF_object = "df"),
+#     setMethod_traceable(name, signature = c(DF_object = "df"),
 #       function(DF_object, ..., fun_name = name){
 #         fun <- get_fun(fun_name, asNamespace("dplyr"))
 #         if (!is(DF_object, "tbl_df")) {
@@ -3274,7 +3274,7 @@ setMethod("slice", signature = c(x = "df"),
 setGeneric("as_tibble", 
   function(x, ...) standardGeneric("as_tibble"))
 
-setMethod("as_tibble", signature = c(x = "df"),
+setMethod_traceable("as_tibble", signature = c(x = "df"),
   function(x, ..., idcol = NULL){
     rownames <- rownames(x)
     x <- tibble::as_tibble(x, ...)
@@ -3413,7 +3413,7 @@ get_from_env <- function (weight, data = list(), env = parent.frame(1)){
   representation = representation(params = "list"),
   prototype = NULL)
 
-setMethod("show", signature = c(object = "upset_data"),
+setMethod_traceable("show", signature = c(object = "upset_data"),
   function(object){
     data <- suppressWarnings(data.frame(as_tibble(object)))
     if (!is.null(object@params$trunc))

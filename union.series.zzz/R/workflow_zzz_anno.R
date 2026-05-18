@@ -24,7 +24,7 @@ assist_anno <- function(file_md = "index.Rmd") {
   return(x)
 }
 
-setMethod("step1", signature = c(x = "assist_anno"),
+setMethod_traceable("step1", signature = c(x = "assist_anno"),
   function(x, get = NULL, target = "# 附：分析流程 {#workflow}", result = "# 分析结果 {#results}")
   {
     step_message("Obtain document title.", show_end = "Assistant annotation")
@@ -46,7 +46,7 @@ setMethod("step1", signature = c(x = "assist_anno"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "assist_anno"),
+setMethod_traceable("step2", signature = c(x = "assist_anno"),
   function(x, anno = get_clipboard(), target = TRUE, result = TRUE)
   {
     step_message("Embedded AI annotation text.")

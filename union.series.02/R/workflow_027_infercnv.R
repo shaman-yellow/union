@@ -20,7 +20,7 @@
 setGeneric("asjob_infercnv",
   function(x, ...) standardGeneric("asjob_infercnv"))
 
-setMethod("asjob_infercnv", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_infercnv", signature = c(x = "job_seurat"),
   function(x, ref, groups = NULL, ..., recluster = TRUE, subset = "seurat_clusters",
     group.by = x$group.by, outdir = create_job_cache_dir(x, "infercnv"))
   {
@@ -118,14 +118,14 @@ setMethod("asjob_infercnv", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_infercnv"),
+setMethod_traceable("step0", signature = c(x = "job_infercnv"),
   function(x){
     step_message("Prepare your data with function `asjob_infercnv`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_infercnv"),
+setMethod_traceable("step1", signature = c(x = "job_infercnv"),
   function(x, workers = 4, cutoff = .1, hmm = FALSE, ...)
   {
     step_message("Run inferCNV.")
@@ -162,7 +162,7 @@ setMethod("step1", signature = c(x = "job_infercnv"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_infercnv"),
+setMethod_traceable("step2", signature = c(x = "job_infercnv"),
   function(x){
     step_message("Got results.")
     if (is.remote(x)) {
@@ -185,7 +185,7 @@ setMethod("step2", signature = c(x = "job_infercnv"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_infercnv"),
+setMethod_traceable("step3", signature = c(x = "job_infercnv"),
   function(x, k = 10, clear = FALSE)
   {
     step_message("Kmean and scoring CNV...")
@@ -246,7 +246,7 @@ setMethod("step3", signature = c(x = "job_infercnv"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_infercnv"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_infercnv"),
   function(x, ref, from = x$group.by, to = "infercnv_cell"){
     if (ref@step < 3) {
       stop('ref@step < 3.')
@@ -390,7 +390,7 @@ kmeanMiniBatch <- function(mtx, k = 10, batch = 100, force = FALSE, ...) {
   "正常细胞的表达值绘制在顶部热图中，肿瘤细胞的表达值绘制在底部热图中，基因在染色体上从左到右排列。正常细胞表达数据实际上从肿瘤细胞表达数据中减去，从而得出差异，其中染色体区域扩增显示为红色块，染色体区域缺失显示为蓝色块。参考<https://github.com/broadinstitute/inferCNV/wiki/Interpreting-the-figure>"
 }
 
-setMethod("set_remote", signature = c(x = "job_infercnv"),
+setMethod_traceable("set_remote", signature = c(x = "job_infercnv"),
   function(x, wd = glue::glue("~/infercnv_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

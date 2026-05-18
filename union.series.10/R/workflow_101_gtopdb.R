@@ -29,12 +29,12 @@ job_gtopdb <- function(dir_save = .prefix("gtopdb", "db"))
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_gtopdb"),
+setMethod_traceable("step0", signature = c(x = "job_gtopdb"),
   function(x){
     step_message("Prepare your data with function `job_gtopdb`.")
   })
 
-setMethod("step1", signature = c(x = "job_gtopdb"),
+setMethod_traceable("step1", signature = c(x = "job_gtopdb"),
   function(x, mode = c("ic")){
     step_message("Filter ...")
     mode <- match.arg(mode)

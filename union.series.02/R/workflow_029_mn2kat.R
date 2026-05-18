@@ -14,7 +14,7 @@
     info = c("Tutorial: ...")
     ))
 
-setMethod("do_monocle", signature = c(x = "job_seurat", ref = "job_kat"),
+setMethod_traceable("do_monocle", signature = c(x = "job_seurat", ref = "job_kat"),
   function(x, ref, dims = 1:15, resolution = 1.2){
     x <- getsub(x, cells = grp(x@object@meta.data$scsa_copykat, "Cancer"))
     x@step <- 2L
@@ -28,14 +28,14 @@ setMethod("do_monocle", signature = c(x = "job_seurat", ref = "job_kat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_mn2kat"),
+setMethod_traceable("step0", signature = c(x = "job_mn2kat"),
   function(x){
     step_message("Prepare your data with function `job_mn2kat`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_mn2kat"),
+setMethod_traceable("step1", signature = c(x = "job_mn2kat"),
   function(x, ...){
     x <- callNextMethod(x, ...)
     p.cancer_position <- suppressMessages(map(x$sr_cancer, x$kat, cutree = TRUE))
@@ -43,17 +43,17 @@ setMethod("step1", signature = c(x = "job_mn2kat"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_mn2kat"),
+setMethod_traceable("map", signature = c(x = "job_mn2kat"),
   function(x, cutree){
     map(x$sr_cancer, x$kat, cutree = cutree)
   })
 
-setMethod("vis", signature = c(x = "job_mn2kat"),
+setMethod_traceable("vis", signature = c(x = "job_mn2kat"),
   function(x, group.by = "seurat_clusters"){
     vis(x$sr_cancer, "seurat_clusters")
   })
 
-setMethod("asjob_seurat", signature = c(x = "job_mn2kat"),
+setMethod_traceable("asjob_seurat", signature = c(x = "job_mn2kat"),
   function(x, k, rename = NULL){
     x <- regroup(x$sr_cancer, x$cellClass_tree.gene_module, k, rename = rename)
     show(vis(x, "regroup.hclust", 1.5))

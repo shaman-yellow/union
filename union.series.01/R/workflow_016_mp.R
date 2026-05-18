@@ -21,7 +21,7 @@
 setGeneric("asjob_mp",
   function(x, ...) standardGeneric("asjob_mp"))
 
-setMethod("asjob_mp", signature = c(x = "job_qiime"),
+setMethod_traceable("asjob_mp", signature = c(x = "job_qiime"),
   function(x){
     if (x@step < 6L) {
       stop("x@step < 6L")
@@ -33,14 +33,14 @@ setMethod("asjob_mp", signature = c(x = "job_qiime"),
     .job_mp(object = object)
   })
 
-setMethod("step0", signature = c(x = "job_mp"),
+setMethod_traceable("step0", signature = c(x = "job_mp"),
   function(x){
     step_message("Prepare your data with function `asjob_mp`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_mp"),
+setMethod_traceable("step1", signature = c(x = "job_mp"),
   function(x, group = "group"){
     step_message("Alpha diversity analysis.
       "
@@ -99,7 +99,7 @@ setMethod("step1", signature = c(x = "job_mp"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_mp"),
+setMethod_traceable("step2", signature = c(x = "job_mp"),
   function(x){
     step_message("The visualization of taxonomy abundance")
     if (is.null(x@params$ontology))
@@ -148,7 +148,7 @@ setMethod("step2", signature = c(x = "job_mp"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mp"),
+setMethod_traceable("step3", signature = c(x = "job_mp"),
   function(x){
     step_message("Beta diversity analysis.")
     if (relative(x)) {
@@ -224,7 +224,7 @@ setMethod("step3", signature = c(x = "job_mp"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_mp"),
+setMethod_traceable("step4", signature = c(x = "job_mp"),
   function(x, legend.color = FALSE)
   {
     step_message("Biomarker discovery.")
@@ -313,7 +313,7 @@ setMethod("step4", signature = c(x = "job_mp"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_mp"),
+setMethod_traceable("step5", signature = c(x = "job_mp"),
   function(x, match,
     use = c("pvalue", "fdr"), cutoff = .05, classes = c("Species", "Genus", "Family"))
   {
@@ -363,7 +363,7 @@ setMethod("step5", signature = c(x = "job_mp"),
     return(x)
   })
 
-setMethod("pattern", signature = c(x = "job_mp"),
+setMethod_traceable("pattern", signature = c(x = "job_mp"),
   function(x, use = c("pvalue", "fdr"), cutoff = .05, not = c("GB", "^un$", "^bacterium$"))
   {
     if (x@step < 4L) {
@@ -403,7 +403,7 @@ matchThats <- function(x, patterns, ignore.case = TRUE) {
   }
 }
 
-setMethod("relative", signature = c(x = "job_mp"),
+setMethod_traceable("relative", signature = c(x = "job_mp"),
   function(x){
     if (is.null(x$relative)) {
       FALSE

@@ -23,12 +23,12 @@ job_xcms <- function()
   .job_xcms()
 }
 
-setMethod("step0", signature = c(x = "job_xcms"),
+setMethod_traceable("step0", signature = c(x = "job_xcms"),
   function(x){
     step_message("Prepare your data with function `job_xcms`.")
   })
 
-setMethod("step1", signature = c(x = "job_xcms"),
+setMethod_traceable("step1", signature = c(x = "job_xcms"),
   function(x){
     step_message("LC-MS run.")
     if (nrow(x$metadata) < 2) {
@@ -39,7 +39,7 @@ setMethod("step1", signature = c(x = "job_xcms"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_xcms"),
+setMethod_traceable("step2", signature = c(x = "job_xcms"),
   function(x, savepath = timeName(x$ion))
   {
     step_message("Output the mgf file.")
@@ -54,7 +54,7 @@ setMethod("step2", signature = c(x = "job_xcms"),
 setGeneric("asjob_xcms",
   function(x, ...) standardGeneric("asjob_xcms"))
 
-setMethod("asjob_xcms", signature = c(x = "job_msconvert"),
+setMethod_traceable("asjob_xcms", signature = c(x = "job_msconvert"),
   function(x, snthresh = 5, noise = 50000, peakwidth = c(3, 30),
     ppm = 20, minFraction = 0.1)
   {

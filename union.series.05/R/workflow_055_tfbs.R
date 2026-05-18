@@ -23,12 +23,12 @@ job_tfbs <- function(genes)
   .job_tfbs(object = rm.no(genes))
 }
 
-setMethod("step0", signature = c(x = "job_tfbs"),
+setMethod_traceable("step0", signature = c(x = "job_tfbs"),
   function(x){
     step_message("Prepare your data with function `job_tfbs`.")
   })
 
-setMethod("step1", signature = c(x = "job_tfbs"),
+setMethod_traceable("step1", signature = c(x = "job_tfbs"),
   function(x, db = .prefix("tfbs/tfbs.rds", "db"), db_anno = .prefix("tfbs/anno.rds", "db"),
     file_anno = .prefix("tfbs/humanTFMotifEntrezMappings.xlsx", "db"), cl = NULL)
   {
@@ -110,7 +110,7 @@ setMethod("step1", signature = c(x = "job_tfbs"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_tfbs", ref = "feature"),
+setMethod_traceable("map", signature = c(x = "job_tfbs", ref = "feature"),
   function(x, ref, region = FALSE, name = "TF", shifts = c(500, 1000, 5000), details = TRUE)
   {
     data <- x@tables$step1$res
@@ -379,7 +379,7 @@ plot_region <- function(data, chr, genome = c("hg37", "hg38", "mm10", "rn6"),
 }
 
 
-setMethod("map", signature = c(x = "job_tfbs", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_tfbs", ref = "character"),
   function(x, ref, mode = c("allu", "shiny"), axes = 1:3, ...)
   {
     mode <- match.arg(mode)

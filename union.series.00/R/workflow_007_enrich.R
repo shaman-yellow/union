@@ -21,7 +21,7 @@
 setGeneric("asjob_enrich",
   function(x, ...) standardGeneric("asjob_enrich"))
 
-setMethod("asjob_enrich", signature = c(x = "feature"),
+setMethod_traceable("asjob_enrich", signature = c(x = "feature"),
   function(x, unlist = TRUE, ...){
     names <- names(x)
     x <- resolve_feature_snapAdd_onExit("x", x)
@@ -76,7 +76,7 @@ job_enrich <- function(ids, annotation, from = "hgnc_symbol", to = "entrezgene_i
   en
 }
 
-setMethod("step0", signature = c(x = "job_enrich"),
+setMethod_traceable("step0", signature = c(x = "job_enrich"),
   function(x){
     step_message("Prepare your data with function `job_enrich`.
       "
@@ -84,7 +84,7 @@ setMethod("step0", signature = c(x = "job_enrich"),
   })
 
 # Biological Process, Molecular Function, and Cellular Component groups
-setMethod("step1", signature = c(x = "job_enrich"),
+setMethod_traceable("step1", signature = c(x = "job_enrich"),
   function(x, organism = c("hsa", "mmu", "rno"),
     orgDb = switch(organism,
       hsa = "org.Hs.eg.db", mmu = "org.Mm.eg.db", rno = "org.Rn.eg.db"),
@@ -214,7 +214,7 @@ setMethod("step1", signature = c(x = "job_enrich"),
   }
 }
 
-setMethod("step2", signature = c(x = "job_enrich"),
+setMethod_traceable("step2", signature = c(x = "job_enrich"),
   function(x, pathways, which.lst = 1, species = x$organism,
     name = paste0("pathview", gs(Sys.time(), " |:", "_")),
     search = "pathview",
@@ -224,7 +224,7 @@ setMethod("step2", signature = c(x = "job_enrich"),
     return(x)
   })
 
-setMethod("res", signature = c(x = "job_enrich", ref = "character"),
+setMethod_traceable("res", signature = c(x = "job_enrich", ref = "character"),
   function(x, ref = c("id", "des", "cate", "sub", "p", "adj"),
     which = 1, key = 1, from = c("kegg", "go"))
   {
@@ -238,7 +238,7 @@ setMethod("res", signature = c(x = "job_enrich", ref = "character"),
     data[[ type ]][ which ]
   })
 
-setMethod("asjob_enrich", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_enrich", signature = c(x = "job_seurat"),
   function(x, exclude.pattern = NULL, exclude.use = NULL,
     ignore.case = TRUE, marker.list = x@params$contrasts, geneType = "hgnc_symbol")
   {
@@ -270,7 +270,7 @@ setMethod("asjob_enrich", signature = c(x = "job_seurat"),
     job_enrich(ids, anno)
   })
 
-setMethod("focus", signature = c(x = "job_enrich"),
+setMethod_traceable("focus", signature = c(x = "job_enrich"),
   function(x, symbols, data = x@tables$step1$res.kegg[[1]])
   {
     if (x@step < 1L) {
@@ -562,7 +562,7 @@ plot_go_polor <- function(data,
   p
 }
 
-setMethod("map", signature = c(x = "job_enrich", ref = "job_enrich"),
+setMethod_traceable("map", signature = c(x = "job_enrich", ref = "job_enrich"),
   function(x, ref, use = c("kegg", "go"), key = 1, cutoff = .05, use.cutoff = c("p.adjust", "pvalue"))
   {
     message("Find intersection pathways across two 'job_enrich'")

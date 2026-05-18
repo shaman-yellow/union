@@ -16,7 +16,7 @@
 setGeneric("asjob_monocle2",
   function(x, ...) standardGeneric("asjob_monocle2"))
 
-setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_monocle2", signature = c(x = "job_seurat"),
   function(x, compare = .guess_levels_from_job_seurat(x),
     compare.by = "group", group.by = x$group.by, nfeatures = 1000)
   {
@@ -86,12 +86,12 @@ setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_monocle2"),
+setMethod_traceable("step0", signature = c(x = "job_monocle2"),
   function(x){
     step_message("Prepare your data with function `job_monocle2`.")
   })
 
-setMethod("step1", signature = c(x = "job_monocle2"),
+setMethod_traceable("step1", signature = c(x = "job_monocle2"),
   function(x){
     step_message("Detect features.")
     object(x) <- e(BiocGenerics::estimateSizeFactors(object(x)))
@@ -101,7 +101,7 @@ setMethod("step1", signature = c(x = "job_monocle2"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_monocle2"),
+setMethod_traceable("step2", signature = c(x = "job_monocle2"),
   function(x, mode = c("diff", "var"), top = 300,
     try_sig = TRUE, cut.fc = .5, use.p = c("p_val"), 
     group = "group")
@@ -151,7 +151,7 @@ setMethod("step2", signature = c(x = "job_monocle2"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_monocle2"),
+setMethod_traceable("step3", signature = c(x = "job_monocle2"),
   function(x, use = c("Pseudotime", "State", x$group.by), 
     extra = "group", root = NULL)
   {
@@ -197,7 +197,7 @@ setMethod("step3", signature = c(x = "job_monocle2"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_monocle2"),
+setMethod_traceable("step4", signature = c(x = "job_monocle2"),
   function(x, ref, use = x$use, recode = NULL, ...)
   {
     step_message("Plot genes in pseudotime.")
@@ -261,7 +261,7 @@ setMethod("step4", signature = c(x = "job_monocle2"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_monocle2"),
+setMethod_traceable("step5", signature = c(x = "job_monocle2"),
   function(x, point = NULL, list_branches = NULL,
     maxShow = 50, workers = 1, 
     rerun = FALSE, features = NULL)
@@ -374,7 +374,7 @@ setMethod("step5", signature = c(x = "job_monocle2"),
     return(x)
   })
 
-setMethod("mutate", signature = c(x = "job_monocle2"),
+setMethod_traceable("mutate", signature = c(x = "job_monocle2"),
   function(x, ...){
     object(x)@phenoData@data <- dplyr::mutate(object(x)@phenoData@data, ...)
     return(x)
@@ -387,7 +387,7 @@ setMethod("mutate", signature = c(x = "job_monocle2"),
 #   order(abs(sig_genes$fold_change), decreasing = TRUE)[1:300]
 # ]
 
-setMethod("set_remote", signature = c(x = "job_monocle2"),
+setMethod_traceable("set_remote", signature = c(x = "job_monocle2"),
   function(x, wd)
   {
     x$wd <- wd

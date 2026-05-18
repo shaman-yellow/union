@@ -39,7 +39,7 @@ job_seurat <- function(target = NULL, project = basename(sub("/$", "", target)),
   x
 }
 
-setMethod("step0", signature = c(x = "job_seurat"),
+setMethod_traceable("step0", signature = c(x = "job_seurat"),
   function(x){
     step_message("Prepare your data with function `job_seurat`. ",
       crayon::red("Required: Seurat v5. "),
@@ -50,7 +50,7 @@ setMethod("step0", signature = c(x = "job_seurat"),
     )
   })
 
-setMethod("step1", signature = c(x = "job_seurat"),
+setMethod_traceable("step1", signature = c(x = "job_seurat"),
   function(x){
     step_message("QC and selecting cells for further analysis.",
       "This do:",
@@ -73,7 +73,7 @@ setMethod("step1", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_seurat"),
+setMethod_traceable("step2", signature = c(x = "job_seurat"),
   function(x, min.features, max.features, max.percent.mt = 5, nfeatures = 2000,
     use = "nFeature_RNA", sct = FALSE, ndims = 20)
   {
@@ -120,7 +120,7 @@ setMethod("step2", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_seurat"),
+setMethod_traceable("step3", signature = c(x = "job_seurat"),
   function(x, dims = 1:15, resolution = 1.2, features = NULL, reset = FALSE,
     reduction = if (is.null(features)) "pca" else "features_pca", force = FALSE)
   {
@@ -154,7 +154,7 @@ setMethod("step3", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_seurat"),
+setMethod_traceable("step4", signature = c(x = "job_seurat"),
   function(x, use = "", use.level = c("label.main", "label.fine"))
   {
     if (use == "scAnno") {
@@ -205,7 +205,7 @@ setMethod("step4", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_seurat"),
+setMethod_traceable("step5", signature = c(x = "job_seurat"),
   function(x, workers = NULL, min.pct = .25, logfc.threshold = .25, 
     force = FALSE, topn = 5, assay = object(x)@active.assay, 
     test.use = "wilcox", dir_cache = "tmp")
@@ -320,7 +320,7 @@ setMethod("step5", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_seurat"),
+setMethod_traceable("step6", signature = c(x = "job_seurat"),
   function(x, tissue, ref.markers = NULL, show.markers = ref.markers,
     method = c("cellMarker", "gpt", "scsa"), forceCluster = NULL,
     # scsa
@@ -350,7 +350,7 @@ setMethod("step6", signature = c(x = "job_seurat"),
   }
 }
 
-setMethod("anno", signature = c(x = "job_seurat"),
+setMethod_traceable("anno", signature = c(x = "job_seurat"),
   function(x, tissue, ref.markers = NULL, show.markers = ref.markers,
     method = c("cellMarker", "gpt", "scsa"), forceCluster = NULL,
     # scsa
@@ -489,7 +489,7 @@ setMethod("anno", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step7", signature = c(x = "job_seurat"),
+setMethod_traceable("step7", signature = c(x = "job_seurat"),
   function(x, classifier, db = org.Hs.eg.db::org.Hs.eg.db){
     step_message("
       Use `garnett::classify_cells` to anntate cells.
@@ -510,7 +510,7 @@ as_type_group <- function(type, group) {
   gs(make.names(group), "[.]+", "_")
 }
 
-setMethod("diff", signature = c(x = "job_seurat"),
+setMethod_traceable("diff", signature = c(x = "job_seurat"),
   function(x, group.by, contrasts, name = "contrasts",
     cut.fc = .3, cut.p = .5, min.pct = .25, force = FALSE)
   {
@@ -628,7 +628,7 @@ try_contrast <- function(combn, patterns) {
     })
 }
 
-setMethod("map", signature = c(x = "job_seurat", ref = "marker_list"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "marker_list"),
   function(x, ref, p.adjust = .05, log2fc = 1, use_all = TRUE, prop = .6, print = TRUE){
     if (x@step < 5L)
       stop("x@step < 5L")
@@ -686,7 +686,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "marker_list"),
     return(x)
   })
 
-setMethod("ids", signature = c(x = "job_seurat"),
+setMethod_traceable("ids", signature = c(x = "job_seurat"),
   function(x, id = x@params$group.by, unique = TRUE){
     ids <- object(x)@meta.data[[ id ]]
     if (unique)
@@ -694,7 +694,7 @@ setMethod("ids", signature = c(x = "job_seurat"),
     ids
   })
 
-setMethod("clear", signature = c(x = "job_seurat"),
+setMethod_traceable("clear", signature = c(x = "job_seurat"),
   function(x, ..., name = rlang::expr_text(substitute(x, parent.frame(1)))){
     name <- eval(name)
     x$final_metadata <- as_tibble(object(x)@meta.data, idcol = "cell")
@@ -755,7 +755,7 @@ pretty_elbowplot <- function(plot) {
   plot
 }
 
-setMethod("getsub", signature = c(x = "job_seurat"),
+setMethod_traceable("getsub", signature = c(x = "job_seurat"),
   function(x, ..., sample = 1L, group.by = x$group.by,
     sample_group.by = c("orig.ident", group.by))
   {
@@ -787,7 +787,7 @@ setMethod("getsub", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("active", signature = c(x = "job_seurat"),
+setMethod_traceable("active", signature = c(x = "job_seurat"),
   function(x, assay = "RNA"){
     object(x)@active.assay <- assay
     x
@@ -822,7 +822,7 @@ plot_qc.seurat <- function(x) {
     cols = color_set(TRUE), label = TRUE, ...))
 }
 
-setMethod("vis", signature = c(x = "job_seurat"),
+setMethod_traceable("vis", signature = c(x = "job_seurat"),
   function(x, group.by = x@params$group.by,
     pt.size = .7, mode = c("cell", "sample", "type"),
     palette = x$palette, reduction = "umap", type_pattern = "_[^_]+$",
@@ -863,7 +863,7 @@ setMethod("vis", signature = c(x = "job_seurat"),
     )
   })
 
-setMethod("focus", signature = c(x = "job_seurat"),
+setMethod_traceable("focus", signature = c(x = "job_seurat"),
   function(x, features, group.by = x@params$group.by, 
     name = "genes", recode = NULL, vln = TRUE, dim = TRUE, 
     dot = TRUE, cols = c("lightgrey", "blue"), facetTest = NULL,
@@ -1160,7 +1160,7 @@ wrap_scale_heatmap <- function(data, w = NULL, h = NULL, ...,
   )
 }
 
-setMethod("map", signature = c(x = "job_seurat", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "character"),
   function(x, ref, slot = "scale.data", ...){
     p.heatmap <- wrap(as_grob(e(Seurat::DoHeatmap(
           object(x), features = ref, raster = TRUE, size = 3, slot = slot, ...
@@ -1169,7 +1169,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "character"),
     p.heatmap
   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "sets_feature"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "sets_feature"),
   function(x, ref, datasets = NULL, names = NULL,
     group.by = x$group.by, sample = "orig.ident",
     pattern_suffix = "_[^_]+$", cell.props.filter = .1,
@@ -1399,7 +1399,7 @@ entropy_score <- function(x, freq = NULL) {
   "给定离散随机变量 $X$，其取值为 ${x_1, x_2,...,x_K}$，对应概率分布为 $P(X = x_i) = p_i$，则 **归一化香农熵** 定义为：$H_{\\text{norm}}(X) = \\frac{ -\\sum_{i=1}^K p_i \\log p_i }{ \\log K }$，取值范围 $0 \\leq H_{\\text{norm}}(X) \\leq 1$"
 }
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_seurat"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_seurat"),
   function(x, ref, use.x, use.ref, name = "map_cell", asIdents = TRUE)
   {
     matched <- match(rownames(object(x)@meta.data), rownames(object(ref)@meta.data))
@@ -1488,7 +1488,7 @@ prepare_10x <- function(target, pattern, single = FALSE, col.gene = 1, check = T
   }
 }
 
-setMethod("skel", signature = c(x = "job_seurat"),
+setMethod_traceable("skel", signature = c(x = "job_seurat"),
   function(x, sig = "sr"){
     code <- c('',
       'sr <- job_seurat("")',
@@ -1511,13 +1511,13 @@ setMethod("skel", signature = c(x = "job_seurat"),
 setGeneric("asjob_seurat",
   function(x, ...) standardGeneric("asjob_seurat"))
 
-setMethod("mutate", signature = c(x = "job_seurat"),
+setMethod_traceable("mutate", signature = c(x = "job_seurat"),
   function(x, ...){
     object(x)@meta.data <- dplyr::mutate(object(x)@meta.data, ...)
     return(x)
   })
 
-setMethod("cal_corp", signature = c(x = "job_seurat", y = "NULL"),
+setMethod_traceable("cal_corp", signature = c(x = "job_seurat", y = "NULL"),
   function(x, y, from, to, names = NULL)
   {
     data <- object(x)[[ object(x)@active.assay ]]@data
@@ -1527,7 +1527,7 @@ setMethod("cal_corp", signature = c(x = "job_seurat", y = "NULL"),
     .cal_corp.elist(data, anno, use = "symbol", from, to, names)
   })
 
-setMethod("markers", signature = c(x = "job_seurat"),
+setMethod_traceable("markers", signature = c(x = "job_seurat"),
   function(x, ref = NULL, n = 10){
     if (x@step < 5L) {
       stop('x@step < 5L.')
@@ -1540,7 +1540,7 @@ setMethod("markers", signature = c(x = "job_seurat"),
     dplyr::slice_head(data, n = n)
   })
 
-setMethod("params", signature = c(x = "job_seurat"),
+setMethod_traceable("params", signature = c(x = "job_seurat"),
   function(x, mode = c("inherit", "all")){
     mode <- match.arg(mode)
     if (mode == "inherit") {
@@ -1557,12 +1557,12 @@ setMethod("params", signature = c(x = "job_seurat"),
     }
   })
 
-setMethod("meta", signature = c(x = "job_seurat"),
+setMethod_traceable("meta", signature = c(x = "job_seurat"),
   function(x){
     as_tibble(object(x)@meta.data)
   })
 
-# setMethod("feature", signature = c(x = "job_seurat"),
+# setMethod_traceable("feature", signature = c(x = "job_seurat"),
 #   function(x, mode = .all_features(x), ...){
 #     if (missing(mode)) {
 #       mode <- ".feature"
@@ -1579,7 +1579,7 @@ setMethod("meta", signature = c(x = "job_seurat"),
 #     feas
 #   })
 
-setMethod("set_remote", signature = c(x = "job_seurat"),
+setMethod_traceable("set_remote", signature = c(x = "job_seurat"),
   function(x, wd = glue::glue("~/seurat_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

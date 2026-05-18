@@ -16,7 +16,7 @@
 setGeneric("asjob_vep",
    function(x, ...) standardGeneric("asjob_vep"))
 
-setMethod("asjob_vep", signature = c(x = "job_ogwas"),
+setMethod_traceable("asjob_vep", signature = c(x = "job_ogwas"),
   function(x, which = 1L, ...){
     metadata <- dplyr::slice(object(x), which)
     file <- x$db[[which]]
@@ -106,12 +106,12 @@ job_vep <- function(input, version = 113, species = "homo_sapiens",
   return(x)
 }
 
-setMethod("step0", signature = c(x = "job_vep"),
+setMethod_traceable("step0", signature = c(x = "job_vep"),
   function(x){
     step_message("Prepare your data with function `job_vep`.")
   })
 
-setMethod("step1", signature = c(x = "job_vep"),
+setMethod_traceable("step1", signature = c(x = "job_vep"),
   function(x, force = FALSE, fork = 4,
     fields = c("Uploaded_variation", "Existing_variation"), ...)
   {
@@ -145,7 +145,7 @@ setMethod("step1", signature = c(x = "job_vep"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_vep"),
+setMethod_traceable("step2", signature = c(x = "job_vep"),
   function(x, mode = "Existing_variation", id_which = 3L){
     step_message("Get annotation results.")
     mode <- match.arg(mode)
@@ -184,7 +184,7 @@ setMethod("step2", signature = c(x = "job_vep"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_vep"),
+setMethod_traceable("step3", signature = c(x = "job_vep"),
   function(x, add_to_file = x$add_to_file,
     newfile = add_filename_suffix(add_to_file, "rsID"),
     col = "rsID", clear = TRUE)
@@ -229,7 +229,7 @@ setMethod("step3", signature = c(x = "job_vep"),
 setGeneric("asjob_fusion",
    function(x, ...) standardGeneric("asjob_fusion"))
 
-setMethod("asjob_fusion", signature = c(x = "job_vep"),
+setMethod_traceable("asjob_fusion", signature = c(x = "job_vep"),
   function(x, file_gwas = x$newfile, SNP = "rsID", 
     A1 = "effect_allele", A2 = "other_allele", Z = "Z", 
     BETA = "beta", P = "p_value", N = NULL)

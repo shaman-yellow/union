@@ -29,12 +29,12 @@ job_hawkdock <- function(symbols, .layout = NULL)
   .job_hawkdock(object = rm.no(symbols), params = list(.layout = .layout))
 }
 
-setMethod("step0", signature = c(x = "job_hawkdock"),
+setMethod_traceable("step0", signature = c(x = "job_hawkdock"),
   function(x){
     step_message("Prepare your data with function `job_hawkdock`.")
   })
 
-setMethod("step1", signature = c(x = "job_hawkdock"),
+setMethod_traceable("step1", signature = c(x = "job_hawkdock"),
   function(x, custom_pdbs = NULL){
     step_message("Download pdb files for protein docking.")
     mart <- new_biomart()
@@ -63,7 +63,7 @@ setMethod("step1", signature = c(x = "job_hawkdock"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_hawkdock"),
+setMethod_traceable("step2", signature = c(x = "job_hawkdock"),
   function(x, email = "huanglichuang@wie-biotech.com", ...)
   {
     step_message("Use Selenium for automatic upload jobs.")
@@ -100,7 +100,7 @@ setMethod("step2", signature = c(x = "job_hawkdock"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_hawkdock"),
+setMethod_traceable("map", signature = c(x = "job_hawkdock"),
   function(x, ref, id, rev = FALSE, tops = 1){
     ref <- match.arg(ref, "hawkdock")
     message("Create dir and naming as `id` as savepath.")

@@ -23,12 +23,12 @@ job_ocr <- function()
   .job_ocr()
 }
 
-setMethod("step0", signature = c(x = "job_ocr"),
+setMethod_traceable("step0", signature = c(x = "job_ocr"),
   function(x){
     step_message("Prepare your data with function `job_ocr`.")
   })
 
-setMethod("step1", signature = c(x = "job_ocr"),
+setMethod_traceable("step1", signature = c(x = "job_ocr"),
   function(x, use = "images", python = pg("python"))
   {
     step_message("Load the Python library")
@@ -55,7 +55,7 @@ setMethod("step1", signature = c(x = "job_ocr"),
     return(x)
   })
 
-setMethod("map", signature = c(x = "job_ocr", ref = "character"),
+setMethod_traceable("map", signature = c(x = "job_ocr", ref = "character"),
   function(x, ref)
   {
     if (!all(file.exists(ref))) {

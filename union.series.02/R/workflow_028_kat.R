@@ -31,7 +31,7 @@ job_kat <- function(x, refs = "")
 setGeneric("asjob_kat",
   function(x, ...) standardGeneric("asjob_kat"))
 
-setMethod("asjob_kat", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_kat", signature = c(x = "job_seurat"),
   function(x, refs = NULL, group.by = x$group.by, use = names(x@object@assays)[[1]], layer = "counts")
   {
     assay <- x@object@assays[[ use ]]
@@ -57,14 +57,14 @@ setMethod("asjob_kat", signature = c(x = "job_seurat"),
     return(x)
   })
 
-setMethod("step0", signature = c(x = "job_kat"),
+setMethod_traceable("step0", signature = c(x = "job_kat"),
   function(x){
     step_message("Prepare your data with function `job_kat`.
       "
     )
   })
 
-setMethod("step1", signature = c(x = "job_kat"),
+setMethod_traceable("step1", signature = c(x = "job_kat"),
   function(x, workers = 5, path = glue::glue("copykat_{x@sig}"), test = FALSE, ...)
   {
     step_message("Run copyKAT.")
@@ -119,7 +119,7 @@ setMethod("step1", signature = c(x = "job_kat"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_kat"),
+setMethod_traceable("step2", signature = c(x = "job_kat"),
   function(x, workers = x$workers, inherits = TRUE, 
     local = FALSE, ignore = FALSE, ...)
   {
@@ -172,7 +172,7 @@ transmute_remote_figs <- function(x, mode = c("plots", "params"), step = x@step)
   return(x)
 }
 
-setMethod("transmute", signature = c(x = "job", ref = "fig"),
+setMethod_traceable("transmute", signature = c(x = "job", ref = "fig"),
   function(x, ref){
     if (!is.remote(x)) {
       stop('!is.remote(x).')
@@ -190,7 +190,7 @@ setMethod("transmute", signature = c(x = "job", ref = "fig"),
     return(ref)
   })
 
-# setMethod("step3", signature = c(x = "job_kat"),
+# setMethod_traceable("step3", signature = c(x = "job_kat"),
 #   function(x, name = x$savedir, force = FALSE) {
 #     step_message("save heatmap.")
 #     if (!is.null(x@params$res_copykat) || force) {
@@ -206,7 +206,7 @@ setMethod("transmute", signature = c(x = "job", ref = "fig"),
 #     return(x)
 #   })
 
-setMethod("map", signature = c(x = "job_seurat", ref = "job_kat"),
+setMethod_traceable("map", signature = c(x = "job_seurat", ref = "job_kat"),
   function(x, ref, from = "scsa_cell", to = "copykat_cell")
   {
     if (!any(colnames(x@object@meta.data) == from)) {
@@ -266,7 +266,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "job_kat"),
   palette
 }
 
-setMethod("regroup", signature = c(x = "job_seurat", ref = "job_kat"),
+setMethod_traceable("regroup", signature = c(x = "job_seurat", ref = "job_kat"),
   function(x, ref, k){
     if (ref@step < 2) {
       stop("ref@step < 2")
@@ -278,7 +278,7 @@ setMethod("regroup", signature = c(x = "job_seurat", ref = "job_kat"),
     return(x)
   })
 
-setMethod("merge", signature = c(x = "job_seurat", y = "job_kat"),
+setMethod_traceable("merge", signature = c(x = "job_seurat", y = "job_kat"),
   function(x, y, merge = x@params$group.by, cutree = NULL, pt.size = 1.5)
   {
     y <- y@tables$step2$res_copykat
@@ -386,7 +386,7 @@ plot_heatmap_copyKAT <- function(copykat.obj, workers = 4L,
   return(fig)
 }
 
-setMethod("set_remote", signature = c(x = "job_kat"),
+setMethod_traceable("set_remote", signature = c(x = "job_kat"),
   function(x, wd = glue::glue("~/kat_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")

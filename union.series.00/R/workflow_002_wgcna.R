@@ -21,7 +21,7 @@
 setGeneric("asjob_wgcna",
   function(x, ...) standardGeneric("asjob_wgcna"))
 
-setMethod("asjob_wgcna", signature = c(x = "job_seurat"),
+setMethod_traceable("asjob_wgcna", signature = c(x = "job_seurat"),
   function(x, features = NULL, cells = NULL){
     step_message("Use SeuratObject:::subset.Seurat to subset the data.")
     hasIt <- features %in% rownames(object(x))
@@ -44,7 +44,7 @@ job_wgcna <- function(metadata, log_counts,
   .job_wgcna(object = elist, params = list(datExpr0 = datExpr0))
 }
 
-setMethod("step0", signature = c(x = "job_wgcna"),
+setMethod_traceable("step0", signature = c(x = "job_wgcna"),
   function(x){
     step_message("Prepare your data with function `job_wgcna`. ",
       "Note that the ", crayon::red("first column"),
@@ -59,7 +59,7 @@ setMethod("step0", signature = c(x = "job_wgcna"),
     )
   })
 
-setMethod("step1", signature = c(x = "job_wgcna"),
+setMethod_traceable("step1", signature = c(x = "job_wgcna"),
   function(x, mutate_name = TRUE){
     step_message("Cluster sample tree.",
     "This do:",
@@ -85,7 +85,7 @@ setMethod("step1", signature = c(x = "job_wgcna"),
     return(x)
   })
 
-setMethod("step2", signature = c(x = "job_wgcna"),
+setMethod_traceable("step2", signature = c(x = "job_wgcna"),
   function(x, height = NULL, size = NULL){
     step_message("Cut sample tree with `height` and `size`. ",
       "This do: ",
@@ -108,7 +108,7 @@ setMethod("step2", signature = c(x = "job_wgcna"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_wgcna"),
+setMethod_traceable("step3", signature = c(x = "job_wgcna"),
   function(x, cores = 4, powers = 1:50, ...)
   {
     step_message("Analysis of network topology for soft-thresholding powers. ",
@@ -137,7 +137,7 @@ setMethod("step3", signature = c(x = "job_wgcna"),
     return(x)
   })
 
-setMethod("step4", signature = c(x = "job_wgcna"),
+setMethod_traceable("step4", signature = c(x = "job_wgcna"),
   function(x, cores = 4, power = x@params$sft$powerEstimate, 
     inherit = TRUE, ...)
   {
@@ -181,7 +181,7 @@ setMethod("step4", signature = c(x = "job_wgcna"),
     return(x)
   })
 
-setMethod("step5", signature = c(x = "job_wgcna"),
+setMethod_traceable("step5", signature = c(x = "job_wgcna"),
   function(x, traits = NULL, group_levels = NULL, cut.p = .05, cut.cor = .3)
   {
     step_message("Correlation test for modules with trait data. ",
@@ -266,7 +266,7 @@ setMethod("step5", signature = c(x = "job_wgcna"),
     return(x)
   })
 
-setMethod("step6", signature = c(x = "job_wgcna"),
+setMethod_traceable("step6", signature = c(x = "job_wgcna"),
   function(x, use.trait = NULL, use = c("adj.pvalue", "pvalue")){
     step_message("Calculate gene significance (GS) and module membership (MM).",
       "This do:",
@@ -340,7 +340,7 @@ cal_module <- function(data, power, save_tom = "tom", ...)
   .wgcNet(net)
 }
 
-setMethod("set_remote", signature = c(x = "job_wgcna"),
+setMethod_traceable("set_remote", signature = c(x = "job_wgcna"),
   function(x, wd = glue::glue("~/wgcna_{x@sig}")){
     x$wd <- wd
     rem_dir.create(wd, wd = ".")
