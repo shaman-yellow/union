@@ -186,7 +186,7 @@ setMethod("step3", signature = c(x = "job_regNet"),
         glue::glue("从 ENCORI 获取的 miRNA-lncRNA 数据。")
       )
       x$all_lncRNA$encori <- encori
-      x <- methodAdd(x, "ENCORI (<https://rna.sysu.edu.cn/encori>)，")
+      x <- methodAdd(x, "ENCORI (<https://rnasysu.com/encori/>)，")
     }
     if (npi) {
       npinter <- ftibble(get_url_data(

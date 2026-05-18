@@ -144,7 +144,7 @@ setMethod("step2", signature = c(x = "job_swiss"),
     )
     targets <- unique(data$symbols)
     x <- snapAdd(
-      x, "本研究中，以 swissTargetPrediction 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p}。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
+      x, "本研究中，以 swissTargetPrediction 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p} (&gt; {cut.p})。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
     )
     return(x)
   })

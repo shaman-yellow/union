@@ -47,7 +47,9 @@ call_nvim_for_remote_setup <- function(file_script,
   project = guess_project(), mode = "huibang")
 {
   if (mode == "huibang") {
-    text <- generate_setup_codes.huibang(file_script, project, TRUE)
+    text <- generate_setup_codes.huibang(
+      file_script, project, TRUE, path_pkg = "./tmp/f3256d7e/union/union.utils"
+    )
   }
   SendCmdToNvim_lua(
     glue::glue(
@@ -62,19 +64,22 @@ run_setup_codes.huibang <- function(file_script, project, envir = .GlobalEnv) {
   )
 }
 
-generate_setup_codes.huibang <- function(file_script, 
-  project, get_text = FALSE)
+generate_setup_codes.huibang <- function(file_script,
+  project, get_text = FALSE, path_pkg = "./union/union.utils", name = NULL
+)
 {
   file_script <- basename(file_script)
   if (!grpl(file_script, "^r\\.[0-9]+_.*\\.r$")) {
     stop('!grpl(file_script, "^r\\.[0-9]+_.*\\.r$"), not match correct script file name.')
   }
-  name <- gs(file_script, "^r\\.|\\.r$", "")
+  if (is.null(name)) {
+    name <- gs(file_script, "^r\\.|\\.r$", "")
+  }
   odir <- paste0("/data/nas1/huanglichuang_OD/project/", project)
   fun_replace <- function(x, envir = parent.frame(1L)) {
     glue::glue(x, .open = ".{{{", .close = "}}}.", envir = envir)
   }
-  lang <- substitute({
+  lang <- quote({
     rm(list = ls()); gc()
     ORIGINAL_DIR <- ".{{{odir}}}."
     output <- file.path(ORIGINAL_DIR, ".{{{name}}}.")
@@ -85,7 +90,7 @@ generate_setup_codes.huibang <- function(file_script,
 
     .libPaths(c('/data/nas2/software/miniconda3/envs/public_R/lib/R/library/', '/data/nas1/huanglichuang_OD/conda/envs/extra_pkgs/lib/R/library/'))
 
-    myPkg <- "./union/union.utils"
+    myPkg <- ".{{{path_pkg}}}."
     if (!dir.exists(myPkg)) {
       stop('Can not found package: ', myPkg)
     }
@@ -111,15 +116,21 @@ table_qc.hb <- function() {
 }
 
 .send_pkg_to_remote <- function(from = "~/union",
-  exclude = ".git", to = "remote", upd = FALSE, remoteUntar = TRUE, remote = "remote")
+  exclude = ".git", to = "remote", upd = FALSE, remoteUntar = TRUE,
+  dir_relative = "tmp/f3256d7e", remote = "remote")
 {
   if (!is_sshfs_mount(to)) {
     stop('!is_sshfs_mount(to).')
   }
+  if (!dir.exists(toDir <- file.path(to, dir_relative))) {
+    dir.create(toDir, recursive = TRUE)
+  }
   pkg <- basename(from)
   archive_package <- paste0(pkg, ".tar.gz")
-  if (!upd && file.exists(file.path(to, archive_package))) {
-    stop('!upd && file.exists(file.path(to, archive_package))')
+  if (!upd && file.exists(file.path(toDir, archive_package))) {
+    stop(
+      '!upd && file.exists(file.path(to, dir_relative, archive_package))'
+    )
   }
   pathPkgFrom <- file.path(from, archive_package)
   # if (file.exists(pathPkgFrom)) {
@@ -131,9 +142,9 @@ table_qc.hb <- function() {
     path = from
   )
   file.copy(
-    pathPkgFrom, to, TRUE
+    pathPkgFrom, toDir, TRUE
   )
-  exdir <- file.path(to, pkg)
+  exdir <- file.path(toDir, pkg)
   if (dir.exists(exdir)) {
     unlink(exdir, TRUE)
   }
@@ -141,12 +152,14 @@ table_qc.hb <- function() {
   if (remoteUntar) {
     ws <- getRemoteWs()
     pr <- guess_project()
-    dir_project <- paste0(ws, "/", pr)
+    dir_project <- paste0(ws, "/", pr, "/", dir_relative)
     cmd <- glue::glue("cd {dir_project} && tar -xzvf {archive_package} -C {pkg} && command rm {archive_package}")
     cdRun("ssh ", remote, " '", cmd, "'")
   } else {
     untar(
-      normalizePath(file.path(to, archive_package)), exdir = exdir
+      normalizePath(
+        file.path(toDir, archive_package)
+      ), exdir = exdir
     )
   }
 }
@@ -159,22 +172,6 @@ is_sshfs_mount <- function(path = "remote") {
     glue::glue("findmnt -n -o FSTYPE --target {path}"), intern = TRUE
   )
   type == "fuse.sshfs"
-}
-
-getRemoteWs <- function() {
-  path <- getOption("remote_working_space")
-  if (is.null(path)) {
-    stop('is.null(path).')
-  }
-  path
-}
-
-guess_project <- function(path = getwd()) {
-  res <- stringr::str_extract(basename(path), "[0-9]+_[a-zA-Z]+[0-9]+")
-  if (is.na(res)) {
-    stop('is.na(res).')
-  }
-  res
 }
 
 push_script.hb <- function(..., .project = guess_project(), 
@@ -315,7 +312,9 @@ project_packaging.hb <- function(file_report, overwrite = FALSE,
   if (!file.exists(toDocx) || overwrite_report) {
     if (TRUE) {
       file.copy(file_report, toDocx, TRUE)
-      cdRun(glue::glue("soffice --headless --convert-to pdf --outdir {path} {toDocx}"))
+      if (FALSE) {
+        cdRun(glue::glue("soffice --headless --convert-to pdf --outdir {path} {toDocx}"))
+      }
     } else {
       file_pdf <- file.path(glue::glue("{path}"), glue::glue("{names$report}.pdf"))
       if (nchar(Sys.which("wpspdf"))) {
@@ -376,6 +375,49 @@ pkgVersion_remote <- function(pkgs, path = "remote",
   res
 }
 
+release_remote_package <- function(name = "union", 
+  pkg_leader = "union/union.utils", pkg_clear = "union/union.publish",
+  from = "tmp/f3256d7e", to = ".", path = "remote", strip = TRUE)
+{
+  if (!is_sshfs_mount(path)) {
+    stop('!is_sshfs_mount(path).')
+  }
+  codeSetup <- generate_setup_codes.huibang(
+    "r.00_release.r", guess_project(),
+    TRUE, path_pkg = paste0(from, "/", pkg_leader), name = "."
+  )
+  fun_replace <- function(x, envir = parent.frame(1L)) {
+    glue::glue(x, .open = ".{{{", .close = "}}}.", envir = envir)
+  }
+  codeCopy <- deparse(substitute({
+    dir <- paste0(to, "/", name)
+    if (file.exists(dir)) {
+      glue::glue("file.exists(dir), overwrite that.")
+    }
+    file.copy(
+      ".{{{paste0(from, '/', name)}}}.", to, TRUE, TRUE
+    )
+  }))
+  codeCopy <- fun_replace(paste0(codeCopy, collapse = "\n"))
+  if (strip) {
+    codePost <- deparse(substitute({
+      .run_strip_semantic_layer(dir, overwrite = TRUE)
+      dir <- paste0(to, "/", pkg_clear)
+      .clear_autor_objects(dir, TRUE)
+    }))
+  } else {
+    codePost <- ""
+  }
+  codes <- glue::as_glue(c(codeSetup, "", codeCopy, "", codePost))
+  # write script
+  tmpdir <- file.path(path, "tmp")
+  dir.create(tmpdir, FALSE)
+  fileName <- digest::digest("strip", "xxhash32", 3L)
+  writeLines(codes, file.path(tmpdir, fileName))
+  # run remote
+  run_in_project.hb(glue::glue("tmp/{fileName}"))
+}
+
 run_remote_output.hb <- function(run = FALSE, skip = NULL,
   files = list.files(path, "^r\\.[0-9]+.*\\.r$", full.names = TRUE),
   order_by_number = TRUE,
@@ -383,6 +425,9 @@ run_remote_output.hb <- function(run = FALSE, skip = NULL,
 {
   if (!is_sshfs_mount(path)) {
     stop('!is_sshfs_mount(path).')
+  }
+  if (!file.exists(file.path(path, "union"))) {
+    stop('!file.exists(file.path(path, "union")), do you forget to release that package?')
   }
   tmpdir <- file.path(path, "tmp")
   dir.create(tmpdir, FALSE)
@@ -410,7 +455,7 @@ run_remote_output.hb <- function(run = FALSE, skip = NULL,
       fileName <- basename(file)
       writeLines(codes, file.path(tmpdir, fileName))
       if (run) {
-        run_in_project(glue::glue("tmp/{fileName}"))
+        run_in_project.hb(glue::glue("tmp/{fileName}"))
       }
       codes
     })
@@ -469,7 +514,7 @@ push_mirror_to_remote.hb <- function(dir_scripts = "scripts_mirror", path = "rem
   if (!is_sshfs_mount(path)) {
     stop('!is_sshfs_mount(path).')
   }
-  files <- list.files(dir_scripts, full.names = TRUE)
+  files <- list.files(dir_scripts, "^r\\.", full.names = TRUE)
   file.copy(files, path, TRUE)
 }
 
@@ -479,7 +524,7 @@ push_mirror_runtime_remote.hb <- function(dir_scripts = "scripts_mirror",
   if (!is_sshfs_mount(path)) {
     stop('!is_sshfs_mount(path).')
   }
-  files <- list.files(dir_scripts, full.names = TRUE)
+  files <- list.files(dir_scripts, "^r\\.", full.names = TRUE)
   vapply(files, FUN.VALUE = logical(1L),
     function(file) {
       lines <- readLines(file)
@@ -551,245 +596,6 @@ push_checkout_after_output.hb <- function(test = TRUE,
         writeLines(lines, file.path(dir_check, basename(file)))
       } else {
         writeLines(lines, file)
-      }
-    })
-}
-
-methodDefinition_as_setMethod_call <- function(m) {
-  stopifnot(methods::is(m, "MethodDefinition"))
-  generic <- as.character(m@generic)
-  sig <- as.list(m@defined)
-  fun <- m@.Data
-  call("setMethod", f = generic, signature = unlist(sig), definition = fun)
-}
-
-.get_method_defination_in_package <- function(
-  lang, env_class, pkgs, envs_search = lapply(pkgs, asNamespace),
-  fun_getClass = .guess_class_from_lang)
-{
-  if (!is(env_class, "environment")) {
-    stop('!is(env_class, "environment").')
-  }
-  if (!is.language(lang)) {
-    stop('!is.language(lang).')
-  }
-  if (is(lang, "<-")) {
-    objName <- rlang::expr_text(lang[[2]])
-    if (is.null(env_class[[objName]])) {
-      class <- fun_getClass(lang[[3]], env_class = env_class)
-      if (!is.null(class)) {
-        env_class[[objName]] <- class
-      } else {
-        if (grpl(objName, "^metadata")) {
-          env_class[[objName]] <- "data.frame"
-        } else if (grpl(objName, "^fea")) {
-          env_class[[objName]] <- "feature"
-        }
-      }
-    }
-    funCall <- lang[[3]]
-  } else if (is(lang, "call")) {
-    funCall <- lang
-  } else if (is(lang, "name")) {
-    message(glue::glue("Skip: {rlang::expr_text(lang)}, is a name."))
-    return()
-  } else if (is(lang, "if")) {
-    message(glue::glue("Skip: {rlang::expr_text(lang)}, is a 'if'."))
-    return()
-  } else if (is(lang, "for")) {
-    message(glue::glue("Skip: {rlang::expr_text(lang)}, is a 'for'."))
-    return()
-  }
-  if (!is.call(funCall)) {
-    message(glue::glue("Skip: {rlang::expr_text(funCall)}, not a call."))
-    return()
-  }
-  callName <- funCall[[1]]
-  if (length(callName) > 1) {
-    if (!any(rlang::expr_text(callName[[2]]) == pkgs)) {
-      message(
-        glue::glue("Skip: {rlang::expr_text(callName)}, other package.")
-      )
-      return()
-    } else {
-      fun_name <- rlang::expr_text(callName[[3]])
-    }
-  } else {
-    fun_name <- rlang::expr_text(callName)
-  }
-  hasThat <- vapply(envs_search, FUN.VALUE = logical(1),
-    function(env) {
-      exists(fun_name, envir = env, inherits = FALSE)
-    })
-  if (!any(hasThat)) {
-    message(glue::glue("Skip: {fun_name}, not exists."))
-    return()
-  }
-  fun <- get_fun(fun_name, envir = envs_search[ hasThat ][[1]])
-  if (isS4(fun)) {
-    if (!is(fun, "genericFunction")) {
-      message(glue::glue("Skip: {fun_name}, is S4, but not genericFunction."))
-      return()
-    }
-    res <- .expr_resolve_S4(funCall, env_class = env_class)
-    f <- try(selectMethod(res$callArgs$fun, signature = res$signature))
-    if (inherits(f, "try-error")) {
-      stop(glue::glue("`{rlang::expr_text(funCall)}`: Can not found method `{res$fname}` for signature ..."))
-    }
-    mcall <- methodDefinition_as_setMethod_call(f)
-    text <- deparse(mcall)
-    return(list(text = text, lang = mcall))
-  } else {
-    text <- deparse(fun)
-    text[1] <- paste0(fun_name, " <- ", text[1])
-    return(list(text = text, lang = fun))
-  }
-}
-
-.guess_class_from_lang <- function(lang, pattern = "job_[a-zA-Z0-9_]+", env_class = NULL)
-{
-  if (is(lang, "name")) {
-    from <- rlang::expr_text(lang)
-    if (!is.null(env_class[[from]])) {
-      return(env_class[[ from ]])
-    } else {
-      return(NULL)
-    }
-  }
-  code <- rlang::expr_text(lang)
-  class <- strx(code, pattern)
-  fun_matchClass <- function(string, type = "rds") {
-    name <- strx(string, glue::glue("(?<=rds_jobSave/).*(?=.[0-9].{type})"))
-    if (!is.na(name) && !is.null(env_class[[ name ]])) {
-      env_class[[ name ]]
-    } else {
-      "job"
-    }
-  }
-  if (isClass(class)) {
-    class
-  } else {
-    if (grpl(code, "copy_job") && identical(lang[[1]], as.name("copy_job"))) {
-      fromJob <- rlang::expr_text(lang[[2]])
-      if (!is.null(env_class[[fromJob]])) {
-        env_class[[ fromJob ]]
-      } else {
-        NULL
-      }
-    } else if (grpl(nameCall <- rlang::expr_text(lang[[1]]), "^do_")) {
-      class <- glue::glue("job_{s(nameCall, 'do_', '')}")
-      if (isClass(class)) {
-        class
-      } else {
-        rlang::abort(glue::glue("Guess class by `do_*` failed: {class}"))
-      }
-    } else if (grpl(code, "dplyr::")) {
-      if (grpl(code, "^dplyr::recode")) {
-        "character"
-      } else {
-        "data.frame"
-      }
-    } else if (grpl(code, "readRDS.*rds_jobSave")) {
-      fun_matchClass(code, "rds")
-    } else if (grpl(code, "qs::qread.*rds_jobSave")) {
-      fun_matchClass(code, "qs")
-    } else {
-      toolSub <- c("getsub")
-      for (i in toolSub) {
-        if (grpl(code, i) && identical(lang[[1]], as.name(i))) {
-          fromJob <- rlang::expr_text(lang[[2]])
-          if (!is.null(env_class[[fromJob]])) {
-            return(env_class[[ fromJob ]])
-          }
-        }
-      }
-      NULL
-    }
-  }
-}
-
-setup_counting_in_directory <- function(dir, pattern = "^[0-9]+") {
-  unlink(
-    list.files(dir, pattern, full.names = TRUE), force = TRUE, recursive = TRUE
-  )
-  options(
-    autor_counting_start_dir = dir,
-    savedir = list(figs = dir, tabs = dir)
-  )
-}
-
-output_with_counting_number <- function(plots, envir = .GlobalEnv, 
-  fun_wrap = "autor", extra_cmd = NULL)
-{
-  if (is.null(output <- getOption("autor_counting_start_dir"))) {
-    stop('is.null(getOption("autor_counting_start_dir")).')
-  }
-  if (!dir.exists(output)) {
-    stop('!dir.exists(output).')
-  }
-  calls <- substitute(plots)
-  if (!is(calls, "{")) {
-    stop('!is(calls, "{").')
-  }
-  rapp_find_job_name <- function(x) {
-    if (is(x, "call") || is(x, "{")) {
-      rapp_find_job_name(x[[2]])
-    } else if (is(x, "name")) {
-      rlang::expr_text(x)
-    } else {
-      stop("The finally of the 'substitute' is: ", class(x))
-    }
-  }
-  num <- as.integer(guess_number.hb(output, p.pattern = "^[0-9]{2}"))
-  fun_num <- function(n) {
-    sprintf("%02d", n)
-  }
-  lapply(calls[-1], 
-    function(call) {
-      name <- rapp_find_job_name(call)
-      job <- try(get(name, envir = .GlobalEnv), TRUE)
-      if (inherits(job, "try-error")) {
-        .try_loadJob(name, FALSE)
-      }
-      object <- eval(parse(text = rlang::expr_text(call)))
-      outputName <- paste0(fun_num(num), "_", label(object))
-      message(glue::glue("Save as: {outputName}"))
-      fun_save <- select_savefun(object)
-      fun_save(object, name = outputName, mkdir = output)
-      expect_file <- file.path(output, outputName)
-      if (file.exists(file_pdf <- paste0(expect_file, ".pdf"))) {
-        res <- try(
-          pdf_convert(file_pdf, filenames = paste0(expect_file, ".png"), dpi = 300, pages = 1)
-        )
-        if (inherits(res, "try-error")) {
-          sink()
-          message(glue::glue("Failed to convert file: {file}"))
-        }
-      }
-      num <<- num + 1L
-    })
-}
-
-convert_pdf_in_project <- function(path = "remote", skip = NULL)
-{
-  dirs <- gs(
-    list.files(path, "^r\\.[0-9]+.*\\.r$", full.names = TRUE), 
-    "(?<=/)r\\.|\\.r$", "", perl = TRUE
-  )
-  order <- as.integer(strx(basename(dirs), "[0-9]+"))
-  dirs <- dirs[ order(order) ]
-  if (!is.null(skip)) {
-    message(glue::glue("Skip: \n{bind(dirs[skip], co = '\n')}"))
-    dirs <- dirs[-skip]
-  }
-  targets <- list.files(dirs, "\\.pdf$", full.names = TRUE)
-  pbapply::pblapply(targets,
-    function(file) {
-      newfile <- paste0(tools::file_path_sans_ext(file), ".png")
-      res <- try(pdf_convert(file, filenames = newfile, dpi = 300, pages = 1))
-      if (inherits(res, "try-error")) {
-        sink()
-        message(glue::glue("Failed to convert file: {file}"))
       }
     })
 }
@@ -910,88 +716,12 @@ guess_number.hb <- function(path = "remote", p.pattern = "r\\.[0-9]{2}",
   sprintf("%02d", max + 1)
 }
 
-spsv <- function(object, name = NULL, prefix = "tmp") {
-  if (is.null(name)) {
-    name <- formal_name(rlang::expr_text(substitute(object)))
-  }
-  fun <- select_savefun(object)
-  fun(object, name = name, mkdir = prefix)
-}
-
-smart_wrap_expr <- function(plots, size = 3, ..., envir = .GlobalEnv)
-{
-  calls <- substitute(plots)
-  if (as_label(calls[[1]]) != "{") {
-    stop('as_label(calls[[1]]) != "{"')
-  }
-  plots <- lapply(calls[-1],
-    function(call) {
-      eval(parse(text = as_label(call)), envir = envir)
-    })
-  smart_wrap(plots, size = size, ...)
-}
-
-expect_package <- function(pkg, version, prio_lib = getOption("prio_lib")) {
-  if (!requireNamespace(pkg)) {
-    stop('!requireNamespace(pkg)')
-  }
-  if (packageVersion(pkg) >= version) {
-    message("Pacakge ", pkg, " as expected.")
-    return()
-  }
-  if (packageVersion(pkg) < version) {
-    message(glue::glue("Detach the loaded namespace, search in preferred lib path."))
-    unloadNamespace(asNamespace(pkg))
-    loadNamespace(pkg, lib.loc = prio_lib)
-  }
-  if (packageVersion(pkg, lib.loc = prio_lib) < version) {
-    stop('packageVersion(pkg, lib.loc = prio_lib) < version.')
-  } else {
-    message(glue::glue("Successfully loaded the latter R package"))
-  }
-}
-
-clear_feature <- function(x, name = "key.rds", dir = ".", 
-  file = file.path(dir, name))
-{
-  if (!is(x, "feature")) {
-    stop('!is(x, "feature").')
-  }
-  saveRDS(x, file)
-}
-
-load_feature <- function(
-  name = "key.rds", dir = ".", 
-  file = file.path(dir, name), 
-  job_otherwise = file.path("rds_jobSave", "ven.marker.0.rds"), remote = NULL)
-{
-  if (file.exists(file)) {
-    readRDS(file)
-  } else {
-    if (!is.null(remote)) {
-      job_otherwise <- file.path(remote, job_otherwise)
-    }
-    feature(readRDS(job_otherwise))
-  }
-}
-
 save_small.huibang <- function(name, cutoff = 50, dir = "rdata_smallObject")
 {
   dir.create(dir, FALSE)
   file <- file.path(dir, glue::glue("{name}.rdata"))
   message(glue::glue("Save rdata: {file}"))
   save_small(cutoff = cutoff, file = file)
-}
-
-.set_gwas_token <- function() {
-  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc4NDM2MzMyLCJleHAiOjE3Nzk2NDU5MzJ9.QwON99L9dvJ1EOSAg4qYvzoYss__oVbAt2Y9SvLfE0c5gRPCpaL1m8rj_d79Rh0qo8CTmNG39WZCB4o-KGbhHynVWJX9saIq-0tfQ3-Ww2KxTBVxZr4hn24XHwnraXUB00c03FOdVbA_Bk34py2_Fc_9arUT9PY2G87wpzLeEGYcnG5pRrI8yRQjyjI175OjCxFGvM1WKf3ccvUP6fJKj5lfNlok_aux9TSoLESDLsAby3ctrJ1gNmOVND1ONcTicEjVyOvTdW0LARcX7QBIwSLo0YCAM6AJqbScHb5YMXzFEJbgiLjj2bTfBSV2BlKcLyOhAP8Z4Cnt5lceiDFczg"
-  expire <- as.Date("2026-05-24")
-  if (Sys.Date() >= expire) {
-    message(glue::glue("GWAS API token expired, please reset it: <https://api.opengwas.io/profile/>"))
-    NULL
-  } else {
-    token
-  }
 }
 
 setup.huibang <- function() {
@@ -1034,23 +764,13 @@ setup.huibang <- function() {
   options("download.file.method" = "wget", "download.file.extra" = "--no-check-certificate")
 }
 
-send_job_to_remote <- function(path, to = "rds_jobSave", remote = "remote") {
-  if (!is_sshfs_mount(remote)) {
-    stop('!is_sshfs_mount(remote).')
-  }
-  if (!file.exists(path)) {
-    stop('!file.exists(path).')
-  }
-  file.copy(path, file.path(remote, to), TRUE)
-}
-
-run_in_project_nohup <- function(script, ...) {
-  run_in_project(
+run_in_project_nohup.hb <- function(script, ...) {
+  run_in_project.hb(
     script, ..., wait = FALSE, ex1 = "nohup", ex2 = "> task_nohup.log 2>&1 &"
   )
 }
 
-run_in_project <- function(script = "", remote = "remote", 
+run_in_project.hb <- function(script = "", remote = "remote", 
   fun_map = NULL, wait = TRUE, ex1 = "", ex2 = "")
 {
   if (!is.null(fun_map)) {
@@ -1061,33 +781,6 @@ run_in_project <- function(script = "", remote = "remote",
   dir_project <- paste0(ws, "/", pr)
   cmd <- glue::glue("cd {dir_project} && {ex1} Rscript {script} {ex2}")
   cdRun("ssh ", remote, " '", cmd, "'", wait = wait)
-}
-
-mark_text <- function(string, color, bold = TRUE, ...) {
-  string <- gs(string, "&lt;", "<")
-  string <- gs(string, "&gt;", ">")
-  ftext <- officer::ftext(
-    string, officer::fp_text_lite(color = color, bold = bold, ...)
-  )
-  paste0("`", officer::to_wml(ftext), "`{=openxml}")
-}
-
-mark <- list()
-
-mark$red <- function(string) {
-  mark_text(string, color = "#C00000")
-}
-
-mark$sig <- mark$red
-
-mark$blue <- function(string) {
-  mark_text(string, color = "#2E75B5")
-}
-
-mark$th <- mark$blue
-
-mark$green <- function(string) {
-  mark_text(string, color = "green")
 }
 
 name.hb <- list()
@@ -1108,70 +801,6 @@ name.hb$report <- function() {
   gett(path)
   message(path)
   glue::glue("{s(guess_project(), '[0-9]+_', '')}_Report_{date}")
-}
-
-get_file_with_format_name <- function(file, name) {
-  filename <- paste0(name, ".", tools::file_ext(file))
-  file_new <- file.path(dirname(file), filename)
-  file.copy(file, file_new, TRUE)
-  url <- glue::glue("file://{normalizePath(file_new)}")
-  if (nchar(Sys.which("wl-copy"))) {
-    system(glue::glue("echo -n {url} | wl-copy -t text/uri-list"))
-  } else {
-    stop('nchar(Sys.which("wl-copy")).')
-  }
-}
-
-gett_file <- function(url) {
-  url <- glue::glue("file:/{normalizePath(url)}")
-  if (nchar(Sys.which("wl-copy"))) {
-    system(glue::glue("echo -n {url} | wl-copy -t text/uri-list"))
-  } else {
-    stop('nchar(Sys.which("wl-copy")).')
-  }
-}
-
-get_contents_refered_from_fields <- function(
-  file, ids = "foreword", id_ref = "reference", save_bib = "library.bib",
-  to_clipboard = TRUE, lines = NULL)
-{
-  if (is.null(lines)) {
-    lines <- readLines(file)
-  }
-  fields <- detect_field(lines, c(ids, id_ref))
-  if (any(lengths(fields) < 1)) {
-    stop('any(lengths(fields) < 1).')
-  }
-  fun_format <- function(x) paste0(unlist(x), collapse = "\n")
-  res <- lapply(ids,
-    function(id) {
-      res <- parse_references_from_text(
-        fun_format(fields[[ id ]]), fun_format(fields[[ id_ref ]])
-      )
-      indices <- unlist(res$mapping$indices)
-      res$reference <- res$reference[ res$reference != "" ]
-      if (!all(indices %in% seq_along(res$reference))) {
-        # Terror <<- namel(indices, res)
-        stop('!all(indices %in% seq_along(res$reference)), not match reference.')
-      }
-      pmids <- strx(res$reference, "(?<=PMID:[\\s\n\\d]{0,1})[0-9]+")
-      if (any(is.na(pmids))) {
-        stop('any(is.na(pmids)), some reference do not have pmid, please check manualy')
-      }
-      bibs <- expect_local_data(
-        "tmp", "bib_pmid", get_bibs_by_pmid, list(pmids)
-      )
-      refs <- .refs(names(bibs))
-      list(bibs = bibs, content = glue::glue(res$content))
-    })
-  contents <- vapply(res, function(x) x$content, character(1))
-  if (to_clipboard) {
-    gett(contents)
-  }
-  if (!is.null(save_bib)) {
-    bibs <- do.call(c, lapply(res, function(x) x$bibs))
-    RefManageR::WriteBib(bibs, save_bib)
-  }
 }
 
 .note_for_reviewer.hb <- c(
@@ -1327,4 +956,5 @@ get_contents_refered_from_fields <- function(
   lines <- .clHbFo$run_clean_md_list(lines)
   writeLines(lines, file)
 }
+
 

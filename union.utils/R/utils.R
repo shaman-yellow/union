@@ -587,4 +587,3 @@ find_common_cross_groups <- function(df, ...group) {
   invisible(lst_res)
 }
 
-

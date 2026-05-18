@@ -153,7 +153,7 @@ setMethod("step2", signature = c(x = "job_superpred"),
     )
     targets <- unique(data$symbols)
     x <- snapAdd(
-      x, "本研究中，以 Super-PRED 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p * 100}%。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
+      x, "本研究中，以 Super-PRED 预测 {snap(fea)} 的作用靶点。设定靶点概率阈值 Probability 为 {cut.p * 100}% (&gt; {cut.p * 100}%。共得到 {length(targets)} 个唯一靶点【各成分的靶点统计：{try_snap(data, 'Name', 'symbols')}】。"
     )
     return(x)
   })

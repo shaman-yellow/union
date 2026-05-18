@@ -1824,7 +1824,8 @@ setMethod("add_anno", signature = c(x = "corp"),
       significant = ifelse(pvalue > .05, "> 0.05",
         ifelse(pvalue > .001, "< 0.05", "< 0.001")),
       sign = ifelse(pvalue > .05, "-",
-        ifelse(pvalue > .001, "*", "**"))
+        ifelse(pvalue > .01, "*",
+          ifelse(pvalue > 0.001, "**", "***")))
     )
   })
 
@@ -2412,8 +2413,13 @@ auto_clear <- function(wd = ".", cache = "cache", ft = getOption("savedir")$figs
   }
 }
 
-autorm <- function(names) {
+autorm <- function(names, cache = "cache") {
   autoRegisters <<- autoRegisters[ -which(names(autoRegisters) %in% names) ]
+  # if (any(file.exists(files <- file.path(cache, paste0(names, ".rds"))))) {
+  #   try(unlink(files, force = TRUE))
+  # }
+  # options(Inclu_image_info = NULL)
+  # getOption("Inclu_image_info")
 }
 
 autosv <- function(x, name, ..., showtext = FALSE, cache = TRUE, force = FALSE) {

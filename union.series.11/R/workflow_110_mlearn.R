@@ -139,7 +139,8 @@ setMethod("step1", signature = c(x = "job_mlearn"),
   })
 
 setMethod("step2", signature = c(x = "job_mlearn"),
-  function(x, n = 10, lambda.type = c("1se", "min"), alpha = 1, seed = x$seed, ...)
+  function(x, n = 10, lambda.type = c("1se", "min"), alpha = 1,
+    style_plot = c("internal", "ggplot"), seed = x$seed, ...)
   {
     step_message("Lasso")
     lambda.type <- match.arg(lambda.type)
@@ -162,49 +163,56 @@ setMethod("step2", signature = c(x = "job_mlearn"),
     x$lasso_res <- list(
       cv_lasso = cv_lasso, coefs = coefs_matrix, features = selected, type = lambda.type
     )
-    expr <- expression({
-      fun <- function() {
-        cv <- cv_lasso
-        requireNamespace("glmnet")
-        suffix <- c("1se", "min")
-        types <- paste0("lambda.", suffix)
-        y <- max(cv$cvm)
-        lambdas <- vapply(types, function(x) cv[[x]], double(1))
-        x <- log(lambdas)
-        labels <- glue::glue("log(λ) ({suffix})\n = {signif(log(lambdas), 2)}")
-        plot(cv, sign.lambda = 1)
-        text(x, y, labels, adj = 1)
-      }
-      fun()
-    })
-    p.lasso_cv <- as_grob(expr, environment())
+    style_plot <- match.arg(style_plot)
+    if (style_plot == "internal") {
+      expr <- expression({
+        fun <- function() {
+          cv <- cv_lasso
+          requireNamespace("glmnet")
+          suffix <- c("1se", "min")
+          types <- paste0("lambda.", suffix)
+          y <- max(cv$cvm)
+          lambdas <- vapply(types, function(x) cv[[x]], double(1))
+          x <- log(lambdas)
+          labels <- glue::glue("log(λ) ({suffix})\n = {signif(log(lambdas), 2)}")
+          plot(cv, sign.lambda = 1)
+          text(x, y, labels, adj = 1)
+        }
+        fun()
+      })
+      p.lasso_cv <- as_grob(expr, environment())
+      expr <- expression({
+        fun <- function() {
+          cv <- cv_lasso
+          requireNamespace("glmnet")
+          suffix <- c("1se", "min")
+          types <- paste0("lambda.", suffix)
+          lambdas <- vapply(types, function(x) cv[[x]], double(1))
+          x <- log(lambdas)
+          if (any(formalArgs(glmnet:::plot.glmnet) == "sign.lambda")) {
+            plot(cv$glmnet.fit, sign.lambda = 1, label = FALSE, xvar = "lambda")
+          } else {
+            plot(cv$glmnet.fit, label = FALSE, xvar = "lambda")
+          }
+          abline(v = x, lty = 2)
+          labels <- glue::glue("log(λ) ({suffix})\n = {signif(log(lambdas), 2)}")
+          text(x, par("usr")[4] * 0.7, labels, adj = 1)
+        }
+        fun()
+      })
+      p.coefs_path <- as_grob(expr, environment())
+    } else {
+      ps.lasso <- .plot_cv_glmnet_with_ggStyle(cv_lasso)
+      p.lasso_cv <- ps.lasso$p_cv
+      p.coefs_path <- ps.lasso$p_coef
+    }
     p.lasso_cv <- set_lab_legend(
       wrap(p.lasso_cv, 5.5, 4, showtext = TRUE),
       glue::glue("{x@sig} LASSO Cross Validation"),
-      glue::glue("LASSO 交叉验证误差|||Lasso 回归模型的交叉验证图，用于选择正则化参数 λ。图中展示了不同 λ 值下的二项式偏差（Binomial Deviance）。横坐标是log(λ)，即正则化参数 λ 的对数值。随着 λ 值的增加，模型的复杂度降低，正则化强度增加。纵坐标是二项式偏差。")
+      glue::glue("LASSO 交叉验证误差|||Lasso 回归模型的交叉验证图，用于选择正则化参数 λ。图中展示了不同 λ 值下的 {cv_lasso$name}。横坐标是log(λ)，即正则化参数 λ 的对数值。随着 λ 值的增加，模型的复杂度降低，正则化强度增加。纵坐标是二项式偏差。")
     )
-    expr <- expression({
-      fun <- function() {
-        cv <- cv_lasso
-        requireNamespace("glmnet")
-        suffix <- c("1se", "min")
-        types <- paste0("lambda.", suffix)
-        lambdas <- vapply(types, function(x) cv[[x]], double(1))
-        x <- log(lambdas)
-        if (any(formalArgs(glmnet:::plot.glmnet) == "sign.lambda")) {
-          plot(cv$glmnet.fit, sign.lambda = 1, label = FALSE, xvar = "lambda")
-        } else {
-          plot(cv$glmnet.fit, label = FALSE, xvar = "lambda")
-        }
-        abline(v = x, lty = 2)
-        labels <- glue::glue("log(λ) ({suffix})\n = {signif(log(lambdas), 2)}")
-        text(x, par("usr")[4] * 0.7, labels, adj = 1)
-      }
-      fun()
-    })
-    p.coefs_path <- as_grob(expr, environment())
     p.coefs_path <- set_lab_legend(
-      wrap(p.coefs_path, 5.5, 4, showtext = TRUE),
+      wrap(p.coefs_path, if (style_plot == "internal") 5.5 else 8, 4, showtext = TRUE),
       glue::glue("{x@sig} Lasso Coefficient path"),
       glue::glue("LASSO 系数路径|||Lasso 回归系数路径图，展示了不同特征的系数随正则化参数 log(λ) 变化的情况。横坐标是 log(λ)，纵坐标是模型中各个特征的系数值。随着 λ 值的增加（从右到左），更多的特征系数被压缩至零，这是Lasso回归的特征选择过程。")
     )
@@ -214,7 +222,7 @@ setMethod("step2", signature = c(x = "job_mlearn"),
       x <- methodAdd(
         x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO 逻辑回归分析。设置 α = 1 实现 L1 正则化，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值 (λ = {fmt(cv_lasso[[ lambda.type ]])}, 
         Log(λ) = {signif(log(cv_lasso[[ lambda.type ]]), 2)}) 。"
-      )
+)
     } else if (alpha < 1) {
       x <- methodAdd(
         x, "以 R 包 glmnet ⟦pkgInfo('glmnet')⟧ 开展 LASSO (Elastic Net) 回归分析。设置 α = {alpha} 实现 L1 与 L2 正则化的加权组合，通过 {n} 折交叉验证结合{prin}准则确定最优 λ 值 (λ = {fmt(cv_lasso[[ lambda.type ]])}, Log(λ) = {signif(log(cv_lasso[[ lambda.type ]]), 2)})。"
@@ -331,11 +339,229 @@ setMethod("step4", signature = c(x = "job_mlearn"),
     return(x)
   })
 
+.plot_cv_glmnet_with_ggStyle <- function(cv, n_label_genes = 10L)
+{
+
+  if (!inherits(cv, "cv.glmnet")) {
+    stop("Input must be 'cv.glmnet' object.")
+  }
+
+  message(glue::glue(
+    "Preparing plotting data for cv.glmnet object..."
+  ))
+
+  vec_lambda <- cv$lambda
+  vec_log_lambda <- log(vec_lambda)
+
+  data_cv <- data.frame(
+    lambda = vec_lambda,
+    log_lambda = vec_log_lambda,
+    cvm = cv$cvm,
+    cvsd = cv$cvsd,
+    nzero = cv$nzero
+  )
+
+  data_cv$ymin <- data_cv$cvm - data_cv$cvsd
+  data_cv$ymax <- data_cv$cvm + data_cv$cvsd
+
+  vec_lambda_selected <- c(
+    cv$lambda.min,
+    cv$lambda.1se
+  )
+
+  vec_log_lambda_selected <- log(vec_lambda_selected)
+
+  vec_suffix <- c("min", "1se")
+
+  data_vline <- data.frame(
+    lambda = vec_lambda_selected,
+    log_lambda = vec_log_lambda_selected,
+    suffix = vec_suffix
+  )
+
+  data_vline$label <- glue::glue(
+    "lambda.{data_vline$suffix}\nlog(λ) = {signif(data_vline$log_lambda, 3L)}"
+  )
+
+  message(glue::glue(
+    "Extracting coefficient matrix..."
+  ))
+
+  mat_beta <- as.matrix(
+    stats::coef(cv$glmnet.fit)
+  )
+
+  vec_features <- rownames(mat_beta)
+
+  mat_beta <- mat_beta[-1L, , drop = FALSE]
+  vec_features <- vec_features[-1L]
+
+  data_coef <- reshape2::melt(
+    mat_beta,
+    varnames = c("feature_index", "lambda_index"),
+    value.name = "coef"
+  )
+
+  data_coef$feature <- vec_features[
+    data_coef$feature_index
+  ]
+
+  data_coef$lambda <- vec_lambda[
+    data_coef$lambda_index
+  ]
+
+  data_coef$log_lambda <- log(
+    data_coef$lambda
+  )
+
+  message(glue::glue(
+    "Detected {length(unique(data_coef$feature))} features."
+  ))
+
+  data_abs <- stats::aggregate(
+    abs(coef) ~ feature,
+    data = data_coef,
+    FUN = max
+  )
+
+  data_abs <- data_abs[
+    order(
+      data_abs[, 2L],
+      decreasing = TRUE
+    ),
+  ]
+
+  vec_label_features <- head(
+    data_abs$feature,
+    n_label_genes
+  )
+
+  data_label <- data_coef[
+    data_coef$feature %in% vec_label_features,
+  ]
+
+  vec_idx_label <- unlist(
+    tapply(
+      seq_len(nrow(data_label)),
+      data_label$feature,
+      function(x) {
+        x[which.max(
+          data_label$log_lambda[x]
+        )]
+      }
+    )
+  )
+
+  data_label <- data_label[
+    vec_idx_label,
+  ]
+
+  data_cv$nzero_factor <- factor(
+    data_cv$nzero,
+    levels = unique(data_cv$nzero)
+  )
+
+  p_cv <- ggplot(
+    data_cv,
+    aes(
+      x = log_lambda,
+      y = cvm
+    )
+  ) +
+    geom_errorbar(
+      aes(
+        ymin = ymin,
+        ymax = ymax,
+        color = nzero_factor
+      ),
+      width = 0.03
+    ) +
+    geom_point(
+      aes(color = nzero_factor),
+      size = 1.8
+    ) +
+    geom_line(
+      color = "grey40",
+      linewidth = 0.5
+    ) +
+    geom_vline(
+      data = data_vline,
+      aes(xintercept = log_lambda),
+      linetype = 2L
+    ) +
+    geom_text(
+      data = data_vline,
+      aes(
+        x = log_lambda,
+        y = max(data_cv$ymax) * 0.98,
+        label = label
+      ),
+      hjust = -0.05,
+      vjust = 1,
+      size = 3
+    ) +
+    labs(
+      x = "Log(λ)",
+      y = cv$name,
+      color = "Variables"
+    ) +
+    theme_bw()
+
+  p_coef <- ggplot(
+    data_coef,
+    aes(
+      x = log_lambda,
+      y = coef,
+      color = feature,
+      group = feature
+    )
+  ) +
+    geom_line(
+      linewidth = 0.8
+    ) +
+    geom_vline(
+      data = data_vline,
+      aes(xintercept = log_lambda),
+      linetype = 2L,
+      color = "grey40"
+    ) +
+    geom_text(
+      data = data_vline,
+      aes(
+        x = log_lambda,
+        y = max(data_coef$coef) * 0.95,
+        label = label
+      ),
+      hjust = -0.05,
+      vjust = 1,
+      inherit.aes = FALSE,
+      size = 3
+    ) +
+    ggrepel::geom_text_repel(
+      data = data_label,
+      aes(label = feature),
+      size = 3,
+      show.legend = FALSE
+    ) +
+    labs(
+      x = "Log(λ)",
+      y = "Coefficients",
+      color = "Feature"
+    ) +
+    theme_bw()
+
+  list(p_cv = p_cv, p_coef = p_coef)
+}
+
 .plot_rf_importance <- function(data_importance, n_top) {
+  data_importance <- dplyr::arrange(
+    data_importance, dplyr::desc(MeanDecreaseGini)
+  )
+  data_importance <- head(data_importance, n_top)
+
   data_importance <- dplyr::arrange(
     data_importance, MeanDecreaseGini
   )
-  data_importance <- head(data_importance, n_top)
 
   data_plot <- tidyr::pivot_longer(
     data_importance,

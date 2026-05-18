@@ -2022,11 +2022,11 @@ prepare_GPTmessage_for_celltypes <- function(tissue,
         x[ !x %in% notShow ]
       })
   }
-  avgExpr <- Seurat::AverageExpression(
+  avgExpr <- e(Seurat::AverageExpression(
     object(x), features = markers,
     assays = object(x)@active.assay,
     group.by = group.by, slot = "data"
-  )
+  ))
   avgExpr <- data.frame(avgExpr[[ 1 ]], check.names = FALSE)
   colnames(avgExpr) <- sort(unique(object(x)@meta.data[[ group.by ]]))
   avgExpr <- as_tibble(avgExpr)
