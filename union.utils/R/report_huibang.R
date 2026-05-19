@@ -327,6 +327,7 @@ project_packaging.hb <- function(file_report, overwrite = FALSE,
   all_results <- gs(all_scripts, "^r\\.|\\.r$", "")
   fun_bind <- function(x) paste(x, collapse = " ")
   cmd_sed <- glue::glue("sed -i \"/^ORIGINAL_DIR\\|^.libPaths/d\" {names$scripts}/*")
+  stop("The 'sed' expression need to be update.", cmd_sed)
   cmd_packaging_scripts <- glue::glue(
     "cd {dir_project} && mkdir {names$scripts} && cp -r {fun_bind(all_scripts)} -t {names$scripts} && {cmd_sed} && zip -r {names$scripts}.zip {names$scripts}"
   )

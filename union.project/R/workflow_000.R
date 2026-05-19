@@ -411,13 +411,13 @@ setMethod_traceable("feature", signature = c(x = "job"),
 #     feas
 #   })
 
-setReplaceMethod("feature", signature = c(x = "job"),
+setReplaceMethod_traceable("feature", signature = c(x = "job"),
   function(x, value){
     x$.feature <- value
     return(x)
   })
 
-setReplaceMethod("feature", signature = c(x = "wrap"),
+setReplaceMethod_traceable("feature", signature = c(x = "wrap"),
   function(x, value){
     x$.feature <- value
     x
@@ -526,7 +526,7 @@ setMethod_traceable("snap", signature = c(x = "ANY", ref = "NULL"),
     attr(x, ".SNAP")
   })
 
-setReplaceMethod("snap", signature = c(x = "ANY"),
+setReplaceMethod_traceable("snap", signature = c(x = "ANY"),
   function(x, value, ...){
     if (length(value) > 1) {
       rlang::abort("`snap(x) <- `: `value` should be a length 1 character.")
@@ -547,7 +547,7 @@ setMethod_traceable("snap", signature = c(x = "job", ref = "missing"),
     x@snap
   })
 
-setReplaceMethod("snap", signature = c(x = "job"),
+setReplaceMethod_traceable("snap", signature = c(x = "job"),
   function(x, value){
     x@snap <- value
     return(x)
@@ -638,7 +638,7 @@ setMethod_traceable("snap", signature = c(x = "feature", ref = "logical"),
     }
   })
 
-setReplaceMethod("snap", signature = c(x = "feature"),
+setReplaceMethod_traceable("snap", signature = c(x = "feature"),
   function(x, value){
     x@snap <- value
     return(x)
@@ -848,7 +848,7 @@ setMethod_traceable("init", signature = c(x = "NULL"),
     TRUE
   })
 
-setReplaceMethod("init", signature = c(x = "meth"),
+setReplaceMethod_traceable("init", signature = c(x = "meth"),
   function(x, value){
     x@init <- value
     return(x)
@@ -910,7 +910,7 @@ setMethod_traceable("meth", signature = c(x = "job", ref = "numeric_or_character
 
 setGeneric("meth<-",
   function(x, value) standardGeneric("meth<-"))
-setReplaceMethod("meth", signature = c(x = "ANY"),
+setReplaceMethod_traceable("meth", signature = c(x = "ANY"),
   function(x, value){
     x@meth <- value
     return(x)
@@ -1052,7 +1052,7 @@ setMethod_traceable("hash_expect", signature = c(x = "ANY"),
   function(x){
     attr(x, "__HASH_EXPECT__")
   })
-setReplaceMethod("hash_expect", signature = c(x = "ANY"),
+setReplaceMethod_traceable("hash_expect", signature = c(x = "ANY"),
   function(x, value){
     if (!is(value, "hash_expect")) {
       stop('!is(value, "hash_expect"), value should be a "hash_expect" object.')
@@ -1655,12 +1655,12 @@ setMethod_traceable("lab", signature = c(x = "feature"),
     glue::glue("feature n{length(x)} {nature} DETAILS {snap}")
   })
 
-setReplaceMethod("lab", signature = c(x = "ANY", value = "NULL"),
+setReplaceMethod_traceable("lab", signature = c(x = "ANY", value = "NULL"),
   function(x, value){
     return(x)
   })
 
-setReplaceMethod("lab", signature = c(x = "ANY", value = "character"),
+setReplaceMethod_traceable("lab", signature = c(x = "ANY", value = "character"),
   function(x, value){
     if (is.null(x)) {
       return(x)
@@ -1732,7 +1732,7 @@ setMethod_traceable("sig", signature = c(x = "virtual_job"),
   function(x){
     x@sig
   })
-setReplaceMethod("sig", signature = c(x = "virtual_job"),
+setReplaceMethod_traceable("sig", signature = c(x = "virtual_job"),
   function(x, value){
     x@sig <- value
     return(x)
@@ -1849,7 +1849,7 @@ setMethod_traceable("object", signature = c(x = "job"),
   function(x){
     x@object
   })
-setReplaceMethod("object", signature = c(x = "job"),
+setReplaceMethod_traceable("object", signature = c(x = "job"),
   function(x, value){
     x@object <- value
     return(x)
@@ -1867,7 +1867,7 @@ setMethod_traceable("plots", signature = c(x = "job", step = "numeric"),
     x@plots[[ step ]]
   })
 
-setReplaceMethod("plots", signature = c(x = "job"),
+setReplaceMethod_traceable("plots", signature = c(x = "job"),
   function(x, value){
     x@object <- value
     return(x)
@@ -1909,7 +1909,7 @@ setMethod_traceable("Legend", signature = c(x = "ANY"),
     }
   })
 
-setReplaceMethod("Legend", signature = c(x = "ANY"),
+setReplaceMethod_traceable("Legend", signature = c(x = "ANY"),
   function(x, value){
     attr(x, ".LEGEND") <- value
     return(x)
@@ -2269,7 +2269,7 @@ setMethod_traceable("tables", signature = c(x = "job", step = "double"),
   function(x, step){
     x@tables[[ step ]]
   })
-setReplaceMethod("tables", signature = c(x = "job"),
+setReplaceMethod_traceable("tables", signature = c(x = "job"),
   function(x, value){
     x@object <- value
     return(x)
@@ -2281,7 +2281,7 @@ setMethod_traceable("params", signature = c(x = "job"),
   function(x){
     x@params
   })
-setReplaceMethod("params", signature = c(x = "job"),
+setReplaceMethod_traceable("params", signature = c(x = "job"),
   function(x, value){
     x@object <- value
     return(x)
@@ -2293,7 +2293,7 @@ setMethod_traceable("others", signature = c(x = "job"),
   function(x){
     x@others[[ x@step ]]
   })
-setReplaceMethod("others", signature = c(x = "job"),
+setReplaceMethod_traceable("others", signature = c(x = "job"),
   function(x, value){
     x@object <- value
     return(x)
