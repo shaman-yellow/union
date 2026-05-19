@@ -85,6 +85,31 @@ gett_file <- function(url) {
   }
 }
 
+gett_files <- function(files) {
+  if (!nchar(Sys.which("wl-copy"))) {
+    stop("wl-copy not found.", call. = FALSE)
+  }
+
+  files <- normalizePath(files, mustWork = TRUE)
+
+  uri <- paste0(
+    "file://",
+    files,
+    collapse = "\n"
+  )
+
+  tf <- tempfile(fileext = ".txt")
+  writeLines(uri, tf)
+
+  system2(
+    "wl-copy",
+    c("--type", "text/uri-list"),
+    stdin = tf
+  )
+
+  invisible(uri)
+}
+
 get_contents_refered_from_fields <- function(
   file, ids = "foreword", id_ref = "reference", save_bib = "library.bib",
   to_clipboard = TRUE, lines = NULL)
@@ -698,5 +723,50 @@ methodDefinition_as_setMethod_call <- function(m) {
       NULL
     }
   }
+}
+
+.check_bin <- function(x) {
+  if (!nchar(Sys.which(x))) {
+    stop("Command not found: ", x, call. = FALSE)
+  }
+}
+
+.wait_wps_doc_ready <- function(file, timeout = 60L) {
+  base <- basename(file)
+
+  for (i in seq_len(timeout * 10L)) {
+    clients <- suppressWarnings(system2("hyprctl", "clients", stdout = TRUE))
+    if (any(grepl(paste0("title: ", base), clients, fixed = TRUE))) {
+      system2(
+        "hyprctl", c("dispatch", "focuswindow", "class:wps"),
+        stdout = FALSE, stderr = FALSE
+      )
+      Sys.sleep(1)
+      return(TRUE)
+    }
+    Sys.sleep(0.1)
+  }
+
+  FALSE
+}
+
+wps_pdf <- function(file, timeout = 60L) {
+  .check_bin("flatpak")
+  .check_bin("hyprctl")
+  .check_bin("ydotool")
+
+  file <- normalizePath(file, mustWork = TRUE)
+
+  system2("flatpak", c("run", "com.wps.Office", shQuote(file)), wait = FALSE)
+
+  if (!.wait_wps_doc_ready(file, timeout)) {
+    stop("WPS document not ready: ", file, call. = FALSE)
+  }
+
+  system2("ydotool", c("key", "56:1", "33:1", "33:0", "56:0"))
+  Sys.sleep(0.3)
+  system2("ydotool", c("key", "33:1", "33:0"))
+
+  invisible(TRUE)
 }
 

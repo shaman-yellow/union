@@ -282,72 +282,126 @@ pdb_packaging.hb <- function(..., dir_save = "material") {
   return(file_zip)
 }
 
-project_packaging.hb <- function(file_report, overwrite = FALSE, 
+project_packaging.hb <- function(
+  file_report,
+  overwrite = FALSE,
   overwrite_report = overwrite,
-  path = "./remote", remote = "remote", report_share_to = "~/.var/app/com.tencent.WeChat/xwechat_files",
-  wait = TRUE)
+  path = "./remote",
+  remote = "remote",
+  report_share_to = "~/.var/app/com.tencent.WeChat/xwechat_files",
+  wait = TRUE,
+  export_pdf = TRUE)
 {
   if (!is_sshfs_mount(path)) {
-    stop('!is_sshfs_mount(path).')
+    stop("!is_sshfs_mount(path).", call. = FALSE)
   }
   if (!file.exists(file_report)) {
-    stop('!file.exists(file_report).')
+    stop("!file.exists(file_report).", call. = FALSE)
   }
+
   ws <- getRemoteWs()
   pr <- guess_project()
+
   message(glue::glue("Workspace: {ws}\nProject: {pr}"))
+
   prefix <- strx(pr, "(?<=_)[a-zA-Z]+")
-  message(glue::glue("Prefix: {prefix}"))
   num_project <- strx(pr, glue::glue("(?<={prefix})[0-9]+"))
+
+  message(glue::glue("Prefix: {prefix}"))
   message(glue::glue("Project number: {prefix}{num_project}"))
-  # remote is linux!
+
   dir_project <- paste0(ws, "/", pr)
   time <- format(Sys.Date(), "%Y%m%d")
+
   types <- c("scripts", "results", "report")
   names <- setNames(
-    as.list(glue::glue("{prefix}_{num_project}_{types}_{time}")), types
+    as.list(glue::glue("{prefix}_{num_project}_{types}_{time}")),
+    types
   )
-  message(glue::glue("Send report file..."))
-  toDocx <- file.path(glue::glue("{path}"), glue::glue("{names$report}.docx"))
-  if (!file.exists(toDocx) || overwrite_report) {
-    if (TRUE) {
-      file.copy(file_report, toDocx, TRUE)
-      if (FALSE) {
-        cdRun(glue::glue("soffice --headless --convert-to pdf --outdir {path} {toDocx}"))
-      }
-    } else {
-      file_pdf <- file.path(glue::glue("{path}"), glue::glue("{names$report}.pdf"))
-      if (nchar(Sys.which("wpspdf"))) {
-        cdRun(glue::glue("wpspdf {toDocx} {file_pdf}"))
-      }
-    }
-  }
-  ## scripts and files.
+
   all_scripts <- list.files(path, "^r\\.[0-9]+.*\\.r$")
   all_results <- gs(all_scripts, "^r\\.|\\.r$", "")
-  fun_bind <- function(x) paste(x, collapse = " ")
-  cmd_sed <- glue::glue("sed -i \"/^ORIGINAL_DIR\\|^.libPaths/d\" {names$scripts}/*")
+
+  fun_bind <- function(x) paste(shQuote(x), collapse = " ")
+
+  cmd_sed <- glue::glue(
+    "sed -i \"/^ORIGINAL_DIR\\|^.libPaths/d\" {shQuote(names$scripts)}/*"
+  )
+
   cmd_packaging_scripts <- glue::glue(
-    "cd {dir_project} && mkdir {names$scripts} && cp -r {fun_bind(all_scripts)} -t {names$scripts} && {cmd_sed} && zip -r {names$scripts}.zip {names$scripts}"
+    "cd {shQuote(dir_project)} && ",
+    "rm -rf {shQuote(names$scripts)} {shQuote(paste0(names$scripts, '.zip'))} && ",
+    "mkdir {shQuote(names$scripts)} && ",
+    "cp -r {fun_bind(all_scripts)} -t {shQuote(names$scripts)} && ",
+    "{cmd_sed} && ",
+    "zip -r {shQuote(paste0(names$scripts, '.zip'))} {shQuote(names$scripts)}"
   )
+
   cmd_packaging_results <- glue::glue(
-    "cd {dir_project} && mkdir {names$results} && cp -r {fun_bind(all_results)} -t {names$results} && zip -r {names$results}.zip {names$results}"
+    "cd {shQuote(dir_project)} && ",
+    "rm -rf {shQuote(names$results)} {shQuote(paste0(names$results, '.zip'))} && ",
+    "mkdir {shQuote(names$results)} && ",
+    "cp -r {fun_bind(all_results)} -t {shQuote(names$results)} && ",
+    "zip -r {shQuote(paste0(names$results, '.zip'))} {shQuote(names$results)}"
   )
-  if (!file.exists(file.path(path, glue::glue("{names$scripts}.zip"))) || overwrite) {
-    message(glue::glue("Pacakging scripts: {names$scripts} ..."))
-    cdRun("ssh ", remote, " '", cmd_packaging_scripts, "'", wait = wait)
-    message(glue::glue("Pacakging results: {names$results} ..."))
-    cdRun("ssh ", remote, " '", cmd_packaging_results, "'", wait = wait)
+
+  file_scripts_zip <- file.path(path, glue::glue("{names$scripts}.zip"))
+  file_results_zip <- file.path(path, glue::glue("{names$results}.zip"))
+
+  if (!file.exists(file_scripts_zip) || !file.exists(file_results_zip) || overwrite) {
+    message(glue::glue("Packaging scripts: {names$scripts} ..."))
+    cdRun("ssh ", remote, " ", shQuote(cmd_packaging_scripts), wait = wait)
+
+    message(glue::glue("Packaging results: {names$results} ..."))
+    cdRun("ssh ", remote, " ", shQuote(cmd_packaging_results), wait = wait)
   }
-  text_reply <- glue::glue("已上传分析报告:{dir_project}/{names$report}.docx和对应pdf\n\n代码压缩包:{dir_project}/{names$scripts}.zip\n\n结果文件压缩包:{dir_project}/{names$results}.zip")
-  browseURL(normalizePath(path), "xdg-open")
-  gett(text_reply)
+
+  message("Send report file...")
+
+  toDocx <- file.path(path, glue::glue("{names$report}.docx"))
+  toPdf <- file.path(path, glue::glue("{names$report}.pdf"))
+
+  if (!file.exists(toDocx) || overwrite_report) {
+    file.copy(file_report, toDocx, overwrite = TRUE)
+  }
+
+  if (export_pdf && (!file.exists(toPdf) || overwrite_report)) {
+    message("Open report by Flatpak WPS and trigger PDF export...")
+    wps_pdf(toDocx)
+  }
+
+  text_reply <- glue::glue(
+    "已上传分析报告:{dir_project}/{names$report}.docx和对应pdf\n\n",
+    "代码压缩包:{dir_project}/{names$scripts}.zip\n\n",
+    "结果文件压缩包:{dir_project}/{names$results}.zip"
+  )
+
+  # gett(text_reply)
+  .gett_report(text_reply, c(toDocx, toPdf))
+
   if (FALSE && !is.null(report_share_to)) {
     file.copy(toDocx, report_share_to, TRUE)
-    file.copy(
-      paste0(tools::file_path_sans_ext(toDocx), ".pdf"), report_share_to, TRUE
-    )
+    file.copy(toPdf, report_share_to, TRUE)
   }
+
+  invisible(list(
+    docx = toDocx,
+    pdf = toPdf,
+    scripts = file_scripts_zip,
+    results = file_results_zip,
+    reply = text_reply
+  ))
+}
+
+.gett_report <- function(text, files) {
+  gett(text)
+  message("Text copied. Paste it first.")
+  readline("Press Enter after pasting text...")
+
+  gett_files(files)
+  message("Files copied. Paste them now.")
+
+  invisible(TRUE)
 }
 
 pkgVersion_remote <- function(pkgs, path = "remote",
