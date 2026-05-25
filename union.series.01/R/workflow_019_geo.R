@@ -202,7 +202,7 @@ setMethod("map", signature = c(x = "job_limma", ref = "job_geo"),
 setMethod("asjob_limma", signature = c(x = "job_geo"),
   function(x, metadata, rna = NULL, use = 1L, normed = "guess",
     use.col = NULL, use_as_id = TRUE, split = "\\s*///\\s*|,\\s*",
-    filter_split_symbol = c("---")
+    filter_split_symbol = c("---"), ENTREZID = NULL
   )
   {
     if (is.null(rna)) {
@@ -223,6 +223,19 @@ setMethod("asjob_limma", signature = c(x = "job_geo"),
     } else {
       counts <- as_tibble(x@params$about[[ use ]]@assayData$exprs)
       genes <- as_tibble(x@params$about[[ use ]]@featureData@data)
+    }
+    if (interactive()) {
+      message("Gene annotation data:\n")
+      print(tibble::as_tibble(genes))
+    }
+    if (!is.null(ENTREZID)) {
+      if (is.null(genes[[ ENTREZID ]])) {
+        stop('is.null(genes[[ ENTREZID ]]).')
+      }
+      if (is.numeric(genes[[ ENTREZID ]])) {
+        genes[[ ENTREZID ]] <- as.character(genes[[ ENTREZID ]])
+      }
+      genes <- map_gene(genes, ENTREZID, "ENTREZID", "SYMBOL")
     }
     if (any(colnames(genes) == "gene_assignment")) {
       genes <- dplyr::mutate(

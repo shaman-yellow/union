@@ -1860,7 +1860,7 @@ get_eigens <- function(net) {
   eigens <- e(WGCNA::orderMEs(net$MEs))
   colors <- e(WGCNA::labels2colors(colorIndex <- unique(net$colors)))
   color_data <- tibble::tibble(module = paste0("ME", colorIndex), color = colors)
-  members <- split(names(net$colors), net$colors)
+  members <- split(names(net$colors), WGCNA::labels2colors(net$colors))
   names(members) <- paste0("ME", names(members))
   .wgcEigen(eigens, colors = color_data, members = members)
 }

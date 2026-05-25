@@ -59,8 +59,8 @@ job_vennDEGs <- function(pattern, exclude = NULL,
   return(x)
 }
 
-job_venn <- function(..., mode = c("key", "candidates", "ck"),
-  analysis = NULL, lst = NULL, fun_map = function(x) x)
+job_venn <- function(..., mode = c("key", "candidates", "ck", "other"),
+  analysis = NULL, lst = NULL, name = NULL, fun_map = function(x) x)
 {
   if (is.null(lst)) {
     object <- list(...)
@@ -79,14 +79,16 @@ job_venn <- function(..., mode = c("key", "candidates", "ck"),
     message(glue::glue("Use nature as: {nature}"))
     object <- lapply(object, function(x) fun_map(unlist(x@.Data)))
     if (is.null(analysis)) {
-      if (missing(mode)) {
-        warning(crayon::red("`mode` is missing, use default: 'key'"))
+      if (is.null(name)) {
+        if (missing(mode)) {
+          warning(crayon::red("`mode` is missing, use default: 'key'"))
+        }
+        mode <- match.arg(mode)
+        name <- switch(
+          mode, key = "关键", candidates = "候选", ck = "候选关键"
+        )
       }
-      mode <- match.arg(mode)
-      mode <- switch(
-        mode, key = "关键", candidates = "候选", ck = "候选关键"
-      )
-      analysis <- glue::glue("{mode}{nature}")
+      analysis <- glue::glue("{name}{nature}")
     }
   } else {
     message(glue::glue("Some were not 'feature', be carefull! If you need automatic snap ..."))

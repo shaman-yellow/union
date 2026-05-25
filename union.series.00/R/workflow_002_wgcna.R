@@ -22,7 +22,8 @@ setGeneric("asjob_wgcna",
   function(x, ...) standardGeneric("asjob_wgcna"))
 
 setMethod("asjob_wgcna", signature = c(x = "job_seurat"),
-  function(x, features = NULL, cells = NULL){
+  function(x, features = NULL, cells = NULL)
+  {
     step_message("Use SeuratObject:::subset.Seurat to subset the data.")
     hasIt <- features %in% rownames(object(x))
     message("Features found:")
@@ -69,34 +70,47 @@ setMethod("step1", signature = c(x = "job_wgcna"),
       dat <- params(x)$datExpr0
       rownames(dat) <- paste0(object(x)$targets$group, "_", seq_along(object(x)$targets$group))
       raw_sample_tree <- draw_sampletree(dat)
+      grob_raw_sample_tree <- as_grob(
+        expression(draw_sampletree(dat)), environment()
+      )
     } else {
-      raw_sample_tree <- draw_sampletree(params(x)$datExpr0)
+      raw_sample_tree <- draw_sampletree(x$datExpr0)
+      grob_raw_sample_tree <- as_grob(
+        expression(draw_sampletree(x$datExpr0)), environment()
+      )
     }
-    raw_sample_tree.p <- wrap(
-      recordPlot(), 
-      min(nrow(params(x)$datExpr0) * .4, 20), 
-      min(nrow(params(x)$datExpr0), 10)
+    p.raw_sample_tree <- wrap(
+      grob_raw_sample_tree, 
+      min(nrow(x$datExpr0) * .4, 20), 
+      min(nrow(x$datExpr0), 10)
     )
-    raw_sample_tree.p <- .set_lab(raw_sample_tree.p, sig(x), "sample clustering")
-    raw_sample_tree.p <- setLegend(raw_sample_tree.p, "为样本聚类树")
-    x@params$raw_sample_tree <- raw_sample_tree
-    x@plots[[ 1 ]] <- list(raw_sample_tree = raw_sample_tree.p)
-    x <- methodAdd(x, "以 R 包 `WGCNA` ({packageVersion('WGCNA')}) {cite_show('WgcnaAnRPacLangfe2008')} 对数据作共表达分析。分析方法参考 <{x@info}>。")
+    p.raw_sample_tree <- set_lab_legend(
+      p.raw_sample_tree,
+      glue::glue("{x@sig} sample clustering"),
+      glue::glue("样本聚类树|||基于样本整体表达谱计算样本间距离，并采用层次聚类展示样本间的整体相似性，用于评估样本分布情况及排查潜在离群样本。纵轴 Height 表示聚类距离，分支连接高度越低，说明样本表达模式越相近；连接高度越高，则提示样本间整体差异相对较大。")
+    )
+    x <- plotsAdd(x, p.raw_sample_tree)
+    x$raw_sample_tree <- raw_sample_tree
+    x <- methodAdd(
+      x, "**WGCNA** 是一种基于基因表达数据构建加权共表达网络的系统生物学分析方法，其主要目的是识别具有高度协同表达特征的基因模块，并探索其与临床性状或生物学表型之间的关联。该方法通过计算基因间表达相关性构建共表达网络，并根据拓扑重叠矩阵（TOM）对基因进行模块划分，从而筛选与目标表型显著相关的关键模块及枢纽基因（hub genes）。进一步结合功能富集分析，可揭示相关模块在疾病发生发展或生物学过程中的潜在功能与调控机制，为关键基因筛选及机制研究提供依据。"
+    )
+    x <- methodAdd(x, "以 R 包 `WGCNA` ⟦pkgInfo('WGCNA')⟧ 对数据作共表达分析{cite_show('WgcnaAnRPacLangfe2008')}。分析方法参考 <{x@info}>。")
     return(x)
   })
 
 setMethod("step2", signature = c(x = "job_wgcna"),
-  function(x, height = NULL, size = NULL){
+  function(x, height = NULL, size = 10L)
+  {
     step_message("Cut sample tree with `height` and `size`. ",
       "This do: ",
       "clip `x@object`; generate `x@params$datExpr`; ",
       "generate `x@params$allTraits`. "
     )
-    if (!is.null(size) || !is.null(height)) {
-      iskeep <- cut_tree(params(x)$raw_sample_tree, height, size)
+    if (!is.null(size) && !is.null(height)) {
+      iskeep <- cut_tree(x$raw_sample_tree, height, size)
       message(glue::glue("Keep: {try_snap(iskeep)}\nDrop:\n{showStrings(which(!iskeep))}"))
       datExpr <- exclude(params(x)$datExpr0, iskeep)
-      x@params$datExpr <- datExpr
+      x$datExpr <- datExpr
       object(x) <- clip_data(object(x), datExpr)
       x <- snapAdd(
         x, "以 `WGCNA::cutreeStatic` (cutHeight = {height}, minSize = {size}) 剪切聚类树，滤掉样本 {showStrings(rownames(x$datExpr0)[!iskeep])}。"
@@ -104,7 +118,7 @@ setMethod("step2", signature = c(x = "job_wgcna"),
     } else {
       x$datExpr <- x$datExpr0
     }
-    x@params$allTraits <- as_wgcTrait(object(x))
+    x$allTraits <- as_wgcTrait(object(x))
     return(x)
   })
 
@@ -127,19 +141,23 @@ setMethod("step3", signature = c(x = "job_wgcna"),
     } else {
       e(WGCNA::enableWGCNAThreads(cores))
       sft <- cal_sft(params(x)$datExpr, powers = powers)
-      x@params$sft <- sft
+      x$sft <- sft
       p.sft <- wrap(plot_sft(sft), 10, 5)
-      p.sft <- .set_lab(p.sft, sig(x), "soft thresholding powers")
-      p.sft <- setLegend(p.sft, "WGCNA 软阈值筛选曲线。")
-      x@plots[[ 3 ]] <- list(sft = p.sft)
+      p.sft <- set_lab_legend(
+        p.sft,
+        glue::glue("{x@sig} soft thresholding powers"),
+        glue::glue("WGCNA 软阈值筛选曲线|||通过 WGCNA 的 pickSoftThreshold 方法评估不同软阈值 power 下网络的无尺度拓扑拟合程度和平均连接度。左图展示软阈值与无尺度拓扑模型拟合指数 signed R² 的关系，红色横线表示参考筛选标准；右图展示不同软阈值下的平均连接度变化。综合选择能够使网络接近无尺度拓扑特征，同时保留适当基因连接度的 power 值用于后续共表达网络构建。")
+      )
+      x <- plotsAdd(x, p.sft)
       x <- methodAdd(x, "以 `WGCNA::pickSoftThreshold` 预测最佳 soft thresholding powers。")
     }
     return(x)
   })
 
 setMethod("step4", signature = c(x = "job_wgcna"),
-  function(x, cores = 4, power = x@params$sft$powerEstimate, 
-    inherit = TRUE, ...)
+  function(x, cores = 4, power = x$sft$powerEstimate, 
+    mergeCutHeight = .15, minModuleSize = 200L,
+    inherit = TRUE, force = FALSE, ...)
   {
     step_message("One-step network construction and module detection.
       Extra parameters would passed to `cal_module`.
@@ -161,28 +179,41 @@ setMethod("step4", signature = c(x = "job_wgcna"),
       object(x) <- object
     } else {
       e(WGCNA::enableWGCNAThreads(cores))
-      net <- cal_module(params(x)$datExpr, power, ...)
+      fun_module <- function(mergeCutHeight, minModuleSize, power)
+      {
+        net <- cal_module(
+          x$datExpr, power,
+          minModuleSize = minModuleSize, mergeCutHeight = mergeCutHeight, ...
+        )
+      }
+      net <- expect_local_data(
+        "tmp", "module", fun_module, list(
+          mergeCutHeight, minModuleSize, power
+        ), rerun = force
+      )
       if (!is(net, "wgcNet")) {
         net <- .wgcNet(net)
       }
-      x@params$MEs <- get_eigens(net)
+      x$MEs <- get_eigens(net)
       ME_genes <- net$colors
       ME_genes <- split(names(ME_genes), unname(ME_genes))
-      names(ME_genes) <- paste0("ME", names(ME_genes))
+      names(ME_genes) <- paste0("ME", WGCNA::labels2colors(names(ME_genes)))
       x$ME_genes <- ME_genes
-      x <- snapAdd(x, "以 power {power} (soft thresholding powers) 创建基因共表达模块 (各模块基因数：{try_snap(ME_genes)})。")
-      net <- .set_lab(
-        wrap(net, 7, 6), sig(x), "co-expression module"
+      x <- snapAdd(x, "使用 `WGCNA::blockwiseModules` 函数，设定最小模块基因数为 {minModuleSize} (minModuleSize) 以过滤过小模块，并通过合并切割聚类树高度为 {mergeCutHeight} (mergeCutHeight) 的分支模块，以 power {power} (soft thresholding powers) 创建基因共表达模块 【各模块基因数 (括号中为数目)：{try_snap(ME_genes)}】。")
+      p.net <- set_lab_legend(
+        wrap(net, 7, 6),
+        glue::glue("{x@sig} co-expression module"),
+        glue::glue("WGCNA 基因共表达模块聚类图|||基于基因间表达相关性构建加权共表达网络，并根据拓扑重叠矩阵对基因进行层次聚类与模块划分。上方树状图表示基因之间的共表达相似性，分支越接近说明基因表达模式越相似；下方不同颜色代表识别得到的不同共表达模块，同一颜色中的基因具有相似的表达变化趋势，可用于后续模块-性状关联分析及关键模块筛选。")
       )
-      net <- setLegend(net, "为 WGCNA 创建的网络的基因共表达模块。")
-      x@plots[[ 4 ]] <- list(net = net)
+      x <- plotsAdd(x, p.net)
       x <- methodAdd(x, "选择 power 为 {power}, 以 `WGCNA::blockwiseModules` 创建共表达网络，检测基因模块。")
     }
     return(x)
   })
 
 setMethod("step5", signature = c(x = "job_wgcna"),
-  function(x, traits = NULL, group_levels = NULL, cut.p = .05, cut.cor = .3)
+  function(x, traits = NULL, group_levels = NULL, cut.p = .05, 
+    cut.cor = .3, native = TRUE)
   {
     step_message("Correlation test for modules with trait data. ",
       "This do:",
@@ -216,10 +247,11 @@ setMethod("step5", signature = c(x = "job_wgcna"),
     if (ncol(params(x)$allTraits) == 0) {
       stop("ncol(params(x)$allTraits) == 0, no data in `allTraits`.")
     }
-    if (ncol(params(x)$allTraits) == 1) {
-      traitName <- colnames(params(x)$allTraits)
-      cor <- e(WGCNA::cor(params(x)$MEs, params(x)$allTraits, use = "p"))
-      pvalue <- e(WGCNA::corPvalueStudent(cor, nrow(params(x)$MEs)))
+    useMEs <- x$MEs[, colnames(x$MEs) != "MEgrey" ]
+    if (ncol(params(x)$allTraits) == 1L) {
+      traitName <- colnames(x$allTraits)
+      cor <- e(WGCNA::cor(useMEs, x$allTraits, use = "p"))
+      pvalue <- e(WGCNA::corPvalueStudent(cor, nrow(useMEs)))
       if (!identical(rownames(cor), rownames(pvalue))) {
         stop('!identical(rownames(cor), rownames(pvalue))')
       }
@@ -227,24 +259,29 @@ setMethod("step5", signature = c(x = "job_wgcna"),
       colnames(x$corp_group) <- c("cor", "pvalue")
       x$corp_group <- dplyr::mutate(x$corp_group, MEs = rownames(!!cor), .before = 1)
       x$corp_group <- dplyr::arrange(x$corp_group, dplyr::desc(abs(cor)))
-      x$corp_group <- .set_lab(
-        x$corp_group, sig(x), "correlation of module with", traitName 
+      x$corp_group <- set_lab_legend(
+        x$corp_group,
+        glue::glue("{x@sig} correlation of module with {traitName}"),
+        glue::glue("共表达模块与 {traitName} 的关联性")
       )
-      x$corp_group <- setLegend(x$corp_group, "为共表达模块与 {traitName} 的关联性。")
-      data <- dplyr::mutate(x$corp_group, group = !!traitName)
-      fun_palette <- fun_color(
-        values = data$cor, category = "div", rev = TRUE
-      )
-      p.corhp <- e(
-        tidyHeatmap::heatmap(data, MEs, group, cor, palette_value = fun_palette)
-      )
-      p.corhp <- tidyHeatmap::layer_text(
-        p.corhp, .value = signif(pvalue, 4)
-      )
+      if (native) {
+        stop("...")
+      } else {
+        data <- dplyr::mutate(x$corp_group, group = !!traitName)
+        fun_palette <- fun_color(
+          values = data$cor, category = "div", rev = TRUE
+        )
+        p.corhp <- e(
+          tidyHeatmap::heatmap(data, MEs, group, cor, palette_value = fun_palette)
+        )
+        p.corhp <- tidyHeatmap::layer_text(
+          p.corhp, .value = signif(pvalue, 4)
+        )
+      }
       p.corhp <- set_lab_legend(
         wrap(p.corhp, 5),
         glue::glue("{x@sig} correlation heatmap"),
-        glue::glue("为模块与疾病表型 ({traitName}) 关联分析热图。")
+        glue::glue("WGCNA 模块-表型相关性热图|||展示 WGCNA 共表达模块与疾病表型 ({traitName}) 之间的相关性分析结果。每一行代表一个共表达模块，热图颜色表示模块特征基因与表型之间的相关方向和强度，红色表示正相关，蓝色表示负相关，颜色越深说明相关性越强。方格中的数值为相关系数，括号中为对应的 P 值，可用于筛选与疾病表型显著相关的关键模块。")
       )
       x <- plotsAdd(x, p.corhp)
       sigModules <- dplyr::filter(
@@ -258,10 +295,10 @@ setMethod("step5", signature = c(x = "job_wgcna"),
         analysis = glue::glue("WGCNA 与 {traitName} 显著关联的共表达模块的基因")
       )
     } else {
-      hps_corp <- new_heatdata(params(x)$MEs, params(x)$allTraits)
+      hps_corp <- new_heatdata(useMEs, x$allTraits)
       hps_corp <- callheatmap(hps_corp)
-      x@plots[[ 5 ]] <- list(hps_corp = hps_corp)
-      x@tables[[ 5 ]] <- list(corp = hps_corp@data_long)
+      x <- plotsAdd(x, hps_corp = hps_corp)
+      x <- tablesAdd(x, corp = hps_corp@data_long)
     }
     return(x)
   })
@@ -274,7 +311,8 @@ setMethod("step6", signature = c(x = "job_wgcna"),
       "tables (filter by pvalue < 0.05) `x@tables[[ 6 ]]`"
     )
     use <- match.arg(use)
-    mm <- cal_corp(params(x)$datExpr, params(x)$MEs, "gene", "module")
+    useMEs <- x$MEs[, colnames(x$MEs) != "MEgrey" ]
+    mm <- cal_corp(params(x)$datExpr, useMEs, "gene", "module")
     mm.s <- mutate(as_tibble(mm), adj.pvalue = p.adjust(pvalue, "BH"))
     mm.s <- dplyr::filter(mm.s, !!rlang::sym(use) < .05)
     gs <- cal_corp(params(x)$datExpr, params(x)$allTraits, "gene", "trait")
@@ -283,15 +321,17 @@ setMethod("step6", signature = c(x = "job_wgcna"),
     if (!is.null(use.trait)) {
       gs.s <- dplyr::filter(gs.s, trait %in% dplyr::all_of(use.trait))
     }
-    p.mm_gs <- new_upset(gs = gs.s$gene, mm = mm.s$gene)
-    show(p.mm_gs)
-    p.mm_gs <- wrap(recordPlot(), 3, 3)
-    dev.off()
-    x@params$mm <- mm
-    x@params$gs <- gs
-    x@params$ins.mm_gs <- intersect(gs.s$gene, mm.s$gene)
-    x@tables[[ 6 ]] <- list(mm = mm.s, gs = gs.s)
-    x@plots[[ 6 ]] <- namel(p.mm_gs)
+    if (FALSE) {
+      p.mm_gs <- new_upset(gs = gs.s$gene, mm = mm.s$gene)
+      show(p.mm_gs)
+      p.mm_gs <- wrap(recordPlot(), 3, 3)
+      dev.off()
+      x <- plotsAdd(x, p.mm_gs)
+    }
+    x$mm <- mm
+    x$gs <- gs
+    x$ins.mm_gs <- intersect(gs.s$gene, mm.s$gene)
+    x <- tablesAdd(x, mm = mm.s, gs = gs.s)
     return(x)
   })
 
@@ -325,7 +365,7 @@ plot_sft <- function(sft)
   p1 + p2
 }
 
-cal_module <- function(data, power, save_tom = "tom", ...)
+cal_module <- function(data, power, save_tom = "tom", minModuleSize = 200L, mergeCutHeight = .15, ...)
 {
   if (!is(data, "wgcData")) {
     stop("is(data, \"wgcData\") == FALSE")
@@ -333,7 +373,8 @@ cal_module <- function(data, power, save_tom = "tom", ...)
   require(WGCNA)
   net <- e(WGCNA::blockwiseModules(
       data, power = power,
-      TOMType = "unsigned", reassignThreshold = 0,
+      TOMType = "unsigned", reassignThreshold = 0, 
+      minModuleSize = minModuleSize, mergeCutHeight = mergeCutHeight,
       numericLabels = TRUE, pamRespectsDendro = FALSE, loadTOM = TRUE,
       saveTOMs = TRUE, saveTOMFileBase = save_tom, verbose = 3, ...
       ))

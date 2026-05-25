@@ -309,18 +309,13 @@ get_contents_refered_from_fields <- function(
       }
 
       if (identical(str_fun, "set_lab_legend")) {
+        lst_expr <- as.list(expr)
 
-        if (length(expr) >= 2L) {
-
-          return(
-            .run_strip_semantic_expr(
-              expr[[ 2L ]],
-              vec_strip_fun = vec_strip_fun
-            )
-          )
+        if (length(lst_expr) >= 4L) {
+          lst_expr[ 4L:length(lst_expr) ] <- ""
         }
 
-        return(quote(NULL))
+        return(as.call(lst_expr))
       }
     }
 
@@ -401,8 +396,8 @@ get_contents_refered_from_fields <- function(
 }
 
 .set_gwas_token <- function() {
-  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc4NDM2MzMyLCJleHAiOjE3Nzk2NDU5MzJ9.QwON99L9dvJ1EOSAg4qYvzoYss__oVbAt2Y9SvLfE0c5gRPCpaL1m8rj_d79Rh0qo8CTmNG39WZCB4o-KGbhHynVWJX9saIq-0tfQ3-Ww2KxTBVxZr4hn24XHwnraXUB00c03FOdVbA_Bk34py2_Fc_9arUT9PY2G87wpzLeEGYcnG5pRrI8yRQjyjI175OjCxFGvM1WKf3ccvUP6fJKj5lfNlok_aux9TSoLESDLsAby3ctrJ1gNmOVND1ONcTicEjVyOvTdW0LARcX7QBIwSLo0YCAM6AJqbScHb5YMXzFEJbgiLjj2bTfBSV2BlKcLyOhAP8Z4Cnt5lceiDFczg"
-  expire <- as.Date("2026-05-24")
+  token <- "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJzaGFtYW4teWVsbG93QGZveG1haWwuY29tIiwiaWF0IjoxNzc5NTUyMzI0LCJleHAiOjE3ODA3NjE5MjR9.oXetTruXv_kmBjCTc1nkWlHfE6MmdBLShmssblJ-wXzNjdr7hOCI_WDtue6flz3ZySfsXVkqZybod6zcRkap2GFikXRJKZKXjMViVdIaNr0xYoaKghV9dzHSULoiOwy9m-6gIqBozLisVTyjRZSNANOPsBwXOjEp4oS3lHMNnDctAjF66poY0555nSiIa4djFH7FWj7Pml-YuEk2heYqT7_hVr_JNItWLX9IJr8FkrZ_T2snWnyVXvAwCA_KKP8o8TWfmgpDeUhFegSjeVvvidK_QxVjg1j5arOkXfFXHGuEIhGowz2rP04XgJmE6i5IkVxbW48A9qZlquV3hL_xKw"
+  expire <- as.Date("2026-06-06")
   if (Sys.Date() >= expire) {
     message(glue::glue("GWAS API token expired, please reset it: <https://api.opengwas.io/profile/>"))
     NULL

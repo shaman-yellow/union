@@ -309,7 +309,7 @@ setMethod("focus", signature = c(x = "job_deseq2"),
   function(x, ref, ref.use = "guess", which = NULL, run_roc = TRUE,
     which.roc = 1L, level.roc = .guess_compare_deseq2(x, which.roc),
     .name = "m", use = c("adj.P.Val", "P.Value"), 
-    sig = FALSE, clear = "auto", test = "wilcox.test", ...)
+    sig = FALSE, clear = "auto", test = "wilcox.test", count_only = FALSE, n_show = 10L, ...)
   {
     # if which set to NULL, wilcox.test will be used.
     # else, the test results in 'results' table will be extracted.
@@ -326,7 +326,7 @@ setMethod("focus", signature = c(x = "job_deseq2"),
     fakeLmJob <- suppressMessages(focus(
       fakeLmJob, ref = ref, ref.use = ref.use,
       .name = .name, which = which, data.which = data.which, sig = sig,
-      use = use, test = test, run_roc = run_roc, ...
+      use = use, test = test, run_roc = run_roc, count_only = count_only, n_show = n_show, ...
     ))
     where <- paste0("focusedDegs_", .name)
     if (identical(clear, "auto")) {
@@ -456,6 +456,9 @@ setMethod("refine", signature = c(x = "job_DEG"),
         rlang::abort('What happened?')
       }
       data <- x[[ use ]]$summary
+      if (use.p %in% colnames(data)) {
+        data <- dplyr::filter(data, !!rlang::sym(use.p) < .05)
+      }
       if (!is.factor(data$group)) {
         stop('!is.factor(data$group), not valid format of summary.')
       }
@@ -465,6 +468,7 @@ setMethod("refine", signature = c(x = "job_DEG"),
       }
       data
     }
+    use.p <- match.arg(use.p)
     lst <- list(x)
     if (...length()) {
       lst <- c(lst, list(...))
@@ -508,7 +512,6 @@ setMethod("refine", signature = c(x = "job_DEG"),
       )
       glue::glue("基因 {unname(lst)} {ex}表现为{fmt(names(lst))}")
     }
-    use.p <- match.arg(use.p)
     if (length(lst) > 1) {
       snaps <- fun_snapThat("一致")
       x <- snapAdd(x, "综上，在各数据集 ({bind(projects)}) 中，将表达趋势一致的基因定义为{snap}。相比于 {levels_main[1]} 组，在 {levels_main[2]} 组，{bind(snaps)}({detail(use.p)} &lt; 0.05)。{snap_auc}因此，⟦mark$red('将 {bind(summary$gene)} 定义为{snap}')⟧。")

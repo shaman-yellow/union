@@ -332,7 +332,8 @@ setMethod("step6", signature = c(x = "job_seurat"),
     renameCell = NULL, keep_markers = 3,
     # chatGPT 
     filter.pct = .25, toClipboard = TRUE, post_modify = FALSE,
-    n = 30, variable = FALSE, hp_type = c("pretty", "seurat"), rerun = FALSE, ...)
+    n = 30, variable = FALSE, hp_type = c("pretty", "seurat"), 
+    stat_mutate = FALSE, rerun = FALSE, ...)
   {
     .check_is_scsa_available()
     if (!is.character(tissue)) {
@@ -360,9 +361,10 @@ setMethod("anno", signature = c(x = "job_seurat"),
     # plot markers "derived|progenitor|Transitional|Memory|switch|white blood cell"
     exclude = NULL, include = NULL, show = NULL, notShow = NULL, 
     only_show_annotated = TRUE, renameCell = NULL, keep_markers = 3,
-    # chatGPT 
+    # chatGPT (deprecated now)
     filter.pct = .25, toClipboard = TRUE, post_modify = FALSE,
-    n = 30, variable = FALSE, hp_type = c("pretty", "seurat"), ..., init = TRUE)
+    n = 30, variable = FALSE, hp_type = c("pretty", "seurat"),
+    stat_mutate = FALSE, ..., init = TRUE)
   {
     if (x@step < 5L) {
       stop('x@step < 5L.')
@@ -468,23 +470,53 @@ setMethod("anno", signature = c(x = "job_seurat"),
         )
         x <- plotsAdd(x, p.props_scsa_group)
       }
-      p.props_scsa_stat <- .map_boxplot2(
-        p.props_scsa$.data, TRUE, "group", "Ratio", ylab = "Ratio", ids = "Cells"
-      )
-      p.props_scsa_stat <- set_lab_legend(
-        wrap(p.props_scsa_stat),
-        glue::glue("{x@sig} Cell Proportion intergroup comparison"),
-        glue::glue("细胞群占比的组间差异分析|||横坐标为为不同细胞簇类型，纵坐标为细胞类型所占比例，纵坐标越高表示该细胞类型所占比例越大。不同颜色代表不同分组。")
-      )
-      snap_stat <- .stat_compare_by_pvalue(
-        p.props_scsa_stat, .guess_levels_from_job_seurat(x), 
-        name = "", mode = "ratio"
-      )
-      if (length(snap_stat)) {
-        # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
-        x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比以 Wilcoxon tests (`wilcox.test`) 做差异分析。{snap_stat}")
+      if (!stat_mutate) {
+        p.props_scsa_stat <- .map_boxplot2(
+          p.props_scsa$.data, TRUE, "group", "Ratio", ylab = "Ratio", ids = "Cells"
+        )
+        p.props_scsa_stat <- set_lab_legend(
+          wrap(p.props_scsa_stat),
+          glue::glue("{x@sig} Cell Proportion intergroup comparison"),
+          glue::glue("细胞群占比的组间差异分析|||横坐标为为不同细胞簇类型，纵坐标为细胞类型所占比例，纵坐标越高表示该细胞类型所占比例越大。不同颜色代表不同分组。")
+        )
+        snap_stat <- .stat_compare_by_pvalue(
+          p.props_scsa_stat, .guess_levels_from_job_seurat(x), 
+          name = "", mode = "ratio"
+        )
+        if (length(snap_stat)) {
+          # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
+          x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比以 Wilcoxon tests (`wilcox.test`) 做差异分析。{snap_stat}")
+        }
+        x <- plotsAdd(x, p.props_scsa_stat)
+      } else {
+        # this is cell levels comparison, not recommended.
+        lst_props_scsa_stat_mutate <- .plot_mutate_cell_fraction(
+          object(x)@meta.data,
+          group_col = "group",
+          cell_col = "scsa_cell",
+          denominator = "all"
+        )
+        p.props_scsa_stat_mutate <- set_lab_legend(
+          wrap(lst_props_scsa_stat_mutate$plot),
+          glue::glue("{x@sig} Cell Proportion intergroup comparison"),
+          glue::glue(
+            "细胞类型组成比例的组间比较|||",
+            "横坐标为不同细胞类型，纵坐标为该细胞类型在全部细胞中的占比，",
+            "不同颜色代表不同分组。柱状图展示不同分组来源细胞在各细胞类型中的分布比例，",
+            "上方星号表示基于 Fisher 精确检验得到的组间差异显著性，",
+            "其中 * 表示 p < 0.05，** 表示 p < 0.01，*** 表示 p < 0.001，ns 表示差异不显著。"
+          )
+        )
+        snap_stat <- .stat_compare_by_pvalue(
+          p.props_scsa_stat_mutate, .guess_levels_from_job_seurat(x), 
+          name = "", mode = "ratio"
+        )
+        if (length(snap_stat)) {
+          # snap <- glue::glue("{bind(names(pvalue))} 的 wilcox.test 统计学显著性 P 为 {bind(pvalue)}。")
+          x <- snapAdd(x, "针对不同样本的不同分组，对细胞占比以 Fisher 精确检验做差异分析。{snap_stat}")
+        }
+        x <- plotsAdd(x, p.props_scsa_stat = p.props_scsa_stat_mutate)
       }
-      x <- plotsAdd(x, p.props_scsa_stat)
     }
     return(x)
   })
@@ -504,6 +536,186 @@ setMethod("step7", signature = c(x = "job_seurat"),
     x@params$group.by <- "cell_type"
     return(x)
   })
+
+.plot_mutate_cell_fraction <- function(
+  data,
+  group_col = "group",
+  cell_col = "scsa_cell",
+  denominator = c("all", "group"),
+  fill_values = NULL,
+  title = "Cell Proportions",
+  y_text = NULL
+)
+{
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    stop("Package 'dplyr' required.")
+  }
+  if (!requireNamespace("tidyr", quietly = TRUE)) {
+    stop("Package 'tidyr' required.")
+  }
+  if (!requireNamespace("tibble", quietly = TRUE)) {
+    stop("Package 'tibble' required.")
+  }
+  if (!requireNamespace("glue", quietly = TRUE)) {
+    stop("Package 'glue' required.")
+  }
+
+  denominator <- match.arg(denominator)
+
+  if (!all(c(group_col, cell_col) %in% colnames(data))) {
+    stop("group_col or cell_col not found in data.", call. = FALSE)
+  }
+
+  .get_sig <- function(p) {
+    ifelse(
+      p < 0.001, "***",
+      ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "ns"))
+    )
+  }
+
+  .get_fisher <- function(data_count) {
+    vec_cell <- setdiff(colnames(data_count), c("group", "rowsum"))
+
+    if (nrow(data_count) != 2L) {
+      stop("Fisher test requires exactly two groups.", call. = FALSE)
+    }
+
+    lst_res <- lapply(vec_cell, function(cell) {
+      data_mat <- data_count[, c(cell, "rowsum"), drop = FALSE]
+      data_mat$other <- data_mat$rowsum - data_mat[[cell]]
+
+      mat_test <- as.matrix(data_mat[, c(cell, "other"), drop = FALSE])
+      rownames(mat_test) <- data_count$group
+
+      res_test <- stats::fisher.test(mat_test)
+
+      data.frame(
+        celltype = cell,
+        pvalue = res_test$p.value,
+        estimate = unname(res_test$estimate),
+        stringsAsFactors = FALSE
+      )
+    })
+
+    data_res <- do.call(rbind, lst_res)
+    data_res$padj <- stats::p.adjust(data_res$pvalue, method = "fdr")
+    data_res$p_label <- .get_sig(data_res$pvalue)
+    data_res
+  }
+
+  .get_compare <- function(data_long) {
+    lst_split <- split(data_long, data_long$celltype)
+
+    lapply(lst_split, function(data_sub) {
+      vec_value <- stats::setNames(data_sub$value, data_sub$group)
+
+      list(
+        high = names(vec_value)[which.max(vec_value)],
+        low = names(vec_value)[which.min(vec_value)]
+      )
+    })
+  }
+
+  message(glue::glue(
+    "Counting cells by `{group_col}` and `{cell_col}`."
+  ))
+
+  data_count <- data[, c(group_col, cell_col), drop = FALSE]
+  colnames(data_count) <- c("group", "celltype")
+  data_count <- data_count[stats::complete.cases(data_count), , drop = FALSE]
+
+  data_count <- dplyr::count(
+    data_count,
+    group,
+    celltype,
+    name = "number"
+  )
+
+  data_count <- tidyr::pivot_wider(
+    data_count,
+    names_from = celltype,
+    values_from = number,
+    values_fill = 0L
+  )
+
+  data_count <- dplyr::mutate(
+    data_count,
+    rowsum = rowSums(dplyr::select(data_count, -group))
+  )
+
+  message(glue::glue(
+    "Detected {nrow(data_count)} groups and {ncol(data_count) - 2L} cell types."
+  ))
+
+  data_test <- .get_fisher(data_count)
+
+  data_fraction <- data_count
+  vec_cell <- setdiff(colnames(data_fraction), c("group", "rowsum"))
+
+  if (denominator == "group") {
+    data_fraction[, vec_cell] <- data_fraction[, vec_cell, drop = FALSE] / data_fraction$rowsum
+  } else {
+    data_fraction[, vec_cell] <- data_fraction[, vec_cell, drop = FALSE] / sum(data_fraction$rowsum)
+  }
+
+  data_long <- tidyr::pivot_longer(
+    data_fraction,
+    cols = dplyr::all_of(vec_cell),
+    names_to = "celltype",
+    values_to = "value"
+  )
+
+  data_test <- data_test[
+    match(unique(data_long$celltype), data_test$celltype),
+    ,
+    drop = FALSE
+  ]
+
+  vec_pvalue <- stats::setNames(data_test$pvalue, data_test$celltype)
+  lst_compare <- .get_compare(data_long)
+
+  if (is.null(y_text)) {
+    y_text <- max(data_long$value, na.rm = TRUE) * 1.08
+  }
+
+  if (is.null(fill_values)) {
+    fill_values <- scales::hue_pal()(length(unique(data_long$group)))
+  }
+
+  plot <- ggplot(
+    data_long,
+    aes(x = celltype, y = value, fill = group)
+  ) +
+    geom_col(position = "dodge", width = 0.75) +
+    scale_fill_manual(values = fill_values, name = "group") +
+    annotate(
+      "text",
+      x = seq_along(data_test$p_label),
+      y = y_text,
+      label = data_test$p_label,
+      size = 5
+    ) +
+    labs(title = title, x = NULL, y = NULL) +
+    theme_bw(base_size = 13) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "top",
+      panel.grid = element_blank()
+    )
+
+  attr(plot, "pvalue") <- vec_pvalue
+  attr(plot, "compare") <- lst_compare
+
+  list(
+    plot = plot,
+    data_count = tibble::as_tibble(data_count),
+    data_fraction = tibble::as_tibble(data_long),
+    data_test = tibble::as_tibble(data_test),
+    pvalue = vec_pvalue,
+    compare = lst_compare
+  )
+}
 
 as_type_group <- function(type, group) {
   group <- paste0(type, "_", gs(group, "[0-9]*$", ""))
@@ -991,15 +1203,16 @@ setMethod("focus", signature = c(x = "job_seurat"),
 }
 
 .stat_compare_by_pvalue <- function(x, levels, name, 
-  ..., recode = NULL, mode = c("expr", "ratio", "communication", "active"))
+  ..., recode = NULL, n_top = Inf, count_only = FALSE,
+  mode = c("expr", "ratio", "communication", "active"), autor = TRUE)
 {
   .get_snap_from_meassure(
-    .get_measure(x, levels, ...),
-    name, recode = recode, mode = mode
+    .get_measure(x, levels, ..., n_top = n_top),
+    name, recode = recode, mode = mode, count_only = count_only, autor = autor
   )
 }
 
-.get_measure <- function(x, levels, cut = .05) {
+.get_measure <- function(x, levels, cut = .05, n_top = Inf) {
   if (is.null(x$pvalue) || is.null(x$compare)) {
     stop('is.null(x$pvalue) || is.null(x$compare).')
   }
@@ -1009,58 +1222,132 @@ setMethod("focus", signature = c(x = "job_seurat"),
   if (length(x$compare) != length(x$pvalue)) {
     stop('length(x$compare) != length(x$pvalue).')
   }
-  if (is.null(x$compare[[1]]$high)) {
-    stop('is.null(x$compare[[1]]$high).')
+  if (!length(x$compare) || is.null(x$compare[[1L]]$high)) {
+    stop('!length(x$compare) || is.null(x$compare[[1L]]$high).')
   }
-  if (!any(isSig <- x$pvalue < .05)) {
-    return(NULL)
+  if (
+    length(n_top) != 1L || 
+    is.na(n_top) || 
+    (!is.infinite(n_top) && n_top < 1L)
+  ) {
+    stop('`n_top` must be a positive number or Inf.')
   }
+
+  isSig <- x$pvalue < cut
+  n_sig <- sum(isSig)
+
+  if (!n_sig) {
+    return(list(
+      g1 = levels[2L], g2 = levels[1L],
+      wh = character(0L), res = character(0L), note = character(0L),
+      levels = levels, x = x, pvalue = numeric(0L),
+      cut = cut, n_sig = 0L, n_show = 0L, top_limited = FALSE
+    ))
+  }
+
   nameSig <- names(x$pvalue)[isSig]
+  pvalueSig <- x$pvalue[isSig]
+  compareSig <- x$compare[isSig]
+
+  ord <- order(pvalueSig)
+  nameSig <- nameSig[ord]
+  pvalueSig <- pvalueSig[ord]
+  compareSig <- compareSig[ord]
+
+  n_show <- if (is.infinite(n_top)) {
+    n_sig
+  } else {
+    min(n_sig, as.integer(n_top))
+  }
+
+  show <- seq_len(n_show)
+
   measure <- ifelse(
-    vapply(x$compare[isSig], function(x) x$high, character(1)) == levels[1], 
+    vapply(compareSig[show], function(z) z$high, character(1L)) == levels[1L],
     "up", "down"
   )
-  list(g1 = levels[2], g2 = levels[1], wh = nameSig, res = measure,
-    note = glue::glue("(P = {signif(x$pvalue[isSig], 4)})"), 
-    levels = levels, x = x, pvalue = x$pvalue[isSig])
+
+  list(
+    g1 = levels[2L], g2 = levels[1L],
+    wh = nameSig[show],
+    res = measure,
+    note = glue::glue("(P = {signif(pvalueSig[show], 4)})"),
+    levels = levels,
+    x = x,
+    pvalue = pvalueSig[show],
+    cut = cut,
+    n_sig = n_sig,
+    n_show = n_show,
+    top_limited = n_show < n_sig
+  )
 }
 
 .get_snap_from_meassure <- function(ms, name, recode = NULL, 
-  mode = c("expr", "ratio", "communication", "active"))
+  mode = c("expr", "ratio", "communication", "active", "enrichment"),
+  count_only = FALSE, autor = TRUE)
 {
   if (missing(name)) {
     rlang::abort("`name` for `.get_snap_from_meassure` is missing.")
   }
-  if (is(ms$x, "wrap")) {
-    snap_map <- glue::glue("如图{aref(ms$x)}")
+
+  snap_map <- if (is(ms$x, "wrap") && autor) {
+    glue::glue("{aref(ms$x)}")
   } else {
-    snap_map <- ""
+    ""
   }
-  if (is.null(ms)) {
-    return(glue::glue("{snap_map}差异分析结果，{ms$g1} 组和 {ms$g2} 组之间无显著性差异。"))
-  }
+
   mode <- match.arg(mode)
+
   if (mode == "expr") {
-    ms$res <- dplyr::recode(ms$res, up = "升高", down = "下降")
+    res_map <- c(up = "升高", down = "下降")
     attribute <- "表达量"
   } else if (mode == "ratio") {
-    ms$res <- dplyr::recode(ms$res, up = "增加", down = "减少")
+    res_map <- c(up = "增加", down = "减少")
     attribute <- "比例"
   } else if (mode == "communication") {
-    ms$res <- dplyr::recode(ms$res, up = "增加", down = "减少")
+    res_map <- c(up = "增加", down = "减少")
     attribute <- "通讯"
   } else if (mode == "active") {
-    ms$res <- dplyr::recode(ms$res, up = "升高", down = "下降")
+    res_map <- c(up = "升高", down = "下降")
     attribute <- "活性"
+  } else if (mode == "enrichment") {
+    res_map <- c(up = "更高", down = "更低")
+    attribute <- "得分"
   }
+
+  if (ms$n_sig == 0L) {
+    return(glue::glue(
+      "差异分析结果{snap_map}，{ms$g1} 组和 {ms$g2} 组之间无显著性差异。"
+    ))
+  }
+
+  ms$res <- dplyr::recode(ms$res, !!!res_map)
+
   if (!is.null(recode)) {
     for (i in c("wh", "g1", "g2")) {
       ms[[i]] <- dplyr::recode(ms[[i]], !!!recode)
     }
     name <- dplyr::recode(name, !!!recode)
   }
-  mem <- glue::glue("{ms$wh}的{name}{attribute}要显著{ms$res}{ms$note}")
-  lead <- glue::glue("{snap_map}差异分析表明，相比于 {ms$g1} 组，{ms$g2} 组")
+
+  if (count_only) {
+    return(glue::glue(
+      "差异分析表明{snap_map}，相比于 {ms$g1} 组，{ms$g2} 组共有 {ms$n_sig} 个{name}{attribute}存在显著差异。"
+    ))
+  }
+
+  mem <- glue::glue("{ms$wh}的{name}{attribute}显著{ms$res}{ms$note}")
+
+  if (ms$top_limited) {
+    lead <- glue::glue(
+      "差异分析表明{snap_map}，相比于 {ms$g1} 组，{ms$g2} 组共有 {ms$n_sig} 个{name}{attribute}存在显著差异；在 P 值最小的 Top {ms$n_show} 个显著{name}中，"
+    )
+  } else {
+    lead <- glue::glue(
+      "差异分析表明{snap_map}，相比于 {ms$g1} 组，{ms$g2} 组"
+    )
+  }
+
   glue::glue("{lead}⟦mark$red('{bind(mem)}')⟧。")
 }
 

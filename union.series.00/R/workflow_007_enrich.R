@@ -592,7 +592,7 @@ map_gene <- function(data, col,
   data <- dplyr::relocate(data, !!rlang::sym(get), .after = !!rlang::sym(col))
   ids <- data[[ get ]]
   mixSets <- NULL
-  if (!is.null(split)) {
+  if (!is.null(split) && is.character(ids)) {
     mixSets <- strsplit(ids, split)
     maybeMergedIds <- ids
     numMix <- sum(lengths(mixSets) > 1)

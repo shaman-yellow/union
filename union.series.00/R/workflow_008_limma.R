@@ -662,7 +662,8 @@ setMethod("focus", signature = c(x = "job_limma"),
     use = c("adj.P.Val", "P.Value"), 
     .name = NULL, sig = FALSE, test = "wilcox.test",
     data.which = if (!is.null(which)) attr(x@tables$step2$tops[[ which ]], "all") else NULL,
-    run_roc = TRUE, levels = .guess_compare_limma(x, 1L), ...)
+    run_roc = TRUE, levels = .guess_compare_limma(x, 1L), 
+    count_only = FALSE, n_show = 10L, ...)
   {
     if (missing(levels)) {
       levels <- eval(levels)
@@ -676,6 +677,7 @@ setMethod("focus", signature = c(x = "job_limma"),
       )
       ref <- resolve_feature(ref)
     } else {
+      stop("Not support non 'features' any more.")
       x <- snapAdd(
         x, "在 {x$project} 数据集中，聚焦于{less(ref)}的差异表达。", 
         add = FALSE, step = if (is.null(.name)) "m" else .name
@@ -723,15 +725,22 @@ setMethod("focus", signature = c(x = "job_limma"),
     )
     # 'control' and 'model'
     summary <- dplyr::mutate(
-      summary, group = factor(group, levels = rev(levels))
+      summary, group = factor(group, levels = rev(levels)),
+      pvalue = dplyr::recode(gene, !!!pvalue)
     )
     # don't use the `use`!!!
     snap <- glue::glue("{names(pvalue)} (P = {pvalue})")
     x <- snapAdd(x,
-      "以 {detail(test)} 对 {bind(names(pvalue))} 统计检验组间差异 (阈值 P &lt; 0.05) 。",
+      "以 {detail(test)} 对 基因集统计检验组间差异 (阈值 P &lt; 0.05) 。",
       step = .name
     )
-    x <- snapAdd(x, .stat_compare_by_pvalue(lst$p.BoxPlotOfDEGs, levels, ""), step = .name)
+    x <- snapAdd(x,
+      .stat_compare_by_pvalue(
+        lst$p.BoxPlotOfDEGs, levels, if (count_only) "基因" else "",
+        count_only = count_only, n_top = n_show
+      ),
+      step = .name
+    )
     if (run_roc) {
       elist <- x$normed_data
       lst$roc <- roc <- sapply(ref, simplify = FALSE,
@@ -873,9 +882,9 @@ setMethod("map", signature = c(x = "job_limma"),
     data <- tibble::as_tibble(t(object$E))
     data$group <- object$targets$group
     data <- tidyr::gather(data, var, value, -group)
-    Terror <<- notGot <- ref[ !ref %in% data$var ]
+    notGot <- ref[ !ref %in% data$var ]
     if (length(notGot)) {
-      warning(glue::glue(crayon::red("Not got: {notGot}")))
+      warning(glue::glue(crayon::red("Not got: {bind(notGot)}")))
     }
     if (!is.null(group)) {
       data <- dplyr::mutate(data, group = factor(group, levels = !!group))
@@ -1044,67 +1053,183 @@ dedup_by_rank.job_limma <- function(x, ref.use = .guess_symbol(x),
 }
 
 .map_boxplot2 <- function(data, pvalue, x = "group", y = "value",
-  xlab = "Group", ylab = "Value", ids = "var", order_facet = NULL, test = "wilcox.test", 
-  annotation = NULL, fun_plot = geom_boxplot, ...)
+  xlab = "Group", ylab = "Value", ids = "var", order_facet = NULL, 
+  test = "wilcox.test", annotation = NULL, fun_plot = geom_boxplot,
+  max_facet_plot = 50L, stat_only = NULL, ...)
 {
   if (!is.null(order_facet)) {
     stop('!is.null(order_facet), change the order of "facet" is not allowed by ggpval.')
     data[[ ids ]] <- factor(data[[ ids ]], levels = order_facet)
   }
+
+  if (
+    length(max_facet_plot) != 1L ||
+    is.na(max_facet_plot) ||
+    (!is.infinite(max_facet_plot) && max_facet_plot < 1L)
+  ) {
+    stop('`max_facet_plot` must be a positive number or Inf.')
+  }
+
   if (test == "fp.test") {
     if (!requireNamespace("RVAideMemoire")) {
       stop('!requireNamespace("RVAideMemoire").')
     }
     message("Use `fp.test` from package RVAideMemoire: ")
     assign("fp.test", RVAideMemoire::fp.test, envir = .GlobalEnv)
-    # fp.test <- RVAideMemoire::fp.test
   }
-  p <- ggplot(data, aes(x = !!rlang::sym(x), y = !!rlang::sym(y), color = !!rlang::sym(x))) +
+
+  compare <- .map_boxplot2_compare(data, x = x, y = y, ids = ids)
+  n_facet <- length(compare)
+
+  if (is.null(stat_only)) {
+    stat_only <- !is.infinite(max_facet_plot) && n_facet > max_facet_plot
+  } else {
+    stat_only <- isTRUE(stat_only)
+  }
+
+  if (stat_only) {
+    warning(
+      glue::glue(
+        "Too many facets ({n_facet}); skip ggplot drawing and only calculate statistics."
+      ),
+      call. = FALSE
+    )
+
+    p <- ggplot() +
+      theme_void() +
+      labs(x = xlab, y = ylab)
+
+    attr(p, "compare") <- compare
+
+    if (pvalue) {
+      if (!is.null(annotation)) {
+        warning(
+          "`annotation` is ignored when `stat_only = TRUE`; pvalue is calculated by `test`.",
+          call. = FALSE
+        )
+      }
+
+      pvalue <- attr(p, "pvalue") <- .map_boxplot2_pvalue(
+        data, x = x, y = y, ids = ids, test = test
+      )
+
+      s.pvalue <- pvalue[pvalue < .05]
+
+      snap(p) <- bind(
+        glue::glue("{names(s.pvalue)} (P = {signif(s.pvalue, 4)})")
+      )
+    }
+
+    return(p)
+  }
+
+  p <- ggplot(data, aes(
+      x = !!rlang::sym(x),
+      y = !!rlang::sym(y),
+      color = !!rlang::sym(x)
+    )) +
     fun_plot(outlier.shape = NA, fill = "transparent") +
-    geom_jitter(aes(x = !!rlang::sym(x), y = !!rlang::sym(y), fill = !!rlang::sym(x)),
-      stroke = 0, shape = 21, width = .1, color = "transparent") +
+    geom_jitter(
+      aes(
+        x = !!rlang::sym(x),
+        y = !!rlang::sym(y),
+        fill = !!rlang::sym(x)
+      ),
+      stroke = 0, shape = 21, width = .1, color = "transparent"
+    ) +
     facet_wrap(ggplot2::vars(!!rlang::sym(ids)), ...) +
     scale_fill_manual(values = color_set()) +
     scale_color_manual(values = color_set()) +
     labs(x = xlab, y = ylab) +
     theme_minimal() +
-    theme(legend.position = "none",
-      axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    ) +
     geom_blank()
-  if (TRUE) {
-    compare <- lapply(split(data, data[[ ids ]]),
-      function(data) {
-        ms <- vapply(
-          split(data[[y]], data[[x]]),
-          function(values) fivenum(values)[3],
-          double(1)
-        )
-        list(high = names(ms)[which.max(ms)], low = names(ms)[which.min(ms)])
-      })
-    attr(p, "compare") <- compare
-  }
+
+  attr(p, "compare") <- compare
+
   if (pvalue) {
     fn <- fivenum(data[[ y ]])
-    levels <- 2 * seq(length(unique(data[[ x ]])) - 1)
-    hs <- fn[4] + abs(fn[5] - fn[1]) / levels
+    levels <- 2L * seq(length(unique(data[[ x ]])) - 1L)
+    hs <- fn[4L] + abs(fn[5L] - fn[1L]) / levels
+
     p <- ggpval::add_pval(
-      p, heights = hs, pval_text_adj = (fn[5] - fn[1]) / 15, 
-      test = test, annotation = annotation
+      p,
+      heights = hs,
+      pval_text_adj = (fn[5L] - fn[1L]) / 15,
+      test = test,
+      annotation = annotation
     )
-    anno_pvalue <- tail(.get_ggplot_content(p, "layers"), n = 1)[[1]]$data
-    if (!is(anno_pvalue, "data.frame") || any(!c(ids, "labs") %in% colnames(anno_pvalue))) {
+
+    anno_pvalue <- tail(.get_ggplot_content(p, "layers"), n = 1L)[[1L]]$data
+
+    if (
+      !is(anno_pvalue, "data.frame") ||
+      any(!c(ids, "labs") %in% colnames(anno_pvalue))
+    ) {
       stop("Can not extract pvalue from ggpval annotation.")
     }
+
     pvalue <- attr(p, "pvalue") <- setNames(
-      as.numeric(strx(anno_pvalue$labs, .pattern_numeric)), anno_pvalue[[ids]]
+      as.numeric(strx(anno_pvalue$labs, .pattern_numeric)),
+      anno_pvalue[[ ids ]]
     )
+
     s.pvalue <- pvalue[pvalue < .05]
+
     snap(p) <- bind(
       glue::glue("{names(s.pvalue)} (P = {signif(s.pvalue, 4)})")
     )
   }
+
   p
 }
+
+.map_boxplot2_pvalue <- function(data, x, y, ids, test) {
+  fun_test <- if (is.character(test)) {
+    get(test, mode = "function")
+  } else {
+    test
+  }
+  if (!is.function(fun_test)) {
+    stop('!is.function(fun_test).')
+  }
+  vapply(split(data, data[[ ids ]], drop = TRUE), function(dat) {
+    xval <- as.character(dat[[ x ]])
+    yval <- dat[[ y ]]
+    gp <- unique(xval)
+    gp <- gp[!is.na(gp)]
+    if (length(gp) != 2L) {
+      return(1)
+    }
+    lst <- lapply(gp, function(g) {
+      res <- yval[xval == g]
+      res[!is.na(res)]
+    })
+    if (any(vapply(lst, length, integer(1L)) < 1L)) {
+      return(1)
+    }
+    res <- try(do.call(fun_test, lst), TRUE)
+    if (inherits(res, "try-error") || is.null(res$p.value)) {
+      return(1)
+    }
+    as.numeric(res$p.value[1L])
+  }, double(1L))
+}
+
+.map_boxplot2_compare <- function(data, x, y, ids) {
+  lapply(split(data, data[[ ids ]], drop = TRUE), function(data) {
+    ms <- vapply(
+      split(data[[ y ]], data[[ x ]], drop = TRUE),
+      function(values) fivenum(values)[3L],
+      double(1L)
+    )
+    list(high = names(ms)[which.max(ms)], low = names(ms)[which.min(ms)])
+  })
+}
+
 
 .pattern_numeric <- "[-+]?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][-+]?\\d+)?"
 
@@ -1395,9 +1520,10 @@ plot_volcano <- function(top_table,
 }
 
 setMethod("asjob_wgcna", signature = c(x = "job_limma"),
-  function(x, filter_genes = NULL, use = "hgnc_symbol"){
+  function(x, filter_genes = NULL, use = .guess_symbol(x))
+  {
     step_message("Use `x@params$normed_data` converted as job_wgcna.")
-    if (is.null(object <- x@params$normed_data))
+    if (is.null(object <- x$normed_data))
       stop("is.null(x@params$normed_data)")
     if (is.null(use)) {
       if (any(duplicated(rownames(object$genes)))) {

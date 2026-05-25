@@ -24,9 +24,18 @@ setMethod("asjob_ssgsea", signature = c(x = "job_limma"),
       stop('x@step < 1L.')
     }
     cli::cli_alert_info("extract_unique_genes.job_limma")
-    object <- extract_unique_genes.job_limma(
-      x, use.filter, use, use.format = use.format, ...
-    )
+    if (FALSE) {
+      object <- extract_unique_genes.job_limma(
+        x, use.filter, use, use.format = use.format, ...
+      )
+    } else {
+      object <- x$normed_data
+      if (is(object, "DGEList")) {
+        object <- new_from_package(
+          "EList", "limma", list(E = object$counts, targets = object$samples, genes = object$genes)
+        )
+      }
+    }
     mtx <- object$E
     genes <- object$genes
     if (use.format) {
@@ -36,9 +45,7 @@ setMethod("asjob_ssgsea", signature = c(x = "job_limma"),
     }
     metadata <- object$targets
     if (x@step >= 2L) {
-      contrasts <- .get_versus_cell(
-        names(x@tables$step2$tops), NULL, unlist = FALSE
-      )
+      contrasts <- list(.guess_compare_limma(x, 1L))
     } else {
       contrasts <- NULL
       message("Can not match 'contrasts' in `x`.")
@@ -87,6 +94,7 @@ setMethod("step1", signature = c(x = "job_ssgsea"),
   function(x, mode = c("matrisome"), org = c("human", "mouse"), sets)
   {
     step_message("Calculate ssGSEA enrichment score.")
+    x <- methodAdd(x, "以 R 包 `GSVA` ⟦pkgInfo('GSVA')⟧ 用于 ssGSEA 分析。")
     if (missing(sets)) {
       mode <- match.arg(mode)
       if (mode == "matrisome") {
@@ -99,20 +107,38 @@ setMethod("step1", signature = c(x = "job_ssgsea"),
         x <- snapAdd(x, "将{snap(sets)}用于 ssGSEA 富集分析。")
         sets <- list(matrisome = unlist(sets, use.names = FALSE))
       }
+    } else {
+      if (is(sets, "feature_char")) {
+        x <- snapAdd(x, "将{snap(sets)}用于 ssGSEA 富集分析。")
+        sets <- setNames(list(resolve_feature(sets)), sets@snap)
+      }
+      if (is(sets, "feature_list")) {
+        x <- snapAdd(x, "将{snap(sets)}用于 ssGSEA 富集分析。")
+        sets <- sets@.Data
+        if (any(vapply(sets, class, "") != "character")) {
+          stop("`feature_list` should not be nest list.")
+        }
+      }
     }
     if (is(sets, "list")) {
       sets <- as_collection(sets)
     }
-    param <- e(GSVA::ssgseaParam(object(x), sets))
-    res <- e(GSVA::gsva(param))
+    fun_compute <- function(...) {
+      param <- e(GSVA::ssgseaParam(object(x), sets))
+      res <- e(GSVA::gsva(param))
+    }
+    res <- expect_local_data(
+      "tmp", "ssgsea", fun_compute,
+      list(colnames(object(x)), rownames(object(x)), sets, object(x)[[1L]])
+    )
     data <- dplyr::select(x$metadata, group, sample)
     if (!identical(data$sample, colnames(res))) {
       stop('!identical(data$sample, colnames(res)).')
     }
     data <- cbind(
-      data, setNames(data.frame(t(res), check.names = FALSE), "Stromal_score")
+      data, setNames(data.frame(t(res), check.names = FALSE), names(sets))
     )
-    x$data <- tidyr::pivot_longer(data, Stromal_score, names_to = "type", values_to = "score")
+    x$data <- tidyr::pivot_longer(data, dplyr::all_of(names(sets)), names_to = "type", values_to = "score")
     if (!is.null(x$contrasts)) {
       p.scores <- lapply(x$contrasts, 
         function(group) {
@@ -121,20 +147,25 @@ setMethod("step1", signature = c(x = "job_ssgsea"),
             data, group = factor(group, levels = !!group)
           )
           p <- .map_boxplot2(
-            x$data, TRUE, y = "score", ylab = "Stromal score", ids = "type"
+            x$data, TRUE, y = "score", ylab = "Enrichment score", ids = "type"
           )
-          wrap(p, 2.5, 3)
+          p <- set_lab_legend(
+            wrap(p, 2.5, 3),
+            glue::glue("{x@sig} {bind(group, co = ' ')} boxplot of enrichment score"),
+            glue::glue("{bind(group, co = ' ')} 富集评分箱形图。")
+          )
+          snap(p) <- .stat_compare_by_pvalue(
+            p, group, "富集", mode = "enrichment"
+          )
+          p
         })
+      if (length(p.scores) == 1L) {
+        x <- snapAdd(x, snap(p.scores[[1]]))
+      }
       names(p.scores) <- vapply(
         x$contrasts, bind, character(1), co = " "
       )
-      p.scores <- .set_lab(
-        p.scores, sig(x), names(p.scores), "boxplot of stromal score"
-      )
-      p.scores <- setLegend(p.scores, glue::glue("为各分组 {names(p.scores)} 基质评分箱形图。"))
       x <- plotsAdd(x, p.scores = p.scores)
     }
-    object(x) <- NULL
-    x <- methodAdd(x, "以 R 包 `GSVA` ({packageVersion('GSVA')}) 用于 ssGSEA 分析 (免疫细胞浸润分析)。")
     return(x)
   })
