@@ -309,18 +309,13 @@ get_contents_refered_from_fields <- function(
       }
 
       if (identical(str_fun, "set_lab_legend")) {
+        lst_expr <- as.list(expr)
 
-        if (length(expr) >= 2L) {
-
-          return(
-            .run_strip_semantic_expr(
-              expr[[ 2L ]],
-              vec_strip_fun = vec_strip_fun
-            )
-          )
+        if (length(lst_expr) >= 4L) {
+          lst_expr[ 4L:length(lst_expr) ] <- ""
         }
 
-        return(quote(NULL))
+        return(as.call(lst_expr))
       }
     }
 
