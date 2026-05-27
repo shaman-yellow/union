@@ -1093,7 +1093,9 @@ NULL
 #' @aliases fast_layout
 #' @description \code{fast_layout}: ...
 #' @rdname network
-fast_layout <- function(edges, layout = "fr", nodes = NULL, ...){
+fast_layout <- function(edges, layout = "fr", nodes = NULL, 
+  ..., args_spiral = list())
+{
   if (!is.null(edges)) {
     if (is(edges, "data.frame")) {
       graph <- igraph::graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
@@ -1109,7 +1111,8 @@ fast_layout <- function(edges, layout = "fr", nodes = NULL, ...){
   graph <- dplyr::mutate(graph, centrality_degree = tidygraph::centrality_degree(mode = 'all'),
     cent = centrality_degree)
   if (layout == "spiral") {
-    layout <- get_coords.spiral(length(dplyr::as_tibble(graph)$name))
+    args <- c(list(length(dplyr::as_tibble(graph)$name)), args_spiral)
+    layout <- do.call(get_coords.spiral, args)
     ggraph::create_layout(graph, layout, ...)
   } else {
     ggraph::create_layout(graph, layout, ...)

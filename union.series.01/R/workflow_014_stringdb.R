@@ -64,7 +64,7 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     network_type = "phy", input_directory = .prefix("stringdb_physical_v12.0", name = "db"),
     version = "12.0", label = FALSE, HLs = NULL, use.anno = TRUE, link_data = "detailed",
     file_anno = .prefix("stringdb_physical_v12.0/9606.protein.physical.links.full.v12.0.txt.gz", name = "db"),
-    filter.exp = 0, filter.text = 0, MCC = TRUE)
+    filter.exp = 0, filter.text = 0, MCC = TRUE, args_spiral = list())
   {
     step_message("Create PPI network.")
     require(ggraph)
@@ -89,7 +89,9 @@ setMethod("step1", signature = c(x = "job_stringdb"),
       res.str <- x$res.str
     }
     if (is.null(x$graph)) {
-      graph <- fast_layout(x$res.str$graph, layout = layout)
+      graph <- fast_layout(
+        x$res.str$graph, layout = layout, args_spiral = args_spiral
+      )
       graph$name <- x$res.str$mapped$Symbol[match(graph$name, x$res.str$mapped$STRING_id)]
       # igraph <- dedup.edges(igraph)
       x$graph <- graph
@@ -386,7 +388,7 @@ output_graph <- function(igraph, file, format = "graphml", toCyDir = TRUE) {
 
 plot_network.str <- function(graph, scale.x = 1.1, scale.y = 1.1,
   label.size = 4, sc = 5, ec = 5, 
-  arr.len = 2, edge.color = 'grey70', edge.width = .4, label = FALSE)
+  arr.len = 2, edge.color = 'grey80', edge.width = .4, label = FALSE)
 {
   if (label) {
     layer.nodes <- geom_node_label(aes(label = name), size = label.size)
