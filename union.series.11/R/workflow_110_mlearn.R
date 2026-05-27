@@ -108,18 +108,23 @@ setMethod("step1", signature = c(x = "job_mlearn"),
       "tmp", "svm_rfe", .run_svm_rfe, args, rerun = rerun
     )
     x$svm_rfe <- svm_rfe
-    p.svm <- caret:::ggplot.rfe(svm_rfe) +
-      lims(x = range(subset_sizes)) +
-      theme_classic()
-    data_error <- .get_ggplot_content(p.svm)
-    data_error <- dplyr::mutate(data_error, Error = 1 - Accuracy)
-    p.error <- ggplot(data_error, aes(x = Variables, y = Error)) +
-      geom_line() +
-      geom_point() +
-      theme_classic() +
-      labs(x = "Variables", y = "Error Rate (Cross-Validation)")
-    # p.svm_error <- 
-    p.svm <- patchwork::wrap_plots(p.svm, p.error)
+    data_svm <- as.data.frame(svm_rfe$results)
+    data_svm <- data_svm[data_svm$Variables %in% subset_sizes, , drop = FALSE]
+    data_svm <- data_svm[order(data_svm$Variables), , drop = FALSE]
+    data_svm$Error <- 1 - data_svm$Accuracy
+    p.acc <- .plot_svm_rfe_metric(
+      data_svm,
+      y = "Accuracy",
+      ylab = glue::glue("{n} × CV Accuracy"),
+      best = "max", subset_sizes = subset_sizes
+    )
+    p.error <- .plot_svm_rfe_metric(
+      data_svm,
+      y = "Error",
+      ylab = glue::glue("{n} × CV Error Rate"),
+      best = "min", subset_sizes = subset_sizes
+    )
+    p.svm <- patchwork::wrap_plots(p.acc, p.error, ncol = 2L)
     p.svm <- set_lab_legend(
       wrap(p.svm, 7, 4),
       glue::glue("{x@sig} SVM-RFE candidate subset sizes evaluation"),
@@ -861,7 +866,107 @@ setMethod("feature", signature = c(x = "job_mlearn"),
   return(res)
 }
 
+.plot_svm_rfe_metric <- function(data_metric, y, ylab, best = c("max", "min"),
+  line_colour = "#2b9fd8", mark_colour = "#b83b3b", subset_sizes)
+{
+  best <- match.arg(best)
+  vec_y <- data_metric[[y]]
 
+  n_best <- if (best == "max") {
+    which.max(vec_y)
+  } else {
+    which.min(vec_y)
+  }
+
+  data_best <- data_metric[n_best, , drop = FALSE]
+  data_best$label <- paste0(
+    data_best$Variables,
+    " – ",
+    formatC(data_best[[y]], format = "f", digits = 3L)
+  )
+
+  n_y_range <- diff(range(data_metric[[y]], na.rm = TRUE))
+  if (!is.finite(n_y_range) || n_y_range == 0) {
+    n_y_range <- abs(data_best[[y]]) * 0.05
+  }
+  if (!is.finite(n_y_range) || n_y_range == 0) {
+    n_y_range <- 0.05
+  }
+
+  vec_x_range <- range(data_metric$Variables, na.rm = TRUE)
+  n_x_mid <- mean(vec_x_range)
+
+  n_push_x <- if (data_best$Variables <= n_x_mid) 1.6 else -1.6
+  n_push_y <- n_y_range * 0.08
+  n_hjust <- if (n_push_x > 0) 0 else 1
+
+  data_best$x_text <- data_best$Variables + n_push_x
+  data_best$y_text <- data_best[[y]] + n_push_y
+  data_best$x_seg <- data_best$Variables + n_push_x * 0.7
+  data_best$y_seg <- data_best[[y]] + n_push_y * 0.7
+
+  ggplot2::ggplot(data_metric, ggplot2::aes(x = Variables, y = .data[[y]])) +
+    ggplot2::geom_line(colour = line_colour, linewidth = 0.7) +
+    ggplot2::geom_point(
+      data = data_best,
+      ggplot2::aes(x = Variables, y = .data[[y]]),
+      inherit.aes = FALSE,
+      shape = 21,
+      size = 2.8,
+      stroke = 0.9,
+      colour = mark_colour,
+      fill = "white"
+    ) +
+    ggplot2::geom_segment(
+      data = data_best,
+      ggplot2::aes(
+        x = Variables,
+        y = .data[[y]],
+        xend = x_seg,
+        yend = y_seg
+      ),
+      inherit.aes = FALSE,
+      linewidth = 0.5,
+      colour = mark_colour
+    ) +
+    ggplot2::geom_text(
+      data = data_best,
+      ggplot2::aes(
+        x = x_text,
+        y = y_text,
+        label = label
+      ),
+      inherit.aes = FALSE,
+      hjust = n_hjust,
+      vjust = 0,
+      colour = mark_colour,
+      size = 3.6,
+      fontface = "bold"
+    ) +
+    ggplot2::scale_x_continuous(
+      limits = range(subset_sizes),
+      breaks = pretty(range(subset_sizes), n = 5L)
+    ) +
+    ggplot2::scale_y_continuous(
+      limits = c(
+        min(data_metric[[y]], na.rm = TRUE) - n_y_range * 0.12,
+        max(data_metric[[y]], na.rm = TRUE) + n_y_range * 0.22
+      )
+    ) +
+    ggplot2::labs(x = NULL, y = ylab) +
+    ggplot2::theme_classic() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(
+        fill = NA,
+        colour = "grey35",
+        linewidth = 0.5
+      ),
+      axis.line = ggplot2::element_blank(),
+      axis.text = ggplot2::element_text(colour = "black"),
+      axis.title = ggplot2::element_text(colour = "black"),
+      plot.margin = ggplot2::margin(6, 8, 6, 6)
+    )
+}
 
 # .run_svm_rfe <- function(data, target, n, method, kernel, 
 #   subset_sizes, workers, seed)
