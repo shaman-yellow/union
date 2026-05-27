@@ -179,9 +179,23 @@ setMethod("step4", signature = c(x = "job_wgcna"),
       object(x) <- object
     } else {
       e(WGCNA::enableWGCNAThreads(cores))
+      .cal_module <- function(data, power, save_tom = "tom", minModuleSize = 200L, mergeCutHeight = .15, ...) {
+        if (!is(data, "wgcData")) {
+          stop("is(data, \"wgcData\") == FALSE")
+        }
+        require(WGCNA)
+        net <- e(WGCNA::blockwiseModules(
+            data, power = power,
+            TOMType = "unsigned", reassignThreshold = 0, 
+            minModuleSize = minModuleSize, mergeCutHeight = mergeCutHeight,
+            numericLabels = TRUE, pamRespectsDendro = FALSE, loadTOM = TRUE,
+            saveTOMs = TRUE, saveTOMFileBase = save_tom, verbose = 3, ...
+            ))
+        .wgcNet(net)
+      }
       fun_module <- function(mergeCutHeight, minModuleSize, power)
       {
-        net <- cal_module(
+        net <- .cal_module(
           x$datExpr, power,
           minModuleSize = minModuleSize, mergeCutHeight = mergeCutHeight, ...
         )
@@ -194,11 +208,51 @@ setMethod("step4", signature = c(x = "job_wgcna"),
       if (!is(net, "wgcNet")) {
         net <- .wgcNet(net)
       }
-      x$MEs <- get_eigens(net)
-      ME_genes <- net$colors
-      ME_genes <- split(names(ME_genes), unname(ME_genes))
-      names(ME_genes) <- paste0("ME", WGCNA::labels2colors(names(ME_genes)))
-      x$ME_genes <- ME_genes
+      if (length(net$colors) != ncol(x$datExpr)) {
+        stop("length(net$colors) != ncol(x$datExpr). Check datExpr orientation.")
+      }
+      if (!is.null(names(net$colors)) &&
+        !identical(names(net$colors), colnames(x$datExpr))) {
+        stop("names(net$colors) is not identical to colnames(x$datExpr).")
+      }
+      .get_me_colors <- function(me_names) {
+        x <- sub("^ME", "", me_names)
+        if (all(grepl("^[0-9]+$", x))) {
+          return(WGCNA::labels2colors(as.integer(x)))
+        }
+        x
+      }
+      .get_eigens <- function(net, datExpr) {
+        eigens <- WGCNA::orderMEs(net$MEs)
+        colors <- .get_me_colors(colnames(eigens))
+        colnames(eigens) <- paste0("ME", colors)
+        color_data <- tibble::tibble(
+          module = colnames(eigens),
+          color = colors
+        )
+        moduleColors <- WGCNA::labels2colors(net$colors)
+        gene_names <- names(net$colors)
+        if (is.null(gene_names)) {
+          gene_names <- colnames(datExpr)
+        }
+        if (length(gene_names) != length(moduleColors)) {
+          stop("length(gene_names) != length(moduleColors).")
+        }
+        members <- split(gene_names, moduleColors)
+        names(members) <- paste0("ME", names(members))
+        .wgcEigen(eigens, colors = color_data, members = members)
+      }
+      x$MEs <- .get_eigens(net, x$datExpr)
+      if (TRUE) {
+        moduleColors <- WGCNA::labels2colors(net$colors)
+        gene_names <- names(net$colors)
+        if (is.null(gene_names)) {
+          gene_names <- colnames(x$datExpr)
+        }
+        ME_genes <- split(gene_names, moduleColors)
+        names(ME_genes) <- paste0("ME", names(ME_genes))
+        x$ME_genes <- ME_genes
+      }
       x <- snapAdd(x, "使用 `WGCNA::blockwiseModules` 函数，设定最小模块基因数为 {minModuleSize} (minModuleSize) 以过滤过小模块，并通过合并切割聚类树高度为 {mergeCutHeight} (mergeCutHeight) 的分支模块，以 power {power} (soft thresholding powers) 创建基因共表达模块 【各模块基因数 (括号中为数目)：{try_snap(ME_genes)}】。")
       p.net <- set_lab_legend(
         wrap(net, 7, 6),
@@ -232,6 +286,9 @@ setMethod("step5", signature = c(x = "job_wgcna"),
     }
     if (!is.null(traits)) {
       .check_columns(traits, c("sample"))
+      if (!is.null(snap(trait)) && length(snap(trait)) == 1L) {
+        x <- snapAdd(x, "将 {snap(trait)} 与基因共表达模块关联分析。")
+      }
       message("Match rownames in expression data.")
       traits <- traits[match(rownames(x@params$datExpr), traits$sample), ]
       rownames <- traits$sample
@@ -261,11 +318,34 @@ setMethod("step5", signature = c(x = "job_wgcna"),
       x$corp_group <- dplyr::arrange(x$corp_group, dplyr::desc(abs(cor)))
       x$corp_group <- set_lab_legend(
         x$corp_group,
-        glue::glue("{x@sig} correlation of module with {traitName}"),
+        glue::glue("{x@sig} correlation of module with {bind(traitName)}"),
         glue::glue("共表达模块与 {traitName} 的关联性")
       )
       if (native) {
-        stop("...")
+        .get_sig <- function(p) {
+          ifelse(
+            p < 0.001, "***",
+            ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "-"))
+          )
+        }
+        textMatrix <- paste(
+          signif(cor, 2),
+          "\n", .get_sig(pvalue),
+          sep = ""
+        )
+        args <- list(Matrix = cor,
+          xLabels = traitName,
+          yLabels = names(useMEs),
+          ySymbols = names(useMEs),
+          colors =  WGCNA::blueWhiteRed(50L),
+          textMatrix = textMatrix,
+          setStdMargins = TRUE,
+          xLabelsAngle = 0L,
+          xLabelsAdj = 0.5,
+          zlim = c(-1, 1),
+          main = "Module-trait relationships"
+        )
+        p.corhp <- funPlot(WGCNA::labeledHeatmap, args)
       } else {
         data <- dplyr::mutate(x$corp_group, group = !!traitName)
         fun_palette <- fun_color(
@@ -281,15 +361,19 @@ setMethod("step5", signature = c(x = "job_wgcna"),
       p.corhp <- set_lab_legend(
         wrap(p.corhp, 5),
         glue::glue("{x@sig} correlation heatmap"),
-        glue::glue("WGCNA 模块-表型相关性热图|||展示 WGCNA 共表达模块与疾病表型 ({traitName}) 之间的相关性分析结果。每一行代表一个共表达模块，热图颜色表示模块特征基因与表型之间的相关方向和强度，红色表示正相关，蓝色表示负相关，颜色越深说明相关性越强。方格中的数值为相关系数，括号中为对应的 P 值，可用于筛选与疾病表型显著相关的关键模块。")
+        glue::glue("WGCNA 模块-表型相关性热图|||展示 WGCNA 共表达模块与疾病表型 ({traitName}) 之间的相关性分析结果。每一行代表一个共表达模块，热图颜色表示模块特征基因与表型之间的相关方向和强度，红色表示正相关，蓝色表示负相关，颜色越深说明相关性越强。方格中的数值为相关系数，随后为 P 值标记，其中 * 表示 p < 0.05，** 表示 p < 0.01，*** 表示 p < 0.001，- 表示差异不显著。")
       )
       x <- plotsAdd(x, p.corhp)
       sigModules <- dplyr::filter(
         x$corp_group, abs(cor) > cut.cor, pvalue < cut.p
         )$MEs
-      x <- snapAdd(
-        x, "筛选显著关联的共表达模块的基因 (pvalue &lt; {cut.p}, cor &gt; {cut.cor})。"
+      data_corPvalue <- safe_as_cor_tbl(
+        list(cor = cor, pvalue = pvalue), "cor", "pvalue"
       )
+      snap_cor <- .stat_ggcor_table_list(
+        data_corPvalue, "Module", "Trait"
+      )
+      x <- snapAdd(x, "筛选显著关联的共表达模块的基因 (⟦mark$blue('pvalue &lt; {cut.p}, cor &gt; {cut.cor}')⟧){aref(p.corhp)}, {snap_cor}")
       x$.feature <- as_feature(
         x$ME_genes[ names(x$ME_genes) %in% sigModules ], x,
         analysis = glue::glue("WGCNA 与 {traitName} 显著关联的共表达模块的基因")

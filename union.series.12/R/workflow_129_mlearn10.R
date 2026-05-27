@@ -30,7 +30,7 @@ setMethod("asjob_mlearn10", signature = c(x = "job_mlearn"),
 setMethod("step1", signature = c(x = "job_mlearn10"),
   function(x, n = 10L, nthread = 1L, validate = NULL, 
     use_rfe = TRUE, nkeep = 10L, debug = FALSE, repeats = 10L,
-    exclude = c("XGBoost"), sizes = NULL)
+    exclude = NULL, sizes = NULL)
   {
     step_message("Run caret")
     if (!is.null(validate)) {
@@ -152,6 +152,53 @@ setMethod("step1", signature = c(x = "job_mlearn10"),
   })
 
 setMethod("step2", signature = c(x = "job_mlearn10"),
+  function(x, models = names(x$res_ml_train10$models), top = 10L)
+  {
+    step_message("Plot representative training results.")
+    if (is.null(x$res_ml_train10) || !is(x$res_ml_train10, "ml_train10")) {
+      stop('is.null(x$res_ml_train10) || !is(x$res_ml_train10, "ml_train10").')
+    }
+    models <- intersect(models, names(x$res_ml_train10$models))
+    if (!length(models)) {
+      stop("No valid model names found in x$res_ml_train10$models.")
+    }
+    lst_objs <- .plot_representative_training_ml_train10(
+      x = x,
+      mlt10 = x$res_ml_train10,
+      models = models,
+      top = top
+    )
+    if (!length(lst_objs)) {
+      message("No representative training plots were generated.")
+      return(x)
+    }
+    lst_plots <- lst_objs[
+      vapply(
+        lst_objs,
+        function(obj) {
+          !is(obj, "df")
+        },
+        logical(1L)
+      )
+    ]
+    lst_tables <- lst_objs[
+      vapply(
+        lst_objs,
+        function(obj) {
+          is(obj, "df")
+        },
+        logical(1L)
+      )
+    ]
+    x$training_plots_ml_train10 <- lst_plots
+    x$training_tables_ml_train10 <- lst_tables
+    if (length(lst_plots)) {
+      x <- .add_plots_list_ml_train10(x, lst_plots)
+    }
+    return(x)
+  })
+
+setMethod("step3", signature = c(x = "job_mlearn10"),
   function(x, which = 1L)
   {
     step_message("Select best model.")
@@ -173,7 +220,7 @@ setMethod("step2", signature = c(x = "job_mlearn10"),
     return(x)
   })
 
-setMethod("step3", signature = c(x = "job_mlearn10"),
+setMethod("step4", signature = c(x = "job_mlearn10"),
   function(x, use = c("validate", "train"), model = x$comprehensive_summary$Model[1])
   {
     use <- match.arg(use)
@@ -213,6 +260,582 @@ setMethod("step3", signature = c(x = "job_mlearn10"),
     x <- plotsAdd(x, p.importance, p.summary)
     return(x)
   })
+
+
+.plot_representative_training_ml_train10 <- function(x, mlt10, models, top = 10L)
+{
+  lst_plots <- list()
+  if ("SVM" %in% models) {
+    lst_svm <- .plot_svm_rfe_representative_ml_train10(x, mlt10)
+    lst_plots <- c(lst_plots, lst_svm)
+  }
+  if ("Lasso" %in% models) {
+    lst_lasso <- .plot_lasso_representative_ml_train10(x, mlt10, top = top)
+    lst_plots <- c(lst_plots, lst_lasso)
+  }
+  if ("RF" %in% models) {
+    lst_rf <- .plot_rf_representative_ml_train10(x, mlt10, top = top)
+    lst_plots <- c(lst_plots, lst_rf)
+  }
+  if ("XGBoost" %in% models) {
+    lst_xgb <- .plot_xgb_representative_ml_train10(x, mlt10, top = top)
+    lst_plots <- c(lst_plots, lst_xgb)
+  }
+  lst_plots[ !vapply(lst_plots, is.null, logical(1L)) ]
+}
+
+.plot_svm_rfe_representative_ml_train10 <- function(x, mlt10)
+{
+  res_rfe <- mlt10$rfes[[ "SVM" ]]
+  if (is.null(res_rfe) || is.null(res_rfe$fit_rfe)) {
+    message("Skip SVM representative plot: SVM RFE result is missing.")
+    return(list())
+  }
+  fit_rfe <- res_rfe$fit_rfe
+  if (is.null(fit_rfe$results) || !all(c("Variables", "Accuracy") %in% colnames(fit_rfe$results))) {
+    message("Skip SVM representative plot: invalid RFE results.")
+    return(list())
+  }
+  if (is.null(x$.args$step1$sizes)) {
+    range <- range(fit_rfe$results$Variables, na.rm = TRUE)
+  } else {
+    range <- range(x$.args$step1$sizes)
+  }
+  p_svm <- caret:::ggplot.rfe(fit_rfe) +
+    ggplot2::lims(x = range) +
+    ggplot2::theme_classic()
+  data_error <- .get_ggplot_content(p_svm)
+  data_error <- dplyr::mutate(data_error, Error = 1 - Accuracy)
+  p_error <- ggplot(data_error, aes(x = Variables, y = Error)) +
+    geom_line() +
+    geom_point() +
+    ggplot2::lims(x = range) +
+    theme_classic() +
+    labs(x = "Variables", y = "Error Rate (Cross-Validation)")
+  p_svm <- patchwork::wrap_plots(p_svm, p_error)
+  p_svm <- set_lab_legend(
+    wrap(p_svm, 7, 4),
+    glue::glue("{x@sig} SVM-RFE candidate subset sizes evaluation"),
+    glue::glue("SVM-RFE候选子集正确率与错误率曲线|||交叉验证准确率与错误率随特征数量变化的趋势，用于评估支持向量机递归特征消除过程中不同特征子集规模对应的分类性能。")
+  )
+  list(p.svm_rfe = p_svm)
+}
+
+.plot_lasso_representative_ml_train10 <- function(x, mlt10, top = 10L)
+{
+  fit <- mlt10$models[[ "Lasso" ]]
+  if (is.null(fit) || !inherits(fit, "train") || is.null(fit$finalModel)) {
+    message("Skip Lasso representative plots: caret train object is missing.")
+    return(list())
+  }
+  if (!inherits(fit$finalModel, "glmnet")) {
+    message("Skip Lasso representative plots: final model is not glmnet.")
+    return(list())
+  }
+  lst_plots <- list()
+  p_tune <- .plot_lasso_tuning_representative_ml_train10(fit)
+  if (!is.null(p_tune)) {
+    p_tune <- set_lab_legend(
+      wrap(p_tune, 5.5, 4, showtext = TRUE),
+      glue::glue("{x@sig} LASSO tuning performance"),
+      glue::glue("LASSO 正则化参数调参曲线|||展示 caret 重采样过程中不同 λ 值对应的模型性能，用于辅助判断正则化强度与模型判别能力之间的关系。虚线标示最终模型采用的 λ 参数。")
+    )
+    lst_plots$p.lasso_cv <- p_tune
+  }
+  p_coef <- .plot_lasso_coef_representative_ml_train10(fit, top = top)
+  if (!is.null(p_coef)) {
+    p_coef <- set_lab_legend(
+      wrap(p_coef, 8, 4, showtext = TRUE),
+      glue::glue("{x@sig} Lasso Coefficient path"),
+      glue::glue("LASSO 系数路径|||展示各特征回归系数随正则化参数 log(λ) 变化的情况。随着正则化强度变化，不同特征系数逐渐收缩至零，反映 LASSO 模型的变量筛选过程。")
+    )
+    lst_plots$p.lasso_coef <- p_coef
+  }
+  lst_plots
+}
+
+.plot_lasso_tuning_representative_ml_train10 <- function(fit)
+{
+  data_res <- fit$results
+  if (is.null(data_res) || !"lambda" %in% colnames(data_res)) {
+    message("Skip Lasso tuning plot: lambda column is missing.")
+    return(NULL)
+  }
+  data_res <- tibble::as_tibble(data_res)
+  if (!is.null(fit$bestTune$alpha) && "alpha" %in% colnames(data_res)) {
+    data_res <- dplyr::filter(data_res, alpha == fit$bestTune$alpha)
+  }
+  str_metric <- if ("ROC" %in% colnames(data_res)) {
+    "ROC"
+  } else if ("Accuracy" %in% colnames(data_res)) {
+    "Accuracy"
+  } else {
+    message("Skip Lasso tuning plot: no supported metric was found.")
+    return(NULL)
+  }
+  str_sd <- paste0(str_metric, "SD")
+  data_res$log_lambda <- log(data_res$lambda)
+  data_res$nzero <- .get_lasso_nzero_ml_train10(
+    fit$finalModel,
+    data_res$lambda
+  )
+  data_res$nzero_factor <- factor(data_res$nzero, levels = unique(data_res$nzero))
+  data_vline <- data.frame(
+    lambda = fit$bestTune$lambda,
+    log_lambda = log(fit$bestTune$lambda),
+    label = glue::glue("lambda\nlog(λ) = {signif(log(fit$bestTune$lambda), 3L)}")
+  )
+  p <- ggplot(data_res, aes(x = log_lambda, y = .data[[ str_metric ]])) +
+    geom_point(aes(color = nzero_factor), size = 1.8) +
+    geom_line(color = "grey40", linewidth = 0.5) +
+    geom_vline(data = data_vline, aes(xintercept = log_lambda), linetype = 2L) +
+    geom_text(
+      data = data_vline,
+      aes(
+        x = log_lambda,
+        y = max(data_res[[ str_metric ]], na.rm = TRUE) * 0.98,
+        label = label
+      ),
+      hjust = -0.05,
+      vjust = 1,
+      size = 3,
+      inherit.aes = FALSE
+    ) +
+    labs(x = "Log(λ)", y = str_metric, color = "Variables") +
+    theme_bw()
+  if (str_sd %in% colnames(data_res)) {
+    p <- ggplot(data_res, aes(x = log_lambda, y = .data[[ str_metric ]])) +
+      geom_errorbar(
+        aes(
+          ymin = .data[[ str_metric ]] - .data[[ str_sd ]],
+          ymax = .data[[ str_metric ]] + .data[[ str_sd ]],
+          color = nzero_factor
+        ),
+        width = 0.03
+      ) +
+      geom_point(aes(color = nzero_factor), size = 1.8) +
+      geom_line(color = "grey40", linewidth = 0.5) +
+      geom_vline(data = data_vline, aes(xintercept = log_lambda), linetype = 2L) +
+      geom_text(
+        data = data_vline,
+        aes(
+          x = log_lambda,
+          y = max(data_res[[ str_metric ]] + data_res[[ str_sd ]], na.rm = TRUE) * 0.98,
+          label = label
+        ),
+        hjust = -0.05,
+        vjust = 1,
+        size = 3,
+        inherit.aes = FALSE
+      ) +
+      labs(x = "Log(λ)", y = str_metric, color = "Variables") +
+      theme_bw()
+  }
+  p
+}
+
+.plot_lasso_coef_representative_ml_train10 <- function(fit, top = 10L)
+{
+  model <- fit$finalModel
+  mat_beta <- as.matrix(model$beta)
+  if (!nrow(mat_beta) || !ncol(mat_beta)) {
+    message("Skip Lasso coefficient path: beta matrix is empty.")
+    return(NULL)
+  }
+  data_coef <- reshape2::melt(
+    mat_beta,
+    varnames = c("feature", "lambda_index"),
+    value.name = "coef"
+  )
+  vec_lambda_name <- colnames(mat_beta)
+  data_coef$lambda_index <- match(as.character(data_coef$lambda_index), vec_lambda_name)
+  if (any(is.na(data_coef$lambda_index))) {
+    data_coef$lambda_index <- as.integer(data_coef$lambda_index)
+  }
+  data_coef$lambda <- model$lambda[data_coef$lambda_index]
+  data_coef$log_lambda <- log(data_coef$lambda)
+  data_abs <- stats::aggregate(
+    abs(coef) ~ feature,
+    data = data_coef,
+    FUN = max
+  )
+  data_abs <- data_abs[order(data_abs[, 2L], decreasing = TRUE), , drop = FALSE]
+  vec_label_features <- head(data_abs$feature, top)
+  data_label <- data_coef[data_coef$feature %in% vec_label_features, , drop = FALSE]
+  vec_idx_label <- unlist(tapply(
+    seq_len(nrow(data_label)),
+    data_label$feature,
+    function(x) x[which.max(data_label$log_lambda[x])]
+  ))
+  data_label <- data_label[vec_idx_label, , drop = FALSE]
+  data_vline <- data.frame(
+    log_lambda = log(fit$bestTune$lambda),
+    label = glue::glue("lambda\nlog(λ) = {signif(log(fit$bestTune$lambda), 3L)}")
+  )
+  ggplot(
+    data_coef,
+    aes(
+      x = log_lambda,
+      y = coef,
+      color = feature,
+      group = feature
+    )
+  ) +
+    geom_line(linewidth = 0.8) +
+    geom_vline(
+      data = data_vline,
+      aes(xintercept = log_lambda),
+      linetype = 2L,
+      color = "grey40"
+    ) +
+    geom_text(
+      data = data_vline,
+      aes(
+        x = log_lambda,
+        y = max(data_coef$coef, na.rm = TRUE) * 0.95,
+        label = label
+      ),
+      hjust = -0.05,
+      vjust = 1,
+      inherit.aes = FALSE,
+      size = 3
+    ) +
+    ggrepel::geom_text_repel(
+      data = data_label,
+      aes(label = feature),
+      size = 3,
+      show.legend = FALSE
+    ) +
+    labs(x = "Log(λ)", y = "Coefficients", color = "Feature") +
+    theme_bw()
+}
+
+.get_lasso_nzero_ml_train10 <- function(model, vec_lambda)
+{
+  mat_beta <- as.matrix(model$beta)
+  if (!length(vec_lambda) || !length(model$lambda)) {
+    return(rep(NA_integer_, length(vec_lambda)))
+  }
+  vapply(vec_lambda,
+    function(x) {
+      idx <- which.min(abs(model$lambda - x))
+      sum(abs(mat_beta[, idx]) > 0)
+    },
+    integer(1L)
+  )
+}
+
+.plot_rf_representative_ml_train10 <- function(x, mlt10, top = 10L)
+{
+  fit <- mlt10$models[[ "RF" ]]
+  if (is.null(fit) || !inherits(fit, "train") || is.null(fit$finalModel)) {
+    message("Skip RF representative plots: caret train object is missing.")
+    return(list())
+  }
+  model <- fit$finalModel
+  lst_plots <- list()
+  if (!is.null(model$err.rate)) {
+    data_error <- tibble::as_tibble(model$err.rate)
+    data_error <- dplyr::mutate(data_error, trees = seq_len(nrow(data_error)))
+    data_error <- tidyr::pivot_longer(
+      data_error,
+      -trees,
+      names_to = "Error_Type",
+      values_to = "Error_Rate"
+    )
+    p_error <- ggplot(data_error, aes(x = trees, y = Error_Rate, color = Error_Type)) +
+      geom_line() +
+      labs(x = "Number of trees", y = "Error Rate") +
+      theme_minimal() +
+      theme(legend.title = element_blank())
+    p_error <- set_lab_legend(
+      wrap(p_error, 5, 3),
+      glue::glue("{x@sig} Trend of random forest error rate"),
+      glue::glue("随机森林误差率随树数量变化趋势图|||展示随机森林模型在树数量增加过程中的袋外误差变化。OOB 为总体袋外误差，不同类别曲线反映各类别的分类误差趋势。")
+    )
+    lst_plots$p.rf_error <- p_error
+  } else {
+    message("Skip RF error plot: err.rate is missing.")
+  }
+  data_importance <- tryCatch(
+    tibble::as_tibble(randomForest::importance(model), rownames = "feature"),
+    error = function(e) NULL
+  )
+  if (!is.null(data_importance) && nrow(data_importance)) {
+    if (!"MeanDecreaseGini" %in% colnames(data_importance)) {
+      data_importance$MeanDecreaseGini <- data_importance[[ ncol(data_importance) ]]
+    }
+    if (!"MeanDecreaseAccuracy" %in% colnames(data_importance)) {
+      data_importance$MeanDecreaseAccuracy <- NA_real_
+    }
+    p_tops <- .plot_rf_importance_representative_ml_train10(data_importance, top)
+    p_tops <- set_lab_legend(
+      wrap(p_tops, 5, top * .2 + 2),
+      glue::glue("{x@sig} RF top importance feature"),
+      glue::glue("随机森林特征重要性分析图|||基于随机森林模型计算各特征的重要性评分，并展示重要性较高的特征。MeanDecreaseGini 表示变量对节点纯度提升的贡献。")
+    )
+    lst_plots$p.rf_importance <- p_tops
+  } else {
+    message("Skip RF importance plot: importance table is missing.")
+  }
+  lst_plots
+}
+
+.plot_rf_importance_representative_ml_train10 <- function(data_importance, top)
+{
+  data_importance <- dplyr::arrange(
+    data_importance,
+    dplyr::desc(MeanDecreaseGini)
+  )
+  data_importance <- head(data_importance, top)
+  if (all(is.na(data_importance$MeanDecreaseAccuracy))) {
+    data_importance$MeanDecreaseAccuracy <- NULL
+  }
+  data_importance <- dplyr::arrange(data_importance, MeanDecreaseGini)
+  data_plot <- tidyr::pivot_longer(
+    data_importance,
+    cols = dplyr::starts_with("MeanDecrease"),
+    names_to = "metric",
+    values_to = "importance"
+  )
+  data_plot$feature <- factor(data_plot$feature, levels = data_importance$feature)
+  ggplot2::ggplot(
+    data_plot,
+    ggplot2::aes(x = feature, y = importance, fill = metric)
+  ) +
+    ggplot2::geom_col(
+      position = ggplot2::position_dodge(width = 0.75),
+      width = 0.65
+    ) +
+    ggplot2::geom_text(
+      ggplot2::aes(label = round(importance, 2L)),
+      position = ggplot2::position_dodge(width = 0.75),
+      hjust = -0.1,
+      size = 3.5
+    ) +
+    ggplot2::scale_fill_manual(
+      values = c("MeanDecreaseAccuracy" = "#3C77C4", "MeanDecreaseGini" = "#F28E2B")
+    ) +
+    ggplot2::labs(
+      title = "RF Feature Importance",
+      x = "Feature",
+      y = "Importance Score",
+      fill = "Type"
+    ) +
+    ggplot2::coord_flip() +
+    ggplot2::theme_classic()
+}
+
+.get_xgb_importance_representative_ml_train10 <- function(mlt10, top = 10L)
+{
+  fit <- mlt10$models[[ "XGBoost" ]]
+
+  if (is.null(fit) || !inherits(fit, "train") || is.null(fit$finalModel)) {
+    message("XGBoost train object is missing.")
+    return(NULL)
+  }
+
+  obj_final <- fit$finalModel
+
+  model <- if (!is.null(obj_final$model)) {
+    obj_final$model
+  } else {
+    obj_final
+  }
+
+  vec_feature <- NULL
+
+  if (!is.null(obj_final$xNames)) {
+    vec_feature <- obj_final$xNames
+  }
+
+  data_importance <- tryCatch(
+    xgboost::xgb.importance(
+      model = model,
+      feature_names = vec_feature
+    ),
+    error = function(e) {
+      message(glue::glue(
+        "xgb.importance failed: {e$message}"
+      ))
+      NULL
+    }
+  )
+
+  if (is.null(data_importance) || !nrow(data_importance)) {
+    message("Fallback to caret::varImp for XGBoost importance.")
+
+    data_vi <- tryCatch(
+      caret::varImp(fit)$importance,
+      error = function(e) {
+        message(glue::glue(
+          "caret::varImp failed: {e$message}"
+        ))
+        NULL
+      }
+    )
+
+    if (!is.null(data_vi) && nrow(data_vi)) {
+      data_importance <- data.frame(
+        Feature = rownames(data_vi),
+        Gain = rowMeans(as.matrix(data_vi), na.rm = TRUE),
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  if ((is.null(data_importance) || !nrow(data_importance)) &&
+      !is.null(mlt10$feature_score[[ "XGBoost" ]])) {
+    message("Fallback to mlt10$feature_score[['XGBoost']].")
+
+    vec_score <- mlt10$feature_score[[ "XGBoost" ]]
+
+    data_importance <- data.frame(
+      Feature = names(vec_score),
+      Gain = as.numeric(vec_score),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  if (is.null(data_importance) || !nrow(data_importance)) {
+    message("Skip XGBoost importance: no valid importance table was found.")
+    return(NULL)
+  }
+
+  if (!"Feature" %in% colnames(data_importance)) {
+    data_importance$Feature <- rownames(data_importance)
+  }
+
+  if (!"Gain" %in% colnames(data_importance)) {
+    vec_num <- colnames(data_importance)[
+      vapply(data_importance, is.numeric, logical(1L))
+    ]
+
+    if ("Overall" %in% vec_num) {
+      data_importance$Gain <- data_importance$Overall
+    } else if (length(vec_num)) {
+      data_importance$Gain <- data_importance[[ vec_num[1L] ]]
+    } else {
+      message("Skip XGBoost importance: no numeric importance column was found.")
+      return(NULL)
+    }
+  }
+
+  data_importance <- data_importance[
+    is.finite(data_importance$Gain),
+    ,
+    drop = FALSE
+  ]
+
+  if (!nrow(data_importance)) {
+    message("Skip XGBoost importance: all Gain values are non-finite.")
+    return(NULL)
+  }
+
+  data_importance <- data_importance[
+    order(data_importance$Gain, decreasing = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(data_importance) <- NULL
+
+  head(data_importance, top)
+}
+
+.plot_xgb_importance_representative_ml_train10 <- function(data_importance)
+{
+  ggplot(
+    data_importance,
+    aes(
+      x = reorder(Feature, Gain),
+      y = Gain
+    )
+  ) +
+    geom_col() +
+    coord_flip() +
+    theme_bw() +
+    xlab("Gene") +
+    ylab("Importance (Gain)") +
+    ggtitle("Feature Importance")
+}
+
+.plot_xgb_representative_ml_train10 <- function(x, mlt10, top = 10L)
+{
+  data_importance <- .get_xgb_importance_representative_ml_train10(
+    mlt10 = mlt10,
+    top = top
+  )
+
+  if (is.null(data_importance) || !nrow(data_importance)) {
+    return(list())
+  }
+
+  p_importance <- .plot_xgb_importance_representative_ml_train10(
+    data_importance
+  )
+
+  p_importance <- set_lab_legend(
+    wrap_scale(p_importance, 20, nrow(data_importance), size = .1),
+    glue::glue("{x@sig} XGBoost Feature Importance"),
+    glue::glue("XGBoost 模型特征重要性排序|||展示对分类任务贡献度较高的特征，按 Gain 值衡量。Gain 越高，说明该特征在树模型分裂及分类决策中的贡献越大。")
+  )
+
+  t_importance <- set_lab_legend(
+    data_importance,
+    glue::glue("{x@sig} XGBoost top importance feature"),
+    glue::glue("XGBoost 特征重要性表|||按 Gain 值从高到低排列的 Top 特征。")
+  )
+
+  list(
+    p.xgb_importance = p_importance,
+    t.xgb_importance = t_importance
+  )
+}
+
+.add_plots_list_ml_train10 <- function(x, lst_plots)
+{
+  if (!length(lst_plots)) {
+    return(x)
+  }
+  do.call(plotsAdd, c(list(x = x), lst_plots))
+}
+
+.summarise_representative_training_plots_ml_train10 <- function(lst_plots)
+{
+  vec_name <- names(lst_plots)
+  data.frame(
+    Name = vec_name,
+    Model = sub("^p\\.([^.]+).*", "\\1", vec_name),
+    Type = .get_representative_plot_type_ml_train10(vec_name),
+    stringsAsFactors = FALSE
+  )
+}
+
+.get_representative_plot_type_ml_train10 <- function(vec_name)
+{
+  vapply(vec_name,
+    function(x) {
+      if (grepl("svm_rfe", x)) {
+        return("递归特征消除性能曲线")
+      }
+      if (grepl("lasso_cv", x)) {
+        return("正则化参数调参曲线")
+      }
+      if (grepl("lasso_coef", x)) {
+        return("正则化系数路径")
+      }
+      if (grepl("rf_error", x)) {
+        return("随机森林袋外误差趋势")
+      }
+      if (grepl("rf_importance|xgb_importance", x)) {
+        return("模型特征重要性")
+      }
+      "代表性训练图"
+    },
+    character(1L)
+  )
+}
 
 
 .stat_shap_analysis <- function(x, p1 = NULL, p2 = NULL, top_n = 5L, digits = 3L)
@@ -520,12 +1143,6 @@ setMethod("step3", signature = c(x = "job_mlearn10"),
   lv <- obj$levels
   fun_pred <- function(model, newdata)
   {
-    if (inherits(model, "xgb.Booster")) {
-      pred <- predict(
-        model, newdata = as.matrix(newdata)
-      )
-      return(as.numeric(pred))
-    }
     pred <- .caret_predict(
       fit = model, dat = newdata, type = "prob"
     )
@@ -717,37 +1334,66 @@ setMethod("clear", signature = c(x = "job_mlearn10"),
   namel(p.kappa, p.acc)
 }
 
-.plot_importance_ml_train10 <- function(data, ...) {
-  avg_imp <- dplyr::summarise(
+.plot_importance_ml_train10 <- function(data, ...)
+{
+  data_imp <- dplyr::summarise(
     dplyr::group_by(data, Algorithm, Feature),
-    Avg_Importance = mean(Importance, na.rm = TRUE),
+    Avg_Importance_raw = mean(Importance[is.finite(Importance)], na.rm = TRUE),
+    Select_Count = dplyr::n(),
     .groups = "drop"
   )
-  # scale the importance
-  avg_imp <- dplyr::mutate(
-    dplyr::group_by(avg_imp, Algorithm),
-    Avg_Importance = (
-      Avg_Importance - min(Avg_Importance)
-      ) / (
-      max(Avg_Importance) - min(Avg_Importance)
+
+  data_imp$Avg_Importance_raw[
+    is.nan(data_imp$Avg_Importance_raw)
+  ] <- NA_real_
+
+  data_imp <- dplyr::mutate(
+    dplyr::group_by(data_imp, Algorithm),
+    Use_Fallback = all(!is.finite(Avg_Importance_raw)),
+    Avg_Importance = dplyr::if_else(
+      Use_Fallback,
+      as.numeric(Select_Count),
+      Avg_Importance_raw
+    ),
+    Avg_Importance = .rescale01_ml_train10(Avg_Importance)
+  )
+
+  data_imp <- dplyr::ungroup(data_imp)
+
+  data_imp <- dplyr::filter(
+    data_imp,
+    is.finite(Avg_Importance)
+  )
+
+  data_imp <- dplyr::group_modify(
+    dplyr::group_by(data_imp, Algorithm),
+    ~ dplyr::slice_max(
+      .x,
+      order_by = Avg_Importance,
+      n = 10L,
+      with_ties = FALSE
     )
   )
-  avg_imp <- dplyr::group_modify(
-    dplyr::group_by(avg_imp, Algorithm),
-    ~ dplyr::slice_max(.x, order_by = Avg_Importance, n = 10L, with_ties = FALSE)
-  )
-  avg_imp <- dplyr::ungroup(avg_imp)
-  ggplot(avg_imp,
-    aes(x = tidytext::reorder_within(Feature, Avg_Importance, Algorithm),
-      y = Avg_Importance)
+
+  data_imp <- dplyr::ungroup(data_imp)
+
+  ggplot(
+    data_imp,
+    aes(
+      x = tidytext::reorder_within(Feature, Avg_Importance, Algorithm),
+      y = Avg_Importance
+    )
+  ) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    facet_wrap(~ Algorithm, scales = "free_y", ...) +
+    tidytext::scale_x_reordered() +
+    labs(
+      title = "Algorithm Feature Importance Ranking",
+      x = "Feature",
+      y = "Average Importance Scaled"
     ) +
-  geom_bar(stat = "identity") +
-  coord_flip() +
-  facet_wrap(~ Algorithm, scales = "free_y", ...) +
-  tidytext::scale_x_reordered() +
-  labs(title = "Algorithm Feature Importance Ranking",
-    x = "Feature", y = "Average Importance Scaled") +
-  theme_minimal()
+    theme_minimal()
 }
 
 .as_input_for_ml_train10 <- function(data, target, positive_class)
@@ -782,27 +1428,32 @@ run_ml_train10 <- function(
   rfe_sizes = NULL, exclude = NULL
 )
 {
-  # ------------------------------------------------------------------
-  # Check input
-  # ------------------------------------------------------------------
-  inputs <- .as_input_for_ml_train10(
+  lst_inputs <- .as_input_for_ml_train10(
     data, target, positive_class
   )
 
-  data <- inputs$data
-  dat <- inputs$dat
-  target <- inputs$target
-  positive_class <- inputs$positive_class
+  data_x <- lst_inputs$data
+  data_train <- lst_inputs$dat
+  factor_target <- lst_inputs$target
+  positive_class <- lst_inputs$positive_class
 
-  # ------------------------------------------------------------------
-  # Model configuration
-  # ------------------------------------------------------------------
-  cfg <- make_cfg(data, tune_length)
+  lst_cfg <- make_cfg(
+    data_x,
+    tune_length = tune_length,
+    nthread = nthread
+  )
+
   if (!is.null(exclude)) {
-    cfg <- cfg[ !names(cfg) %in% exclude ]
+    lst_cfg <- lst_cfg[ !names(lst_cfg) %in% exclude ]
   }
 
-  ctrl <- caret::trainControl(
+  if (!length(lst_cfg)) {
+    stop("No model configuration remains after applying `exclude`.")
+  }
+
+  n_candidates <- .get_n_candidates_cfg(lst_cfg)
+
+  ctrl_train <- caret::trainControl(
     method = "repeatedcv",
     number = cv_folds,
     classProbs = TRUE,
@@ -810,236 +1461,232 @@ run_ml_train10 <- function(
     savePredictions = "final",
     allowParallel = TRUE,
     repeats = repeats,
+    selectionFunction = "oneSE",
     seeds = make_seeds(
       n_folds = cv_folds,
       repeats = repeats,
-      n_candidates = 50L,
+      n_candidates = n_candidates,
       seed = seed
     )
   )
 
-  fun_caret <- function(...) {
-    fit <- tryCatch(
-      do.call(caret::train, append(base_args, args)),
-      error = function(e) {
-        print(e)
-        NULL
+  vec_model <- names(lst_cfg)
+
+  lst_train <- lapply(vec_model,
+    function(str_nm) {
+      lst_args <- lst_cfg[[ str_nm ]]
+      data_use <- data_train
+      res_rfe <- NULL
+      vec_vars <- NULL
+
+      if (use_rfe) {
+        message(glue::glue("RFE selecting for {str_nm} ..."))
+
+        res_rfe <- perform_rfe(
+          data_train,
+          str_nm,
+          cv_folds,
+          seed = seed,
+          rfe_sizes = rfe_sizes,
+          tune_length = tune_length,
+          nthread = nthread
+        )
+
+        vec_vars <- res_rfe$vars
+        data_use <- data_train[, c("Class", vec_vars), drop = FALSE]
       }
-    )
-    if (is.null(fit)) {
-      stop('is.null(fit).')
-    }
-    return(fit)
-  }
 
-  # ------------------------------------------------------------------
-  # Train caret models
-  # ------------------------------------------------------------------
-  model_list <- list()
-  rfe_list <- list()
-  feature_rfe <- list()
+      if (identical(str_nm, "XGBoost")) {
+        n_xgb_folds <- .check_xgb_input_ml_train10(
+          data_use,
+          cv_folds = cv_folds
+        )
+        ctrl_use <- caret::trainControl(
+          method = "repeatedcv",
+          number = n_xgb_folds,
+          classProbs = TRUE,
+          summaryFunction = caret::twoClassSummary,
+          selectionFunction = "oneSE",
+          savePredictions = "final",
+          allowParallel = FALSE,
+          repeats = repeats,
+          seeds = make_seeds(
+            n_folds = n_xgb_folds,
+            repeats = repeats,
+            n_candidates = nrow(lst_args$tuneGrid),
+            seed = seed
+          )
+        )
+        data_xgb <- data_use[, colnames(data_use) != "Class", drop = FALSE]
+        data_xgb <- data_xgb[, vapply(data_xgb, is.numeric, logical(1L)), drop = FALSE]
+        lst_base_args <- list(
+          x = data_xgb,
+          y = data_use$Class,
+          metric = "ROC",
+          trControl = ctrl_use
+        )
+        message(glue::glue(
+          "Train XGBoost by safe caret modelInfo; n = {nrow(data_xgb)}, p = {ncol(data_xgb)}, folds = {n_xgb_folds}."
+        ))
+      } else {
+        lst_base_args <- list(
+          form = Class ~ .,
+          data = data_use,
+          metric = "ROC",
+          trControl = ctrl_train
+        )
+      }
 
-  for (nm in names(cfg)) {
+      fun_caret <- function(...) {
+        set.seed(seed)
 
-    args <- cfg[[nm]]
-    dat_use <- dat
+        fit <- tryCatch(
+          do.call(caret::train, c(lst_base_args, lst_args)),
+          error = function(e) {
+            message(glue::glue("Failed in training {str_nm}: {e$message}"))
+            NULL
+          }
+        )
 
-    if (use_rfe) {
-      message(glue::glue("RFE selecting for {nm} ..."))
-      rfe_list[[ nm ]] <- perform_rfe(
-        dat, nm, cv_folds, seed = seed, rfe_sizes = rfe_sizes
+        if (is.null(fit)) {
+          stop(glue::glue("is.null(fit) in {str_nm}."))
+        }
+
+        fit
+      }
+
+      message(glue::glue("Training {str_nm} ..."))
+
+      fit <- expect_local_data(
+        "tmp",
+        glue::glue("ml_caret_{str_nm}"),
+        fun_caret,
+        list(
+          str_nm,
+          .get_cache_args_ml_train10(str_nm, lst_args),
+          colnames(data_use),
+          rownames(data_use),
+          levels(factor_target),
+          positive_class,
+          seed,
+          cv_folds,
+          tune_length,
+          use_rfe,
+          repeats,
+          nthread,
+          rfe_sizes
+        )
       )
-      vars <- rfe_list[[ nm ]]$vars
-      feature_rfe[[ nm ]] <- vars
-      dat_use <- dat[, c("Class", vars), drop = FALSE]
-    }
 
-    base_args <- list(
-      form = Class ~ .,
-      data = dat_use,
-      metric = "ROC",
-      trControl = ctrl
-    )
+      if (is.null(fit)) {
+        message(glue::glue("Failed in training {str_nm}."))
+      }
 
-    message(glue::glue("Training {nm} ..."))
-
-    fit <- expect_local_data(
-      "tmp",
-      glue::glue("ml_{nm}"),
-      fun_caret,
-      list(colnames(dat_use), rownames(dat_use), levels(target), positive_class,
-        seed, cv_folds, tune_length, use_rfe, repeats)
-    )
-
-    if (is.null(fit)) {
-      message(glue::glue("Failed in training {nm}"))
-    }
-
-    model_list[[nm]] <- fit
-  }
-
-  # ------------------------------------------------------------------
-  # XGBoost (manual training)
-  # ------------------------------------------------------------------
-  xgb_fun <- function(...) {
-
-    params <- list(
-      objective = "binary:logistic",
-      eval_metric = "auc",
-      eta = 0.05,
-      max_depth = 3,
-      subsample = 0.8,
-      colsample_bytree = 0.8
-    )
-
-    cv <- tryCatch(
-      xgboost::xgb.cv(
-        params = params,
-        data = dtrain,
-        nrounds = 5,
-        nfold = cv_folds,
-        early_stopping_rounds = 3,
-        verbose = 0,
-        prediction = FALSE
-      ),
-      error = function(e) NULL
-    )
-
-    if (is.null(cv)) {
-      return(NULL)
-    }
-
-    eval_log <- cv$evaluation_log
-
-    best_nrounds <- which.max(
-      eval_log$test_auc_mean
-    )
-
-    model <- tryCatch(
-      xgboost::xgb.train(
-        params = params,
-        data = dtrain,
-        nrounds = best_nrounds,
-        verbose = 0
-      ),
-      error = function(e) NULL
-    )
-
-    attr(model, "cv_auc") <- max(
-      eval_log$test_auc_mean
-    )
-    attr(model, "best_nrounds") <- best_nrounds
-    return(model)
-  }
-
-  if (is.null(exclude) || !any(exclude == "XGBoost")) {
-    dat_xgb <- dat
-    if (use_rfe) {
-      message("RFE selecting for XGBoost ...")
-      rfe_list[[ "XGBoost" ]] <- perform_rfe(
-        dat, "XGBoost", cv_folds, seed = seed, rfe_sizes = rfe_sizes
-      )
-      vars <- rfe_list[[ "XGBoost" ]]$vars
-      feature_rfe[[ "XGBoost" ]] <- vars
-      dat_xgb <- dat[, c("Class", vars), drop = FALSE]
-    }
-    x_mat <- as.matrix(dat_xgb[, -1, drop = FALSE])
-    y_vec <- ifelse(dat_xgb$Class == levels(dat_xgb$Class)[1], 1L, 0L)
-    dtrain <- xgboost::xgb.DMatrix(data = x_mat, label = y_vec)
-    message("Training XGBoost ...")
-    model_list$XGBoost <- expect_local_data(
-      "tmp", "ml_XGBoost", xgb_fun,
       list(
-        colnames(x_mat), rownames(x_mat), levels(target), positive_class,
-        seed, cv_folds, tune_length, use_rfe
+        model = fit,
+        rfe = res_rfe,
+        vars = vec_vars
       )
-    )
-  }
+    })
 
-  # ------------------------------------------------------------------
-  # Summary table
-  # ------------------------------------------------------------------
-  res <- data.frame(
-    Model = names(model_list),
-    CV_AUC = NA_real_,
+  names(lst_train) <- vec_model
+
+  lst_model <- lapply(lst_train, function(x) x$model)
+  lst_rfe <- lapply(lst_train, function(x) x$rfe)
+  lst_feature_rfe <- lapply(lst_train, function(x) x$vars)
+
+  lst_rfe <- lst_rfe[ !vapply(lst_rfe, is.null, logical(1L)) ]
+  lst_feature_rfe <- lst_feature_rfe[
+    !vapply(lst_feature_rfe, is.null, logical(1L))
+  ]
+
+  data_summary <- data.frame(
+    Model = names(lst_model),
+    CV_AUC = vapply(lst_model,
+      function(fit) {
+        if (is.null(fit)) {
+          return(NA_real_)
+        }
+
+        if (!inherits(fit, "train")) {
+          return(NA_real_)
+        }
+
+        if (!"ROC" %in% colnames(fit$results)) {
+          return(NA_real_)
+        }
+
+        vec_roc <- fit$results$ROC
+
+        if (!length(vec_roc) || all(is.na(vec_roc))) {
+          return(NA_real_)
+        }
+
+        max(vec_roc, na.rm = TRUE)
+      },
+      numeric(1L)
+    ),
     stringsAsFactors = FALSE
   )
 
-  for (i in seq_along(model_list)) {
-    fit <- model_list[[i]]
-    if (is.null(fit)) {
-      next
-    }
-    if (inherits(fit, "train")) {
-      if ("ROC" %in% colnames(fit$results)) {
-        res$CV_AUC[i] <- max(
-          fit$results$ROC,
-          na.rm = TRUE
-        )
+  data_summary <- data_summary[
+    order(-data_summary$CV_AUC, na.last = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(data_summary) <- NULL
+
+  lst_feature_score <- lapply(names(lst_model),
+    function(str_nm) {
+      fit <- lst_model[[ str_nm ]]
+
+      if (is.null(fit)) {
+        return(NULL)
       }
-    } else if (inherits(fit, "xgb.Booster")) {
-      res$CV_AUC[i] <- attr(fit, "cv_auc")
-    }
-  }
 
-  # ------------------------------------------------------------------
-  # Feature genes
-  # ------------------------------------------------------------------
-  feat_res <- list()
-  feat_score <- list()
-
-  for (nm in names(model_list)) {
-    fit <- model_list[[nm]]
-    if (is.null(fit)) {
-      next
-    }
-    if (inherits(fit, "train")) {
-      vi <- tryCatch(
+      data_imp <- tryCatch(
         caret::varImp(fit)$importance,
-        error = function(e) NULL
+        error = function(e) {
+          message(glue::glue("Failed to extract varImp for {str_nm}: {e$message}"))
+          NULL
+        }
       )
-      if (!is.null(vi)) {
-        score <- vi[, 1]
-        names(score) <- rownames(vi)
-        score <- sort(
-          score,
-          decreasing = TRUE
-        )
-        feat_res[[nm]] <- names(score)
-        feat_score[[nm]] <- score
+
+      if (is.null(data_imp)) {
+        return(NULL)
       }
-    }
-  }
 
-  if (!is.null(model_list$XGBoost)) {
-    imp <- tryCatch(
-      xgboost::xgb.importance(
-        model = model_list$XGBoost
-      ),
-      error = function(e) NULL
-    )
-    if (!is.null(imp)) {
-      feat_res$XGBoost <- imp$Feature
-    }
-  }
+      mat_imp <- as.matrix(data_imp)
+      vec_score <- rowMeans(mat_imp, na.rm = TRUE)
+      names(vec_score) <- rownames(data_imp)
 
-  # ------------------------------------------------------------------
-  # Order result
-  # ------------------------------------------------------------------
-  res <- res[order(-res$CV_AUC), ]
-  rownames(res) <- NULL
+      sort(vec_score, decreasing = TRUE)
+    })
 
-  # ------------------------------------------------------------------
-  # Return
-  # ------------------------------------------------------------------
+  names(lst_feature_score) <- names(lst_model)
+
+  lst_feature_score <- lst_feature_score[
+    !vapply(lst_feature_score, is.null, logical(1L))
+  ]
+
+  lst_feature_gene <- lapply(lst_feature_score, names)
+
   out <- list(
-    models = model_list, rfes = rfe_list, summary = res,
-    feature_genes = feat_res, feature_score = feat_score,
-    feature_rfe = feature_rfe, data = dat,
+    models = lst_model,
+    rfes = lst_rfe,
+    summary = data_summary,
+    feature_genes = lst_feature_gene,
+    feature_score = lst_feature_score,
+    feature_rfe = lst_feature_rfe,
+    data = data_train,
     positive_class = positive_class,
-    levels = levels(target), use_rfe = use_rfe
+    levels = levels(factor_target),
+    use_rfe = use_rfe
   )
+
   class(out) <- "ml_train10"
+
   return(out)
 }
 
@@ -1060,83 +1707,170 @@ make_seeds <- function(
   return(seeds)
 }
 
-perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L)
+perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL,
+  seed = 12345L, tune_length = 5L, nthread = 1L)
 {
+  data_x <- dat[, setdiff(colnames(dat), "Class"), drop = FALSE]
+  factor_y <- dat$Class
+  n_feature <- ncol(data_x)
+
+  if (n_feature <= 1L) {
+    return(list(
+      fit_rfe = NULL,
+      vars = colnames(data_x)
+    ))
+  }
+
+  vec_sizes <- rfe_sizes
+
+  if (is.null(vec_sizes)) {
+    vec_sizes <- unique(as.integer(round(seq(
+      from = min(5L, n_feature),
+      to = min(n_feature, 10L),
+      length.out = min(10L, n_feature)
+    ))))
+  }
+
+  vec_sizes <- sort(unique(vec_sizes[
+    vec_sizes >= 1L & vec_sizes <= n_feature
+  ]))
+
+  if (!length(vec_sizes)) {
+    vec_sizes <- n_feature
+  }
+
+  str_rfe_alg <- alg_name
+
+  if (identical(alg_name, "XGBoost")) {
+    str_rfe_alg <- "RF"
+    message(glue::glue(
+      "Use RF-based RFE selector for XGBoost; final model is still caret XGBoost."
+    ))
+  }
+
+  lst_special <- list(
+    RF = caret::rfFuncs,
+    LR = caret::lrFuncs,
+    DT = caret::treebagFuncs,
+    NB = caret::nbFuncs,
+    LDA = caret::ldaFuncs,
+    BT = caret::rfFuncs
+  )
+
+  rfe_funcs <- lst_special[[ str_rfe_alg ]]
+  lst_fit_args <- list()
+
+  if (is.null(rfe_funcs)) {
+    lst_cfg <- make_cfg(
+      data_x,
+      tune_length = tune_length,
+      nthread = nthread
+    )
+
+    if (is.null(lst_cfg[[ alg_name ]])) {
+      stop(glue::glue("No caret configuration found for RFE model: {alg_name}"))
+    }
+
+    rfe_funcs <- caret::caretFuncs
+    lst_fit_args <- lst_cfg[[ alg_name ]]
+
+    lst_fit_args$trControl <- caret::trainControl(
+      method = "cv",
+      number = min(cv_folds, 5L),
+      classProbs = FALSE,
+      summaryFunction = caret::defaultSummary,
+      allowParallel = TRUE
+    )
+
+    message(glue::glue(
+      "Use caretFuncs for RFE: {alg_name}, method = {lst_fit_args$method}, metric = Accuracy"
+    ))
+  }
+
+  rfe_funcs$selectSize <- function(x, metric, maximize) {
+    data_res <- x[x$Variables %in% vec_sizes, , drop = FALSE]
+
+    if (!nrow(data_res)) {
+      stop("No valid subset sizes found in resampling results.")
+    }
+
+    .select_size_tolerance_ml_train10(
+      data_res = data_res,
+      metric = metric,
+      maximize = maximize,
+      tolerance = 0.02
+    )
+  }
+
+  ctrl_rfe <- caret::rfeControl(
+    functions = rfe_funcs,
+    method = "cv",
+    number = min(cv_folds, 5L),
+    verbose = FALSE,
+    returnResamp = "final",
+    seeds = make_seeds(
+      n_folds = min(cv_folds, 5L),
+      n_candidates = max(50L, length(vec_sizes)),
+      seed = seed
+    )
+  )
+
   fun_rfe <- function(...) {
     message(glue::glue("Run RFE: {alg_name}"))
-    if (ncol(dat) <= 2) {
-      return(colnames(dat)[colnames(dat) != "Class"])
-    }
-    rfe_funcs <- switch(
-      alg_name,
-      "RF"      = caret::rfFuncs,
-      "LR"      = caret::lrFuncs,
-      "DT"      = caret::treebagFuncs,
-      "NB"      = caret::nbFuncs,
-      "LDA"     = caret::ldaFuncs,
-      "BT"      = caret::rfFuncs,
-      caret::caretFuncs
-    )
-    p <- ncol(dat) - 1L
-    sizes <- rfe_sizes
-    if (is.null(sizes)) {
-      sizes <- unique(
-        round(seq(
-            from = min(5L, p),
-            to   = min(p, 10L),
-            length.out = min(10L, p)
-            ))
-      )
-    }
-    rfe_funcs$selectSize <- function(x, metric, maximize) {
-      x <- x[x$Variables %in% sizes, , drop = FALSE]
-      if (!nrow(x)) {
-        stop("No valid subset sizes found in resampling results.")
-      }
-      if (maximize) {
-        best <- which.max(x[[metric]])
-      } else {
-        best <- which.min(x[[metric]])
-      }
-      x$Variables[best]
-    }
-    sizes <- sizes[sizes <= p]
-    seeds <- make_seeds(n_folds = cv_folds, n_candidates = 50L, seed = seed)
-    ctrl_rfe <- caret::rfeControl(
-      functions = rfe_funcs,
-      method = "cv",
-      number = cv_folds,
-      verbose = FALSE,
-      returnResamp = "final",
-      seeds = seeds
-    )
-    x <- dat[, setdiff(colnames(dat), "Class"), drop = FALSE]
-    y <- dat$Class
+
     fit_rfe <- tryCatch(
-      caret::rfe(x = x, y = y, sizes = sizes, rfeControl = ctrl_rfe),
+      do.call(caret::rfe, c(
+        list(
+          x = data_x,
+          y = factor_y,
+          sizes = vec_sizes,
+          metric = "Accuracy",
+          maximize = TRUE,
+          rfeControl = ctrl_rfe
+        ),
+        lst_fit_args
+      )),
       error = function(e) {
-        print(e)
+        message(glue::glue("Failed to perform RFE for {alg_name}: {e$message}"))
         NULL
       }
     )
+
     if (is.null(fit_rfe)) {
       stop(glue::glue("Failed to perform RFE: {alg_name}"))
-      # return(colnames(x))
     }
-    vars <- predictors(fit_rfe)
-    if (length(vars) == 0) {
-      vars <- colnames(x)
+
+    vec_vars <- caret::predictors(fit_rfe)
+
+    if (!length(vec_vars)) {
+      vec_vars <- colnames(data_x)
     }
-    list(fit_rfe = fit_rfe, vars = vars)
-  }
-  res <- expect_local_data(
-    "tmp", glue::glue("rfe_{alg_name}"), fun_rfe,
+
     list(
-      colnames(dat), rownames(dat),
-      dat$Class, cv_folds, seed,
-      rfe_sizes
+      fit_rfe = fit_rfe,
+      vars = vec_vars
+    )
+  }
+
+  res <- expect_local_data(
+    "tmp",
+    glue::glue("rfe_caret_{alg_name}"),
+    fun_rfe,
+    list(
+      alg_name,
+      colnames(dat),
+      rownames(dat),
+      dat$Class,
+      cv_folds,
+      seed,
+      rfe_sizes,
+      tune_length,
+      nthread,
+      lst_fit_args$method,
+      lst_fit_args$tuneGrid
     )
   )
+
   return(res)
 }
 
@@ -1205,16 +1939,16 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
     ),
 
     GBM = glue::glue(
-      "采用梯度提升机（Gradient Boosting Machine，GBM）模型进行分类分析，基于 R 包 `gbm` ⟦pkgInfo('gbm')⟧（caret method = gbm）逐步迭代构建弱学习器。参数搜索范围包括树深度（{paste(unique(cfg$GBM$tuneGrid$interaction.depth), collapse = '、')}）、树数量（{paste(unique(cfg$GBM$tuneGrid$n.trees), collapse = '、')}）、学习率（{paste(unique(cfg$GBM$tuneGrid$shrinkage), collapse = '、')}）及最小叶节点样本数（{paste(unique(cfg$GBM$tuneGrid$n.minobsinnode), collapse = '、')}），采用{cv_folds}折交叉验证优化模型。"
+      "采用梯度提升机（Gradient Boosting Machine，GBM）模型进行分类分析，基于 R 包 `gbm` ⟦pkgInfo('gbm')⟧（caret method = gbm）逐步迭代构建弱学习器。采用{cv_folds}折交叉验证优化模型。"
     ),
 
     XGBoost = glue::glue(
-      "采用极端梯度提升算法（Extreme Gradient Boosting，XGBoost）进行分类分析，基于 R 包 `xgboost` ⟦pkgInfo('xgboost')⟧ 构建模型。设置学习率 eta = 0.05、最大树深 max_depth = 3、行采样比例 subsample = 0.8、列采样比例 colsample_bytree = 0.8，并采用{cv_folds}折交叉验证与早停策略确定最优迭代轮数。"
+      "采用极端梯度提升算法（Extreme Gradient Boosting，XGBoost）进行分类分析，基于 R 包 `xgboost` ⟦pkgInfo('xgboost')⟧ 构建模型，并通过自定义 caret modelInfo 纳入 caret 重采样、调参与预测流程。采用{cv_folds}折交叉验证筛选最优参数组合。"
     )
   )
   if (!is.null(mlt10)) {
     use <- names(mlt10$models)
-    use <- use[ !vapply(mlt10, is.null, logical(1)) ]
+    use <- use[ !vapply(mlt10$models, is.null, logical(1L)) ]
     txt <- txt[ use ]
   }
   txt
@@ -1260,18 +1994,31 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
       if (inherits(fit, "train")) {
         if (predict) {
           ## Predict by external/new data
-          pred <- tryCatch(
-            .caret_predict(fit = fit, dat = dat_use, type = type),
-            error = function(e) NULL
-          )
-          if (!is.null(pred) && type == "raw") {
-            pred <- factor(pred, levels = lv)
-          }
-          if (!is.null(pred) && type == "prob") {
-            if (is.data.frame(pred) && lv[1L] %in% colnames(pred)) {
-              pred <- pred[, lv[1L]]
-            } else {
-              pred <- NULL
+          if (type == "prob" && identical(nm, "NB")) {
+            pred <- .check_nb_prob_ml_train10(
+              fit = fit,
+              data_new = dat_use,
+              lv = lv
+            )
+          } else {
+            pred <- tryCatch(
+              .caret_predict(fit = fit, dat = dat_use, type = type),
+              error = function(e) {
+                message(glue::glue("Prediction failed for {nm}: {e$message}"))
+                NULL
+              }
+            )
+
+            if (!is.null(pred) && type == "raw") {
+              pred <- factor(pred, levels = lv)
+            }
+
+            if (!is.null(pred) && type == "prob") {
+              if (is.data.frame(pred) && lv[1L] %in% colnames(pred)) {
+                pred <- pred[, lv[1L]]
+              } else {
+                pred <- NULL
+              }
             }
           }
         } else {
@@ -1337,17 +2084,8 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
           attr(pred, "truth") <- truth_sub
         }
 
-      } else if (inherits(fit, "xgb.Booster")) {
-
-        pred <- tryCatch(
-          predict(fit, newdata = as.matrix(dat_use[, -1L, drop = FALSE])),
-          error = function(e) NULL
-        )
-
-        if (!is.null(pred) && type == "raw") {
-          pred <- ifelse(pred >= cutoff, lv[1L], lv[2L])
-          pred <- factor(pred, levels = lv)
-        }
+      } else {
+        stop("...")
       }
 
       pred
@@ -1378,11 +2116,15 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
 
 .evaluation_ml_train10 <- function(mlt10, cutoff = 0.5)
 {
+  if (isTRUE(mlt10$is_external_data)) {
+    message(glue::glue("Use external dataset to evaluation models (Confusion Matrix)."))
+  }
   res_pred <- .predict_or_extract_ml_train10(
     mlt10 = mlt10,
     type = "raw",
     cutoff = cutoff
   )
+  message(glue::glue("Evaluation done"))
   truth <- res_pred$truth
   lv <- res_pred$levels
   cm_list <- list()
@@ -1405,6 +2147,7 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
       stringsAsFactors = FALSE
     )
   }
+  message(glue::glue("Confusion Matrix Done"))
   stat_df <- do.call(rbind, stat_list)
   rownames(stat_df) <- NULL
   stat_df <- stat_df[order(-stat_df$Accuracy), ]
@@ -1425,10 +2168,14 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
 
 .roc_ml_train10 <- function(mlt10)
 {
+  if (isTRUE(mlt10$is_external_data)) {
+    message(glue::glue("Use external dataset to evaluation models (ROC)."))
+  }
   res_pred <- .predict_or_extract_ml_train10(
     mlt10 = mlt10,
     type = "prob"
   )
+  message(glue::glue("Evaluation done."))
 
   truth <- res_pred$truth
   lv <- res_pred$levels
@@ -1437,6 +2184,7 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
   auc_list <- list()
 
   for (nm in names(res_pred$pred)) {
+    message(glue::glue("ROC evaluation of {nm}"))
     prob <- res_pred$pred[[nm]]
     roc_obj <- pROC::roc(
       response = truth,
@@ -1577,6 +2325,7 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
   if (!is(roc_obj, "ml_roc")) {
     stop("!is(roc_obj, 'ml_roc').")
   }
+  message(glue::glue("Plot ROC."))
 
   df_all  <- list()
   auc_lab <- character(0)
@@ -1679,10 +2428,186 @@ perform_rfe <- function(dat, alg_name, cv_folds, rfe_sizes = NULL, seed = 12345L
 
 
 
+
+.get_xgb_tree_safe_model <- function()
+{
+  list(
+    label = "Safe XGBoost Tree",
+    library = "xgboost",
+    type = c("Classification"),
+    parameters = data.frame(
+      parameter = c(
+        "nrounds",
+        "max_depth",
+        "eta",
+        "gamma",
+        "colsample_bytree",
+        "min_child_weight",
+        "subsample"
+      ),
+      class = rep("numeric", 7L),
+      label = c(
+        "Number of Boosting Iterations",
+        "Max Tree Depth",
+        "Shrinkage",
+        "Minimum Loss Reduction",
+        "Subsample Ratio of Columns",
+        "Minimum Sum of Instance Weight",
+        "Subsample Percentage"
+      ),
+      stringsAsFactors = FALSE
+    ),
+    grid = function(x, y, len = NULL, search = "grid") {
+      expand.grid(
+        nrounds = c(20L, 50L),
+        max_depth = c(1L, 2L),
+        eta = c(0.03, 0.05),
+        gamma = 0,
+        colsample_bytree = 0.8,
+        min_child_weight = 1L,
+        subsample = 0.8
+      )
+    },
+    fit = function(x, y, wts, param, lev, last, classProbs, ...) {
+      data_x <- as.data.frame(x)
+      data_x <- data_x[, vapply(data_x, is.numeric, logical(1L)), drop = FALSE]
+      mat_x <- as.matrix(data_x)
+      storage.mode(mat_x) <- "double"
+      vec_y <- ifelse(y == lev[1L], 1, 0)
+      dtrain <- xgboost::xgb.DMatrix(
+        data = mat_x,
+        label = vec_y,
+        missing = NA
+      )
+      lst_extra <- list(...)
+      lst_params <- list(
+        booster = "gbtree",
+        objective = "binary:logistic",
+        eval_metric = "logloss",
+        max_depth = as.integer(param$max_depth),
+        eta = param$eta,
+        gamma = param$gamma,
+        colsample_bytree = param$colsample_bytree,
+        min_child_weight = param$min_child_weight,
+        subsample = param$subsample
+      )
+      if (!is.null(lst_extra$nthread)) {
+        lst_params$nthread <- as.integer(lst_extra$nthread)
+      }
+      fit <- xgboost::xgb.train(
+        params = lst_params,
+        data = dtrain,
+        nrounds = as.integer(param$nrounds),
+        verbose = 0
+      )
+      structure(
+        list(
+          model = fit,
+          levels = lev,
+          xNames = colnames(data_x),
+          param = param
+        ),
+        class = "xgb_tree_safe"
+      )
+    },
+    predict = function(modelFit, newdata, submodels = NULL) {
+      vec_prob <- .predict_xgb_tree_safe(modelFit, newdata)
+      factor(
+        ifelse(vec_prob >= 0.5, modelFit$levels[1L], modelFit$levels[2L]),
+        levels = modelFit$levels
+      )
+    },
+    prob = function(modelFit, newdata, submodels = NULL) {
+      vec_prob <- .predict_xgb_tree_safe(modelFit, newdata)
+      data_prob <- data.frame(
+        x1 = vec_prob,
+        x2 = 1 - vec_prob,
+        check.names = FALSE
+      )
+      colnames(data_prob) <- modelFit$levels
+      data_prob
+    },
+    predictors = function(x, ...) {
+      x$xNames
+    },
+    varImp = function(object, ...) {
+      data_imp <- tryCatch(
+        xgboost::xgb.importance(model = object$model),
+        error = function(e) NULL
+      )
+      if (is.null(data_imp) || !nrow(data_imp)) {
+        data_out <- data.frame(Overall = numeric(0L))
+        return(data_out)
+      }
+      data_out <- data.frame(
+        Overall = data_imp$Gain,
+        stringsAsFactors = FALSE
+      )
+      rownames(data_out) <- data_imp$Feature
+      data_out
+    },
+    levels = function(x) {
+      x$levels
+    },
+    sort = function(x) {
+      x[order(x$nrounds, x$max_depth, x$eta), , drop = FALSE]
+    }
+  )
+}
+
+.predict_xgb_tree_safe <- function(modelFit, newdata)
+{
+  data_new <- as.data.frame(newdata)
+  if (!is.null(modelFit$xNames)) {
+    data_new <- data_new[, modelFit$xNames, drop = FALSE]
+  }
+  data_new <- data_new[, vapply(data_new, is.numeric, logical(1L)), drop = FALSE]
+  mat_new <- as.matrix(data_new)
+  storage.mode(mat_new) <- "double"
+  dnew <- xgboost::xgb.DMatrix(
+    data = mat_new,
+    missing = NA
+  )
+  as.numeric(predict(modelFit$model, newdata = dnew))
+}
+
+.check_xgb_input_ml_train10 <- function(data, cv_folds)
+{
+  vec_class <- paste(
+    names(table(data$Class)),
+    as.integer(table(data$Class)),
+    sep = ":",
+    collapse = "; "
+  )
+  message(glue::glue(
+    "Package check: caret={as.character(utils::packageVersion('caret'))}; xgboost={as.character(utils::packageVersion('xgboost'))}; pROC={as.character(utils::packageVersion('pROC'))}"
+  ))
+  message(glue::glue(
+    "XGBoost input check: n = {nrow(data)}, p = {ncol(data) - 1L}, class = {vec_class}"
+  ))
+  data_x <- data[, colnames(data) != "Class", drop = FALSE]
+  vec_non_numeric <- colnames(data_x)[
+    !vapply(data_x, is.numeric, logical(1L))
+  ]
+  if (length(vec_non_numeric)) {
+    message(glue::glue(
+      "XGBoost ignores non-numeric predictors: {paste(vec_non_numeric, collapse = ', ')}"
+    ))
+  }
+  n_min_class <- min(table(data$Class))
+  n_xgb_folds <- max(2L, min(cv_folds, as.integer(n_min_class)))
+  if (n_xgb_folds < cv_folds) {
+    message(glue::glue(
+      "Reset XGBoost cv_folds from {cv_folds} to {n_xgb_folds} because the minimum class size is {n_min_class}."
+    ))
+  }
+  n_xgb_folds
+}
+
 # ------------------------------------------------------------------
 # Dynamic cfg (compact version)
 # ------------------------------------------------------------------
-make_cfg <- function(data, tune_length = 5L) {
+make_cfg <- function(data, tune_length = 5L, nthread = 1L) {
 
   n_sample  <- nrow(data)
   p_feature <- ncol(data)
@@ -1745,6 +2670,46 @@ make_cfg <- function(data, tune_length = 5L) {
   gbm_tree <- if (small_mode) c(20, 50) else if (mid_mode) c(50, 100) else c(100, 200)
   gbm_lr <- if (small_mode) c(0.03) else c(0.03, 0.05)
   gbm_node <- if (small_mode) c(5, 8) else c(5, 10)
+
+  xgb_round <- if (small_mode) {
+    c(20L, 50L)
+  } else if (mid_mode) {
+    c(50L, 100L)
+  } else {
+    c(100L, 200L)
+  }
+
+  xgb_depth <- if (small_mode) {
+    c(1L, 2L)
+  } else if (mid_mode) {
+    c(1L, 2L)
+  } else {
+    c(1L, 2L, 3L)
+  }
+
+  xgb_eta <- if (small_mode) {
+    c(0.03, 0.05)
+  } else {
+    c(0.03, 0.05)
+  }
+
+  xgb_child <- if (small_mode) {
+    c(3L)
+  } else {
+    c(1L, 3L)
+  }
+
+  xgb_subsample <- if (small_mode) {
+    c(0.8)
+  } else {
+    c(0.7, 0.9)
+  }
+
+  xgb_colsample <- if (small_mode) {
+    c(0.8)
+  } else {
+    c(0.7, 0.9)
+  }
 
   # --------------------------------------------------------------
   # Final cfg
@@ -1823,9 +2788,10 @@ make_cfg <- function(data, tune_length = 5L) {
 
     Lasso = list(
       method = "glmnet",
-      tuneGrid = expand.grid(
-        alpha = 1,
-        lambda = lambda_seq
+      family = "binomial",
+      tuneGrid = .get_lasso_tune_grid_ml_train10(
+        n_sample = n_sample,
+        p_feature = p_feature
       )
     ),
 
@@ -1846,10 +2812,208 @@ make_cfg <- function(data, tune_length = 5L) {
         shrinkage = gbm_lr,
         n.minobsinnode = gbm_node
       )
+    ),
+    XGBoost = list(
+      method = .get_xgb_tree_safe_model(),
+      verbose = FALSE,
+      nthread = nthread,
+      tuneGrid = .get_xgb_tune_grid_ml_train10(
+        n_sample = n_sample,
+        p_feature = p_feature
+      )
     )
   )
 
   return(cfg)
 }
 
+.get_n_candidates_cfg <- function(lst_cfg)
+{
+  vec_n <- vapply(lst_cfg,
+    function(x) {
+      if (!is.null(x$tuneGrid)) {
+        return(nrow(x$tuneGrid))
+      }
+
+      if (!is.null(x$tuneLength)) {
+        return(as.integer(x$tuneLength))
+      }
+
+      1L
+    },
+    integer(1L)
+  )
+
+  max(vec_n, 1L)
+}
+
+.get_cache_args_ml_train10 <- function(str_nm, lst_args)
+{
+  lst_out <- lst_args
+
+  if (identical(str_nm, "XGBoost")) {
+    lst_out$method <- "xgb_tree_safe_v1"
+  }
+
+  lst_out
+}
+
+.check_nb_prob_ml_train10 <- function(fit, data_new, lv)
+{
+  data_prob <- tryCatch(
+    .caret_predict(fit = fit, dat = data_new, type = "prob"),
+    error = function(e) {
+      message(glue::glue("NB probability prediction failed: {e$message}"))
+      NULL
+    }
+  )
+
+  if (is.null(data_prob)) {
+    return(NULL)
+  }
+
+  if (!is.data.frame(data_prob)) {
+    message("NB probability prediction is not a data.frame.")
+    return(NULL)
+  }
+
+  if (!lv[1L] %in% colnames(data_prob)) {
+    message(glue::glue("NB probability column `{lv[1L]}` was not found."))
+    return(NULL)
+  }
+
+  vec_prob <- data_prob[[ lv[1L] ]]
+
+  if (any(!is.finite(vec_prob))) {
+    message(glue::glue(
+      "NB produced {sum(!is.finite(vec_prob))} non-finite probability values."
+    ))
+
+    return(NULL)
+  }
+
+  vec_prob
+}
+
+.select_size_tolerance_ml_train10 <- function(data_res, metric, maximize,
+  tolerance = 0.02)
+{
+  data_res <- data_res[order(data_res$Variables), , drop = FALSE]
+
+  if (!metric %in% colnames(data_res)) {
+    metric <- if ("Accuracy" %in% colnames(data_res)) {
+      "Accuracy"
+    } else if ("Kappa" %in% colnames(data_res)) {
+      "Kappa"
+    } else {
+      colnames(data_res)[vapply(data_res, is.numeric, logical(1L))][1L]
+    }
+
+    message(glue::glue("RFE metric is reset to `{metric}`."))
+  }
+
+  vec_value <- data_res[[ metric ]]
+
+  if (all(is.na(vec_value))) {
+    message(glue::glue("All RFE `{metric}` values are NA; use minimum feature size."))
+    return(min(data_res$Variables))
+  }
+
+  if (maximize) {
+    value_best <- max(vec_value, na.rm = TRUE)
+    data_keep <- data_res[vec_value >= value_best - tolerance, , drop = FALSE]
+  } else {
+    value_best <- min(vec_value, na.rm = TRUE)
+    data_keep <- data_res[vec_value <= value_best + tolerance, , drop = FALSE]
+  }
+
+  min(data_keep$Variables)
+}
+
+.get_xgb_tune_grid_ml_train10 <- function(n_sample, p_feature)
+{
+  if (n_sample <= 40L) {
+    return(expand.grid(
+      nrounds = c(10L, 20L),
+      max_depth = c(1L, 2L),
+      eta = 0.05,
+      gamma = 0,
+      colsample_bytree = 0.8,
+      min_child_weight = 3L,
+      subsample = 0.8
+    ))
+  }
+
+  if (n_sample <= 80L) {
+    return(expand.grid(
+      nrounds = c(20L, 50L),
+      max_depth = c(1L, 2L),
+      eta = 0.05,
+      gamma = 0,
+      colsample_bytree = 0.8,
+      min_child_weight = 3L,
+      subsample = 0.8
+    ))
+  }
+
+  expand.grid(
+    nrounds = c(50L, 100L),
+    max_depth = c(1L, 2L),
+    eta = c(0.03, 0.05),
+    gamma = 0,
+    colsample_bytree = c(0.7, 0.9),
+    min_child_weight = c(1L, 3L),
+    subsample = c(0.7, 0.9)
+  )
+}
+
+.get_lasso_tune_grid_ml_train10 <- function(n_sample, p_feature)
+{
+  if (n_sample <= 40L) {
+    vec_lambda <- exp(seq(
+      log(0.05),
+      log(2),
+      length.out = 30L
+    ))
+  } else if (n_sample <= 80L) {
+    vec_lambda <- exp(seq(
+      log(0.02),
+      log(1),
+      length.out = 30L
+    ))
+  } else {
+    vec_lambda <- exp(seq(
+      log(0.005),
+      log(0.5),
+      length.out = 30L
+    ))
+  }
+
+  expand.grid(
+    alpha = 1,
+    lambda = vec_lambda
+  )
+}
+
+.rescale01_ml_train10 <- function(vec_x)
+{
+  vec_x <- as.numeric(vec_x)
+  vec_out <- rep(NA_real_, length(vec_x))
+  idx <- is.finite(vec_x)
+
+  if (!any(idx)) {
+    return(vec_out)
+  }
+
+  vec_range <- range(vec_x[idx], na.rm = TRUE)
+
+  if (isTRUE(all.equal(vec_range[1L], vec_range[2L]))) {
+    vec_out[idx] <- 1
+    return(vec_out)
+  }
+
+  vec_out[idx] <- (vec_x[idx] - vec_range[1L]) / diff(vec_range)
+
+  vec_out
+}
 

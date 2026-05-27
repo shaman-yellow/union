@@ -1857,9 +1857,10 @@ setMethod("draw", signature = c(x = "heatdata_gene_cor"),
   })
 
 get_eigens <- function(net) {
-  eigens <- e(WGCNA::orderMEs(net$MEs))
-  colors <- e(WGCNA::labels2colors(colorIndex <- unique(net$colors)))
-  color_data <- tibble::tibble(module = paste0("ME", colorIndex), color = colors)
+  eigens <- WGCNA::orderMEs(net$MEs)
+  colors <- WGCNA::labels2colors(seq_len(ncol(eigens)) - 1L)
+  colnames(eigens) <- paste0("ME", colors)
+  color_data <- tibble::tibble(module = paste0("ME", colors), color = colors)
   members <- split(names(net$colors), WGCNA::labels2colors(net$colors))
   names(members) <- paste0("ME", names(members))
   .wgcEigen(eigens, colors = color_data, members = members)

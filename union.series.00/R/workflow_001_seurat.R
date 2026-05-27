@@ -723,18 +723,18 @@ as_type_group <- function(type, group) {
 }
 
 setMethod("diff", signature = c(x = "job_seurat"),
-  function(x, group.by, contrasts, name = "contrasts",
-    cut.fc = .3, cut.p = .5, min.pct = .25, force = FALSE)
+  function(x, compare.by, contrasts, groups = NULL, group.by = x$group.by,
+    name = "contrasts", cut.fc = .3, cut.p = .05, min.pct = .25, force = FALSE)
   {
     message("Differential analysis for cells.")
-    if (is.null(object(x)@meta.data[[ group.by ]])) {
-      stop('is.null(object(x)@meta.data[[ group.by ]]).')
+    if (is.null(object(x)@meta.data[[ compare.by ]])) {
+      stop('is.null(object(x)@meta.data[[ compare.by ]]).')
     }
     if (is(contrasts, "character")) {
       contrasts <- .get_versus_cell(contrasts, NULL, unlist = FALSE)
     }
-    if (!all(unlist(contrasts) %in% ids(x, group.by))) {
-      stop('!all(unlist(contrasts) %in% ids(x, group.by)).')
+    if (!all(unlist(contrasts) %in% ids(x, compare.by))) {
+      stop('!all(unlist(contrasts) %in% ids(x, compare.by)).')
     }
     if (is.data.frame(contrasts)) {
       contrasts <- apply(contrasts, 1, c, simplify = FALSE)
@@ -742,55 +742,70 @@ setMethod("diff", signature = c(x = "job_seurat"),
     if (is(contrasts, "list") && !all(lengths(contrasts) == 2)) {
       stop('is(contrasts, "list") && !all(lengths(contrasts) == 2).')
     }
-    numCells <- table(x@object@meta.data[[ group.by ]])
+    init(snap(x)) <- TRUE
+    if (!is.null(groups) && !is.null(group.by)) {
+      message(glue::glue("Get subset for comparison: {bind(groups)}"))
+      x <- getsub(x, !!rlang::sym(group.by) %in% groups)
+      x <- snapAdd(
+        x, "提取 Seurat 数据集中 {bind(groups)} 用于细胞组间差异分析。",
+        step = paste0("diff_", name)
+      )
+    }
+    if (SeuratObject::DefaultAssay(object(x)) == "SCT" && !is.null(x$seurat_subset) && x$seurat_subset) {
+      SeuratObject::DefaultAssay(object(x)) <- "RNA"
+      object(x) <- e(Seurat::NormalizeData(object(x)))
+      object(x) <- e(Seurat::ScaleData(object(x)))
+    }
+    numCells <- table(x@object@meta.data[[ compare.by ]])
     cellsFew <- numCells[ numCells <= 3 ]
     excluThat <- vapply(contrasts, function(x) any(x %in% names(cellsFew)), logical(1))
+    lst_res <- list()
     if (any(excluThat)) {
       message(glue::glue("Some cells too few, exclude from contrasts ({bind(which(excluThat))})."))
       contrasts <- contrasts[ !excluThat ]
     }
-    if (is.null(x@params[[ glue::glue("{name}_contrast") ]]) || force) {
+    if (is.null(x[[ glue::glue("diff_{name}")]]) || force) {
+      SeuratObject::Idents(object(x)) <- compare.by
       res <- e(lapply(contrasts,
           function(con) {
             data <- Seurat::FindMarkers(object(x),
-              ident.1 = con[1], ident.2 = con[2], min.pct = min.pct,
-              group.by = group.by
+              ident.1 = con[1], ident.2 = con[2], min.pct = min.pct
             )
             data$gene <- rownames(data)
             data
           }))
       names(res) <- vapply(contrasts, function(x) paste0(x[1], "_vs_", x[2]), character(1))
       res <- dplyr::as_tibble(data.table::rbindlist(res, idcol = TRUE))
-      res <- dplyr::rename(res, contrast = .id)
+      res_nofilter <- res <- dplyr::rename(res, contrast = .id)
       res <- dplyr::filter(res, p_val_adj < cut.p, abs(avg_log2FC) > cut.fc)
-      res <- .set_lab(res, sig(x), "DEGs of the contrasts")
-      res <- setLegend(
-        res, "细胞群差异表达基因附表 (其中 'contrast' 列为比较的两类细胞) (|log~2~(FC)| &gt; {cut.fc}, P-Adjust &lt; {cut.p})。"
+      res <- set_lab_legend(
+        res,
+        glue::glue("{x@sig} DEGs of the contrasts"),
+        glue::glue("细胞群差异表达基因附表 (其中 'contrast' 列为比较的两类细胞) (|log~2~(FC)| &gt; {cut.fc}, P-Adjust &lt; {cut.p})。")
       )
-      x@params[[ glue::glue("{name}_contrast") ]] <- res
+      lst_res$contrast <- res
+      lst_res$contrast_nofilter <- res_nofilter
     } else {
-      res <- x@params[[ glue::glue("{name}_contrast") ]]
+      res <- x[[ glue::glue("diff_{name}")]]$contrast
+      res_nofilter <- x[[ glue::glue("diff_{name}")]]$contrast_nofilter
     }
-    p.volcano <- plot_volcano(
-      res, "gene", use = "p_val_adj", use.fc = "avg_log2FC", fc = cut.fc, keep_cols = TRUE
-    )
-    p.volcano <- p.volcano + facet_wrap(~ contrast)
-    p.volcano <- set_lab_legend(
-      wrap(p.volcano),
-      glue::glue("{x@sig} cell differential expression volcano plot"),
-      glue::glue("细胞群差异表达基因火山图。")
-    )
-    x[[ glue::glue("{name}_volcano") ]] <- p.volcano
-    init(snap(x)) <- TRUE
-    snap <- vapply(contrasts, bind, character(1), co = " vs ")
+    snap_compare <- vapply(contrasts, bind, character(1), co = " vs ")
     x <- snapAdd(
-      x, "对细胞群差异分析 (依据 {group.by}, 分析 {less(snap)})，筛选差异表达基因。",
+      x, "以 `Seurat::FindMarkers` 差异分析 (依据 {compare.by}, 分析 {less(snap_compare)}) (⟦mark$blue('|log~2~(FC)| &gt; {cut.fc}, P-Adjust &lt; {cut.p}')⟧) 筛选差异表达基因。",
       step = paste0("diff_", name)
     )
     ## contrast intersection
     tops <- split(res, ~ contrast)
+    if (length(tops) < 3L) {
+      lst_stat <- .collate_snap_and_features_by_logfc(tops, "avg_log2FC", get = "gene")
+      x <- snapAdd(
+        x, "显著基因统计：\n⟦mark$red('{lst_stat$snap}')⟧\n",
+        step = paste0("diff_", name)
+      )
+    }
     use.gene <- "gene"
     fun_filter <- function(x) rm.no(x)
+    message("Collate features.")
     tops <- lapply(tops,
       function(data){
         up <- dplyr::filter(data, avg_log2FC > 0)[[ use.gene ]]
@@ -798,20 +813,35 @@ setMethod("diff", signature = c(x = "job_seurat"),
         lst <- list(up = up, down = down)
         lapply(lst, fun_filter)
       })
-    feature(x) <- as_feature(tops, x, analysis = "Seurat 细胞群差异表达分析")
-    s.com <- paste0(
-      "- ", names(tops), ": ", vapply(tops, try_snap, character(1))
+    if (is.null(groups)) {
+      snap_cells <- ""
+    } else {
+      snap_cells <- bind(groups)
+    }
+    feature(x) <- as_feature(
+      tops, x, analysis = "细胞群{snap_cells}组间差异表达分析"
     )
-    x <- snapAdd(
-      x, "上调或下调统计：\n\n{paste0(s.com, collapse = '\n')}",
-      step = paste0("diff_", name)
-    )
+    message("Stat significant genes number.")
     tops <- unlist(tops, recursive = FALSE)
-    x[[ paste0(name, "_intersection") ]] <- tops
-    p.sets_intersection <- new_upset(lst = tops, trunc = NULL)
-    p.sets_intersection <- .set_lab(p.sets_intersection, sig(x), "contrasts-DEGs-intersection")
-    p.sets_intersection <- setLegend(p.sets_intersection, "细胞群差异表达基因的 UpSet 交集图。")
-    x[[ paste0("p.", name, "_intersection") ]] <- p.sets_intersection
+    p.volcano <- plot_volcano(
+      res_nofilter, "gene", use = "p_val_adj", use.fc = "avg_log2FC", fc = cut.fc, keep_cols = TRUE
+    )
+    p.volcano <- p.volcano + facet_wrap(~ contrast)
+    p.volcano <- set_lab_legend(
+      wrap(p.volcano),
+      glue::glue("{x@sig} cell differential expression volcano plot"),
+      glue::glue("细胞群差异表达基因火山图|||横坐标为Log2(Fold Change)，纵坐标为-Log10({detail('p_val_adj')})，每个点代表一个基因；横向参考线代表-Log10({cut.p})=1.3，纵向参考线代表log2FC = ± {cut.fc}；以参考线为划分，右上角的基因为疾病组相较对照组显著上调的差异表达基因，左上角的基因为显著下调的差异表达基因，其余基因为不具有显著统计学意义的基因（用灰色表示）。")
+    )
+    # 图中标注基因为按 |log2FC| 从高到低上下调 Top 10 差异表达基因。
+    lst_res$p.volcano <- p.volcano
+    lst_res$ins <- tops
+    if (FALSE) {
+      p.sets_intersection <- new_upset(lst = tops, trunc = NULL)
+      p.sets_intersection <- .set_lab(p.sets_intersection, sig(x), "contrasts-DEGs-intersection")
+      p.sets_intersection <- setLegend(p.sets_intersection, "细胞群差异表达基因的 UpSet 交集图。")
+      lst_res$p.sets_intersection <- p.sets_intersection
+    }
+    x[[ glue::glue("diff_{name}")]] <- lst_res
     if (identical(parent.frame(2), .GlobalEnv)) {
       job_append_heading(x, heading = "细胞差异表达分析")
       job_append_method(
@@ -1049,7 +1079,7 @@ setMethod("vis", signature = c(x = "job_seurat"),
         palette <- color_set()
       }
     } else if (is.numeric(mapValue)) {
-      stop('is.numeric(mapValue).')
+      stop(' is.numeric(mapValue).')
     }
     if (mode == "type") {
       groups <- unique(object(x)@meta.data[[ group.by ]])
@@ -1204,7 +1234,7 @@ setMethod("focus", signature = c(x = "job_seurat"),
 
 .stat_compare_by_pvalue <- function(x, levels, name, 
   ..., recode = NULL, n_top = Inf, count_only = FALSE,
-  mode = c("expr", "ratio", "communication", "active"), autor = TRUE)
+  mode = c("expr", "ratio", "communication", "active", "enrichment"), autor = TRUE)
 {
   .get_snap_from_meassure(
     .get_measure(x, levels, ..., n_top = n_top),
@@ -1282,7 +1312,7 @@ setMethod("focus", signature = c(x = "job_seurat"),
   )
 }
 
-.get_snap_from_meassure <- function(ms, name, recode = NULL, 
+.get_snap_from_meassure <- function(ms, name, recode = NULL,
   mode = c("expr", "ratio", "communication", "active", "enrichment"),
   count_only = FALSE, autor = TRUE)
 {

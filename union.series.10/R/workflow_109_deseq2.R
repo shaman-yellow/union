@@ -444,7 +444,7 @@ setMethod("asjob_iobr", signature = c(x = "job_deseq2"),
 }
 
 setMethod("refine", signature = c(x = "job_DEG"),
-  function(x, ..., name = NULL, use.p = c("pvalue", "padj"), ref = "key", cut.auc = .7)
+  function(x, ..., name = NULL, use.p = c("pvalue", "padj"), ref = c("key", "candidates"), cut.auc = .7)
   {
     fun_extract <- function(x) {
       alls <- grpf(names(x@params), "^focusedDegs_")
@@ -494,10 +494,15 @@ setMethod("refine", signature = c(x = "job_DEG"),
       )
     }
     summary <- dplyr::filter(summary, .group_id == 2L)
+    if (missing(ref)) {
+      ref <- match.arg(ref)
+    }
     if (ref == "key") {
       snap <- "关键基因"
+    } else if (ref == "candidates") {
+      snap <- "候选基因"
     } else {
-      stop("...")
+      snap <- ref
     }
     fea <- as_feature(summary$gene, snap)
     x <- .job_venn()

@@ -734,13 +734,11 @@ setMethod("focus", signature = c(x = "job_limma"),
       "以 {detail(test)} 对 基因集统计检验组间差异 (阈值 P &lt; 0.05) 。",
       step = .name
     )
-    x <- snapAdd(x,
-      .stat_compare_by_pvalue(
-        lst$p.BoxPlotOfDEGs, levels, if (count_only) "基因" else "",
-        count_only = count_only, n_top = n_show
-      ),
-      step = .name
+    snap_stat <- .stat_compare_by_pvalue(
+      lst$p.BoxPlotOfDEGs, levels, if (count_only) "基因" else "",
+      count_only = count_only, n_top = n_show
     )
+    x <- snapAdd(x, snap_stat, step = .name)
     if (run_roc) {
       elist <- x$normed_data
       lst$roc <- roc <- sapply(ref, simplify = FALSE,
