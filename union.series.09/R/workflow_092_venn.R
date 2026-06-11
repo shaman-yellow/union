@@ -801,7 +801,7 @@ new_venn <- function(..., lst = NULL, wrap = TRUE,
   }
 
   if (wrap) {
-    p <- wrap(p, if (force_upset) 5 else 3, 4)
+    p <- wrap(p, 5, 6)
   }
 
   attr(p, "ins") <- ins <- ins(lst = lst)

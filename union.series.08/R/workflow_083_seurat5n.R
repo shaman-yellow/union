@@ -111,7 +111,8 @@ setMethod("step1", signature = c(x = "job_seurat5n"),
   })
 
 setMethod("step2", signature = c(x = "job_seurat5n"),
-  function(x, ndims = 20, sct = FALSE, jk = FALSE, workers = NULL){
+  function(x, ndims = 20, sct = FALSE, jk = FALSE, workers = 5L)
+  {
     step_message("Run standard anlaysis workflow or `SCTransform`.")
     if (is.remote(x)) {
       if (is.null(workers)) {
@@ -127,11 +128,22 @@ setMethod("step2", signature = c(x = "job_seurat5n"),
     if (sct) {
       if (!is.null(workers)) {
         old_plan <- future::plan()
-        future::plan(future::multicore, workers = workers)
-        on.exit(future::plan(old_plan))
+        on.exit(future::plan(old_plan), add = TRUE)
+        if (parallelly::supportsMulticore()) {
+          future::plan(future::multicore, workers = workers)
+        } else {
+          future::plan(future::sequential)
+          message(
+            "Multicore is not supported in this R session. Run by Rscript for reliable SCTransform parallelization."
+          )
+        }
+        message(glue::glue("future workers: {future::nbrOfWorkers()}"))
       }
       object(x) <- e(Seurat::SCTransform(
-          object(x), method = "glmGamPoi", vars.to.regress = "percent.mt", verbose = TRUE,
+          object(x),
+          method = "glmGamPoi",
+          vars.to.regress = "percent.mt",
+          verbose = TRUE,
           assay = SeuratObject::DefaultAssay(object(x))
           ))
       message(glue::glue("Shift assays to {SeuratObject::DefaultAssay(object(x))}"))
@@ -183,7 +195,7 @@ setMethod("step2", signature = c(x = "job_seurat5n"),
   })
 
 setMethod("step3", signature = c(x = "job_seurat5n"),
-  function(x, dims = 1:15, resolution = 1.2,
+  function(x, dims = 1:15, resolution = .2,
     use = c("HarmonyIntegration", "CCAIntegration", "RPCAIntegration"), ...)
   {
     step_message("Identify clusters of cells")
@@ -195,7 +207,12 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
         Seurat::FindClusters(object(x), resolution = resolution, ...)
       )
       object(x) <- e(
-        Seurat::RunUMAP(object(x), dims = dims, reduction = use, ...)
+        Seurat::RunUMAP(
+          object(x), dims = dims, reduction = use,
+          n.neighbors = 50L,
+          min.dist = 0.45,
+          ...
+        )
       )
     } else {
       if (is.null(x$.before_IntegrateLayers)) {
@@ -203,11 +220,14 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
         object(x) <- e(Seurat::FindClusters(object(x), resolution = resolution,
             cluster.name = "unintegrated_clusters"))
         object(x) <- e(Seurat::RunUMAP(object(x), dims = dims,
-            reduction = "pca", reduction.name = "umap_unintegrated"))
+            reduction = "pca", reduction.name = "umap_unintegrated",
+            n.neighbors = 50L,
+            min.dist = 0.45
+            ))
         x$.before_IntegrateLayers <- TRUE
       }
       p.umapUint <-  e(Seurat::DimPlot(object(x), reduction = "umap_unintegrated",
-          group.by = c("orig.ident", "seurat_clusters"), cols = color_set(TRUE)))
+          group.by = c("orig.ident", "unintegrated_clusters"), cols = color_set(TRUE)))
       p.umapUint <- set_lab_legend(
         wrap(p.umapUint, 10, 5),
         glue::glue("{x@sig} UMAP Unintegrated"),
@@ -260,6 +280,7 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
       glue::glue("{x@sig} UMAP with label"),
       glue::glue("UMAP 聚类图|||UMAP 图中带有数字注释了细胞簇属于哪个聚类，有利于分辨。不同颜色代表不同cluster。横纵坐标是 UMAP 降维的两个维度。UMAP能够将高维空间中的数据映射到低维空间中，并保留数据集的局部特性。")
     )
+    x$checks$ps.checks <- .plot_check_clustering(object(x))
     x <- plotsAdd(x, p.umapInt, p.umapLabel)
     x <- methodAdd(x, "在 1-{max(dims)} PC 维度下，以 `Seurat::FindNeighbors` 构建 Nearest-neighbor Graph。随后在 {resolution} 分辨率下，以 `Seurat::FindClusters` 函数识别细胞群并以 `Seurat::RunUMAP` 进行 UMAP 聚类。")
     nBefore <- length(levels(object(x)@meta.data$unintegrated_clusters))
@@ -269,6 +290,21 @@ setMethod("step3", signature = c(x = "job_seurat5n"),
     x$JoinLayers <- TRUE
     return(x)
   })
+
+.plot_check_clustering <- function(seu) {
+  p.checks_feature <- Seurat::FeaturePlot(
+    object = seu,
+    features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+    reduction = "umap",
+    order = TRUE
+  )
+  p.checks_dim <- Seurat::DimPlot(
+    object = seu,
+    group.by = "orig.ident",
+    reduction = "umap"
+  )
+  list(p.checks_feature = wrap(p.checks_feature), p.checks_dim = wrap(p.checks_dim))
+}
 
 setMethod("asjob_limma", signature = c(x = "job_seurat"),
   function(x, features, cells, cell_groups, group.by = x$group.by,
@@ -304,6 +340,672 @@ setMethod("asjob_limma", signature = c(x = "job_seurat"),
     x$from_seurat <- TRUE
     return(x)
   })
+
+
+scFuns <- new.env(parent = emptyenv())
+
+scFuns$is_10x_matrix_dir <- function(dir_path)
+{
+  if (!dir.exists(dir_path)) {
+    return(FALSE)
+  }
+
+  has_barcode <- any(file.exists(file.path(
+    dir_path,
+    c("barcodes.tsv", "barcodes.tsv.gz")
+  )))
+
+  has_matrix <- any(file.exists(file.path(
+    dir_path,
+    c("matrix.mtx", "matrix.mtx.gz")
+  )))
+
+  has_feature <- any(file.exists(file.path(
+    dir_path,
+    c("genes.tsv", "genes.tsv.gz", "features.tsv", "features.tsv.gz")
+  )))
+
+  has_barcode && has_matrix && has_feature
+}
+
+
+scFuns$find_10x_matrix_dirs <- function(dir_root)
+{
+  vec_dir <- list.dirs(dir_root, recursive = TRUE, full.names = TRUE)
+  vec_keep <- vapply(vec_dir, scFuns$is_10x_matrix_dir, logical(1L))
+
+  vec_dir[vec_keep]
+}
+
+scFuns$check_tar_md5 <- function(file_tar)
+{
+  file_md5 <- paste0(file_tar, ".md5")
+
+  if (!file.exists(file_md5)) {
+    return(NA)
+  }
+
+  vec_line <- readLines(file_md5, warn = FALSE)
+
+  if (length(vec_line) == 0L) {
+    return(NA)
+  }
+
+  chr_expected <- regmatches(
+    vec_line[[1L]],
+    regexpr("[0-9a-fA-F]{32}", vec_line[[1L]])
+  )
+
+  if (length(chr_expected) == 0L || is.na(chr_expected) || !nzchar(chr_expected)) {
+    return(NA)
+  }
+
+  chr_observed <- unname(tools::md5sum(file_tar))
+
+  identical(tolower(chr_observed), tolower(chr_expected))
+}
+
+scFuns$get_10x_matrix_dirs <- function(
+  dir_root,
+  extract_tar = TRUE,
+  check_md5 = FALSE,
+  verbose = TRUE
+)
+{
+  if (!dir.exists(dir_root)) {
+    stop(glue::glue("Directory does not exist: {dir_root}"), call. = FALSE)
+  }
+
+  dir_root <- normalizePath(dir_root, winslash = "/", mustWork = TRUE)
+
+  vec_sample_dir <- list.dirs(dir_root, recursive = FALSE, full.names = TRUE)
+  vec_empty_dir <- vec_sample_dir[vapply(
+    vec_sample_dir,
+    function(x) length(list.files(x, all.files = TRUE, no.. = TRUE)) == 0L,
+    logical(1L)
+  )]
+
+  vec_tar <- list.files(
+    dir_root,
+    pattern = "\\.tar$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+  data_matrix_before <- scFuns$make_10x_matrix_table(dir_root)
+
+  n_already <- 0L
+  n_extracted <- 0L
+  n_failed <- 0L
+  n_md5_failed <- 0L
+
+  if (verbose) {
+    message(glue::glue("Root directory: {dir_root}"))
+    message(glue::glue("Sample directories: {length(vec_sample_dir)}"))
+    message(glue::glue("Empty sample directories: {length(vec_empty_dir)}"))
+    message(glue::glue("Tar files found: {length(vec_tar)}"))
+    message(glue::glue(
+      "Valid 10x matrix directories before extraction: {sum(data_matrix_before$is_valid)}"
+    ))
+  }
+
+  if (verbose && length(vec_empty_dir) > 0L) {
+    message(glue::glue(
+      "Empty directories: {paste(basename(vec_empty_dir), collapse = ', ')}"
+    ))
+  }
+
+  for (file_tar in vec_tar) {
+    vec_candidate <- scFuns$get_tar_matrix_candidates(file_tar)
+    vec_existing_matrix <- scFuns$get_existing_matrix_from_candidates(vec_candidate)
+
+    if (length(vec_existing_matrix) > 0L) {
+      n_already <- n_already + 1L
+
+      if (verbose) {
+        message(glue::glue("Already extracted: {basename(file_tar)}"))
+      }
+
+      next
+    }
+
+    if (!extract_tar) {
+      next
+    }
+
+    if (check_md5) {
+      val_md5 <- scFuns$check_tar_md5(file_tar)
+
+      if (identical(val_md5, FALSE)) {
+        n_md5_failed <- n_md5_failed + 1L
+        n_failed <- n_failed + 1L
+
+        if (verbose) {
+          message(glue::glue("Skip tar due to MD5 mismatch: {basename(file_tar)}"))
+        }
+
+        next
+      }
+
+      if (is.na(val_md5) && verbose) {
+        message(glue::glue("MD5 file unavailable or unreadable: {basename(file_tar)}"))
+      }
+    }
+
+    ok_extract <- tryCatch(
+      {
+        withCallingHandlers(
+          utils::untar(file_tar, exdir = dirname(file_tar)),
+          warning = function(w) {
+            if (verbose) {
+              message(glue::glue(
+                "Warning while extracting {basename(file_tar)}: {conditionMessage(w)}"
+              ))
+            }
+
+            invokeRestart("muffleWarning")
+          }
+        )
+
+        TRUE
+      },
+      error = function(e) {
+        if (verbose) {
+          message(glue::glue(
+            "Failed to extract {basename(file_tar)}: {conditionMessage(e)}"
+          ))
+        }
+
+        FALSE
+      }
+    )
+
+    vec_existing_matrix <- scFuns$get_existing_matrix_from_candidates(vec_candidate)
+
+    if (ok_extract && length(vec_existing_matrix) > 0L) {
+      n_extracted <- n_extracted + 1L
+
+      if (verbose) {
+        message(glue::glue("Extracted: {basename(file_tar)}"))
+      }
+    } else {
+      n_failed <- n_failed + 1L
+
+      if (verbose) {
+        message(glue::glue(
+          "No valid 10x matrix directory found after extraction: {basename(file_tar)}"
+        ))
+      }
+    }
+  }
+
+  data_matrix <- scFuns$make_10x_matrix_table(dir_root)
+
+  n_valid_sample <- length(unique(data_matrix$sample_id[data_matrix$is_valid]))
+  n_missing_sample <- length(unique(data_matrix$sample_id[!data_matrix$is_valid]))
+
+  if (verbose) {
+    message(glue::glue("Already extracted tar files: {n_already}"))
+    message(glue::glue("Newly extracted tar files: {n_extracted}"))
+    message(glue::glue("Failed tar files: {n_failed}"))
+    message(glue::glue("MD5 failed tar files: {n_md5_failed}"))
+    message(glue::glue("Valid 10x matrix directories after extraction: {sum(data_matrix$is_valid)}"))
+    message(glue::glue("Samples with valid matrix: {n_valid_sample}"))
+    message(glue::glue("Samples without valid matrix: {n_missing_sample}"))
+  }
+
+  if (verbose && n_missing_sample > 0L) {
+    vec_missing_sample <- unique(data_matrix$sample_id[!data_matrix$is_valid])
+
+    message(glue::glue(
+      "Samples without valid matrix: {paste(vec_missing_sample, collapse = ', ')}"
+    ))
+  }
+
+  attr(data_matrix, "summary") <- list(
+    n_sample_dir = length(vec_sample_dir),
+    n_empty_sample_dir = length(vec_empty_dir),
+    n_tar = length(vec_tar),
+    n_matrix_before = sum(data_matrix_before$is_valid),
+    n_already = n_already,
+    n_extracted = n_extracted,
+    n_failed = n_failed,
+    n_md5_failed = n_md5_failed,
+    n_matrix_after = sum(data_matrix$is_valid),
+    n_valid_sample = n_valid_sample,
+    n_missing_sample = n_missing_sample,
+    empty_sample_dir = basename(vec_empty_dir),
+    missing_sample = unique(data_matrix$sample_id[!data_matrix$is_valid])
+  )
+
+  data_matrix
+}
+
+scFuns$get_tar_matrix_candidates <- function(file_tar)
+{
+  dir_tar <- dirname(file_tar)
+  dir_expected <- sub("\\.tar$", "", file_tar)
+
+  vec_entry <- tryCatch(
+    utils::untar(file_tar, list = TRUE),
+    error = function(e) {
+      message(glue::glue(
+        "Failed to list tar entries: {basename(file_tar)}; {conditionMessage(e)}"
+      ))
+
+      character(0L)
+    }
+  )
+
+  if (length(vec_entry) == 0L) {
+    return(unique(c(dir_expected, dir_tar)))
+  }
+
+  vec_entry <- gsub("^\\./", "", vec_entry)
+  vec_entry <- gsub("^/+", "", vec_entry)
+  vec_entry <- vec_entry[!is.na(vec_entry)]
+  vec_entry <- vec_entry[nzchar(vec_entry)]
+
+  if (length(vec_entry) == 0L) {
+    return(unique(c(dir_expected, dir_tar)))
+  }
+
+  vec_split <- strsplit(vec_entry, "/", fixed = TRUE)
+
+  vec_top <- vapply(
+    vec_split,
+    function(x) {
+      if (length(x) == 0L || is.na(x[[1L]]) || !nzchar(x[[1L]])) {
+        return(NA_character_)
+      }
+
+      x[[1L]]
+    },
+    character(1L)
+  )
+
+  vec_top <- unique(vec_top[!is.na(vec_top) & nzchar(vec_top)])
+  vec_candidate <- file.path(dir_tar, vec_top)
+
+  unique(c(dir_expected, vec_candidate, dir_tar))
+}
+
+
+scFuns$get_existing_matrix_from_candidates <- function(vec_candidate)
+{
+  vec_candidate <- vec_candidate[dir.exists(vec_candidate)]
+
+  if (length(vec_candidate) == 0L) {
+    return(character(0L))
+  }
+
+  vec_matrix <- unlist(
+    lapply(
+      vec_candidate,
+      function(dir_path) {
+        vec_found <- scFuns$find_10x_matrix_dirs(dir_path)
+
+        if (scFuns$is_10x_matrix_dir(dir_path)) {
+          vec_found <- unique(c(dir_path, vec_found))
+        }
+
+        vec_found
+      }
+    ),
+    use.names = FALSE
+  )
+
+  unique(vec_matrix)
+}
+
+
+scFuns$make_10x_matrix_table <- function(dir_root)
+{
+  dir_root <- normalizePath(dir_root, winslash = "/", mustWork = TRUE)
+
+  vec_sample_dir <- list.dirs(dir_root, recursive = FALSE, full.names = TRUE)
+
+  if (length(vec_sample_dir) == 0L) {
+    return(data.frame(
+      sample_id = character(0L),
+      sample_dir = character(0L),
+      matrix_dir = character(0L),
+      matrix_name = character(0L),
+      matrix_rel_path = character(0L),
+      n_matrix = integer(0L),
+      n_tar = integer(0L),
+      tar_file = character(0L),
+      is_valid = logical(0L),
+      is_empty_sample = logical(0L),
+      status = character(0L),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  lst_table <- lapply(
+    vec_sample_dir,
+    function(dir_sample) {
+      sample_id <- basename(dir_sample)
+
+      vec_matrix_dir <- scFuns$find_10x_matrix_dirs(dir_sample)
+      vec_matrix_dir <- normalizePath(
+        vec_matrix_dir,
+        winslash = "/",
+        mustWork = TRUE
+      )
+
+      vec_tar <- list.files(
+        dir_sample,
+        pattern = "\\.tar$",
+        recursive = TRUE,
+        full.names = TRUE
+      )
+
+      is_empty_sample <- length(list.files(
+        dir_sample,
+        all.files = TRUE,
+        no.. = TRUE
+      )) == 0L
+
+      tar_file <- paste(basename(vec_tar), collapse = "; ")
+
+      if (length(vec_matrix_dir) == 0L) {
+        status <- if (is_empty_sample) {
+          "empty_sample_dir"
+        } else if (length(vec_tar) > 0L) {
+          "tar_without_valid_matrix"
+        } else {
+          "no_tar_no_matrix"
+        }
+
+        return(data.frame(
+          sample_id = sample_id,
+          sample_dir = normalizePath(dir_sample, winslash = "/", mustWork = TRUE),
+          matrix_dir = NA_character_,
+          matrix_name = NA_character_,
+          matrix_rel_path = NA_character_,
+          n_matrix = 0L,
+          n_tar = length(vec_tar),
+          tar_file = tar_file,
+          is_valid = FALSE,
+          is_empty_sample = is_empty_sample,
+          status = status,
+          stringsAsFactors = FALSE
+        ))
+      }
+
+      vec_matrix_rel_path <- substring(
+        vec_matrix_dir,
+        nchar(normalizePath(dir_sample, winslash = "/", mustWork = TRUE)) + 2L
+      )
+
+      data.frame(
+        sample_id = sample_id,
+        sample_dir = normalizePath(dir_sample, winslash = "/", mustWork = TRUE),
+        matrix_dir = vec_matrix_dir,
+        matrix_name = basename(vec_matrix_dir),
+        matrix_rel_path = vec_matrix_rel_path,
+        n_matrix = length(vec_matrix_dir),
+        n_tar = length(vec_tar),
+        tar_file = tar_file,
+        is_valid = TRUE,
+        is_empty_sample = is_empty_sample,
+        status = "valid_matrix",
+        stringsAsFactors = FALSE
+      )
+    }
+  )
+
+  data_table <- do.call(rbind, lst_table)
+  rownames(data_table) <- NULL
+
+  data_table
+}
+
+# ==========================================================================
+
+seuFuns <- new.env(parent = parent.frame())
+
+seuFuns$.resolve_integrated_reduction_seurat <- function(object, use = NULL)
+{
+  vec_reduction <- Seurat::Reductions(object)
+
+  if (!is.null(use)) {
+    vec_use <- as.character(use)
+    vec_hit <- vec_use[vec_use %in% vec_reduction]
+
+    if (length(vec_hit) > 0L) {
+      return(vec_hit[[1L]])
+    }
+
+    stop(glue::glue(
+      "None of the requested integrated reductions exists: {paste(vec_use, collapse = ', ')}."
+    ))
+  }
+
+  vec_candidate <- c(
+    "HarmonyIntegration",
+    "CCAIntegration",
+    "RPCAIntegration",
+    "integrated.dr",
+    "harmony",
+    "integrated"
+  )
+  vec_hit <- vec_candidate[vec_candidate %in% vec_reduction]
+
+  if (length(vec_hit) == 0L) {
+    stop(glue::glue(
+      "Cannot find integrated reduction. Available reductions: {paste(vec_reduction, collapse = ', ')}."
+    ))
+  }
+
+  return(vec_hit[[1L]])
+}
+
+seuFuns$.check_umap_dims_seurat <- function(object, reduction, dims)
+{
+  n_dim <- ncol(Seurat::Embeddings(object, reduction = reduction))
+
+  if (max(dims) > n_dim) {
+    stop(glue::glue(
+      "Requested dims exceed available dimensions in '{reduction}': max(dims) = {max(dims)}, available = {n_dim}."
+    ))
+  }
+
+  return(invisible(TRUE))
+}
+
+seuFuns$.backup_reduction_seurat <- function(object, reduction, backup_prefix = "backup")
+{
+  if (!reduction %in% Seurat::Reductions(object)) {
+    return(object)
+  }
+
+  time_tag <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  backup_name <- paste0(reduction, "_", backup_prefix, "_", time_tag)
+
+  object@reductions[[backup_name]] <- object@reductions[[reduction]]
+  message(glue::glue("Backup reduction '{reduction}' to '{backup_name}'."))
+
+  return(object)
+}
+
+seuFuns$.drop_reduction_seurat <- function(object, reduction)
+{
+  if (reduction %in% Seurat::Reductions(object)) {
+    object@reductions[[reduction]] <- NULL
+  }
+
+  return(object)
+}
+
+redraw_umap <- function(x, dims = 1L:15L, resolution = .2,
+  use = "HarmonyIntegration", n_neighbors = 20L, min_dist = 0.08, spread = 1.5,
+  seed_use = 2026L, replace = FALSE, replace_reduction = replace,
+  backup = FALSE, suffix = "redraw", ...)
+{
+  if (!methods::is(x, "job_seurat5n")) {
+    stop('!is(x, "job_seurat5n").')
+  }
+
+  dims <- as.integer(dims)
+  object_now <- object(x)
+
+  if (!"pca" %in% Seurat::Reductions(object_now)) {
+    stop("Cannot redraw unintegrated UMAP because reduction 'pca' is missing.")
+  }
+
+  integrated_reduction <- seuFuns$.resolve_integrated_reduction_seurat(
+    object = object_now,
+    use = use
+  )
+
+  seuFuns$.check_umap_dims_seurat(object_now, "pca", dims)
+  seuFuns$.check_umap_dims_seurat(object_now, integrated_reduction, dims)
+
+  if (replace_reduction) {
+    name_umap_unintegrated <- "umap_unintegrated"
+    name_umap_integrated <- "umap"
+  } else {
+    name_umap_unintegrated <- paste0("umap_unintegrated_", suffix)
+    name_umap_integrated <- paste0("umap_integrated_", suffix)
+  }
+
+  if (replace_reduction && backup) {
+    object_now <- seuFuns$.backup_reduction_seurat(object_now, name_umap_unintegrated)
+    object_now <- seuFuns$.backup_reduction_seurat(object_now, name_umap_integrated)
+  }
+
+  object_now <- seuFuns$.drop_reduction_seurat(object_now, name_umap_unintegrated)
+  object_now <- seuFuns$.drop_reduction_seurat(object_now, name_umap_integrated)
+
+  message(glue::glue(
+    "Redraw unintegrated UMAP: pca, dims = {min(dims)}-{max(dims)}, n.neighbors = {n_neighbors}, min.dist = {min_dist}, spread = {spread}."
+  ))
+
+  object_now <- Seurat::RunUMAP(
+    object_now,
+    reduction = "pca",
+    dims = dims,
+    reduction.name = name_umap_unintegrated,
+    reduction.key = "UMAPU_",
+    n.neighbors = n_neighbors,
+    min.dist = min_dist,
+    spread = spread,
+    seed.use = seed_use,
+    verbose = TRUE,
+    ...
+  )
+
+  message(glue::glue(
+    "Redraw integrated UMAP: {integrated_reduction}, dims = {min(dims)}-{max(dims)}, n.neighbors = {n_neighbors}, min.dist = {min_dist}, spread = {spread}."
+  ))
+
+  object_now <- Seurat::RunUMAP(
+    object_now,
+    reduction = integrated_reduction,
+    dims = dims,
+    reduction.name = name_umap_integrated,
+    reduction.key = "UMAP_",
+    n.neighbors = n_neighbors,
+    min.dist = min_dist,
+    spread = spread,
+    seed.use = seed_use,
+    verbose = TRUE,
+    ...
+  )
+
+  object(x) <- object_now
+
+  vec_meta <- colnames(object(x)@meta.data)
+  cluster_unintegrated <- if ("unintegrated_clusters" %in% vec_meta) {
+    "unintegrated_clusters"
+  } else {
+    "seurat_clusters"
+  }
+
+  p.umapUint <- Seurat::DimPlot(
+    object(x),
+    reduction = name_umap_unintegrated,
+    group.by = c("orig.ident", cluster_unintegrated),
+    cols = color_set(TRUE),
+    raster = TRUE
+  )
+
+  p.umapUint <- set_lab_legend(
+    wrap(p.umapUint, 10L, 5L),
+    glue::glue("{x@sig} UMAP Unintegrated"),
+    glue::glue("去除批次效应之前的 UMAP 聚类图|||不同颜色代表不同样本或整合前 cluster。横纵坐标是 UMAP 降维的两个维度。UMAP 能够将高维空间中的数据映射到低维空间中，并保留数据集的局部特性。")
+  )
+
+  p.umapInt <- Seurat::DimPlot(
+    object(x),
+    reduction = name_umap_integrated,
+    group.by = c("orig.ident", "seurat_clusters"),
+    cols = color_set(TRUE),
+    raster = TRUE
+  )
+
+  p.umapInt <- set_lab_legend(
+    wrap(p.umapInt, 10L, 5L),
+    glue::glue("{x@sig} UMAP Integrated"),
+    glue::glue("去除批次效应之后的 UMAP 聚类图|||不同颜色代表不同样本或整合后 cluster。横纵坐标是 UMAP 降维的两个维度。UMAP 能够将高维空间中的数据映射到低维空间中，并保留数据集的局部特性。")
+  )
+
+  p.umapLabel <- Seurat::DimPlot(
+    object(x),
+    reduction = name_umap_integrated,
+    group.by = "seurat_clusters",
+    cols = color_set(TRUE),
+    label = TRUE,
+    repel = TRUE,
+    raster = TRUE
+  )
+
+  p.umapLabel <- set_lab_legend(
+    p.umapLabel,
+    glue::glue("{x@sig} UMAP with label"),
+    glue::glue("UMAP 聚类图|||UMAP 图中带有数字注释了细胞簇属于哪个聚类，有利于分辨。不同颜色代表不同 cluster。横纵坐标是 UMAP 降维的两个维度。UMAP 能够将高维空间中的数据映射到低维空间中，并保留数据集的局部特性。")
+  )
+
+  if (replace) {
+    if (is.null(x$plots$step3)) {
+      x$plots$step3 <- list()
+    }
+
+    x$plots$step3$p.umapUint <- p.umapUint
+    x$plots$step3$p.umapInt <- p.umapInt
+    x$plots$step3$p.umapLabel <- p.umapLabel
+  } else {
+    x <- plotsAdd(
+      x, p.umapUint_new, p.umapInt_new, p.umapLabel_new, step = 3L
+    )
+  }
+
+  if (exists(".plot_check_clustering", mode = "function", inherits = TRUE)) {
+    x$checks$ps.checks <- .plot_check_clustering(object(x))
+  }
+
+  x$checks$redraw_umap <- list(
+    dims = dims,
+    resolution_not_used = resolution,
+    integrated_reduction = integrated_reduction,
+    n_neighbors = n_neighbors,
+    min_dist = min_dist,
+    spread = spread,
+    seed_use = seed_use,
+    replace = replace,
+    replace_reduction = replace_reduction,
+    umap_unintegrated = name_umap_unintegrated,
+    umap_integrated = name_umap_integrated
+  )
+
+  return(x)
+}
+
+
+# ==========================================================================
+
 
 .seurat_qc_note <- "上方小提琴图：每个样本对应一个‘小提琴’，小提琴的宽度代表相应数据的密度，宽度越大表示在该区域内的数据点越密集，更多数据点集中于此区域；宽度越小则表示密度越小，即数据相对较少；过滤标准：nCount 和 nFeature 过高可能是双细胞，过低可能是细胞碎片；percent.mt（线粒体基因表达比例，是细胞内线粒体基因表达量占所有基因表达量的比例）表明细胞状态，值过高可能是细胞正在经历压力或死亡。下方点图：每一个点代表一个细胞，不同颜色代表不同样本；左图横坐标为总基因表达数，纵坐标为线粒体基因比例；右图横坐标为 nCount（总基因表达数），纵坐标为 Feature（总基因数）；正常情况下，nCount 越多那么 nFeature 就越高，呈现出正相关关系，因此检测到的基因表达数应与检测到的基因数目在细胞间高度相关，而线粒体基因比例则不相关（若呈正相关，横坐标越大纵坐标也越大；若呈负相关，横坐标越大纵坐标应越小）。"
 

@@ -587,3 +587,273 @@ find_common_cross_groups <- function(df, ...group) {
   invisible(lst_res)
 }
 
+plot_volcano_facet <- function(top_table,
+  facet,
+  label = "hgnc_symbol",
+  use = "adj.P.Val",
+  fc = .3,
+  cut.p = .05,
+  n_top = 10L,
+  seed = 2L,
+  use.fc = "logFC",
+  label.fc = "log2(FC)",
+  label.p = paste0("-log10(", use, ")"),
+  keep_cols = FALSE,
+  pal = NULL,
+  mode_fc = 0L,
+  f.nudge = .5,
+  nudge_y = 0,
+  label_by = c("p", "abs_fc"),
+  facet_scales = "free_y",
+  facet_ncol = NULL,
+  show_count = TRUE,
+  count_size = 3.2,
+  label_size = 3,
+  show_legend = TRUE,
+  max.overlaps = Inf,
+  p_floor = .Machine$double.xmin
+)
+{
+  set.seed(seed)
+  label_by <- match.arg(label_by)
+  message("Plot facet Volcano.")
+
+  if (!any(label == colnames(top_table))) {
+    if (any("rownames" == colnames(top_table))) {
+      label <- "rownames"
+    }
+  }
+
+  vec_need <- unique(c(label, facet, use.fc, use))
+  vec_miss <- setdiff(vec_need, colnames(top_table))
+  if (length(vec_miss) > 0L) {
+    stop(glue::glue(
+      "Missing required column(s): {paste(vec_miss, collapse = ', ')}."
+    ))
+  }
+
+  if (!keep_cols) {
+    data <- dplyr::select(
+      top_table,
+      dplyr::all_of(vec_need)
+    )
+  } else {
+    data <- top_table
+  }
+
+  data <- dplyr::filter(
+    data,
+    !is.na(!!rlang::sym(use)),
+    !is.na(!!rlang::sym(use.fc)),
+    !is.na(!!rlang::sym(facet))
+  )
+
+  data <- dplyr::mutate(
+    data,
+    .p = !!rlang::sym(use),
+    .fc = !!rlang::sym(use.fc),
+    .p_plot = pmax(.p, p_floor),
+    .neg_log10_p = -log10(.p_plot),
+    .abs_fc = abs(.fc),
+    change = ifelse(
+      .fc > abs(fc) & .p < cut.p,
+      "up",
+      ifelse(
+        .fc < -abs(fc) & .p < cut.p,
+        "down",
+        "stable"
+      )
+    ),
+    change = factor(change, levels = c("down", "stable", "up"))
+  )
+
+  if (is.null(pal)) {
+    pal <- c("#053061FF", "#67001FFF")
+  }
+
+  if (mode_fc == 0L) {
+    xintercept <- c(-abs(fc), abs(fc))
+  } else if (mode_fc == 1L) {
+    xintercept <- abs(fc)
+  } else {
+    xintercept <- -abs(fc)
+  }
+
+  data_lab <- dplyr::filter(
+    data,
+    change %in% c("up", "down")
+  )
+
+  if (label_by == "p") {
+    data_lab <- dplyr::arrange(
+      data_lab,
+      !!rlang::sym(facet),
+      change,
+      .p,
+      dplyr::desc(.abs_fc)
+    )
+  } else {
+    data_lab <- dplyr::arrange(
+      data_lab,
+      !!rlang::sym(facet),
+      change,
+      dplyr::desc(.abs_fc),
+      .p
+    )
+  }
+
+  data_lab <- dplyr::distinct(
+    data_lab,
+    !!rlang::sym(facet),
+    change,
+    !!rlang::sym(label),
+    .keep_all = TRUE
+  )
+
+  data_lab <- dplyr::group_by(
+    data_lab,
+    !!rlang::sym(facet),
+    change
+  )
+
+  data_lab <- dplyr::slice_head(
+    data_lab,
+    n = n_top
+  )
+
+  data_lab <- dplyr::ungroup(data_lab)
+
+  if (nrow(data_lab) > 0L) {
+    data_lab <- dplyr::group_by(
+      data_lab,
+      !!rlang::sym(facet)
+    )
+
+    data_lab <- dplyr::mutate(
+      data_lab,
+      .nudge_base = stats::median(.abs_fc, na.rm = TRUE),
+      .nudge_base = ifelse(
+        is.finite(.nudge_base) & .nudge_base > 0,
+        .nudge_base,
+        max(.abs_fc, abs(fc), na.rm = TRUE)
+      ),
+      .nudge_base = ifelse(
+        is.finite(.nudge_base) & .nudge_base > 0,
+        .nudge_base,
+        .5
+      ),
+      .nudge_x = ifelse(
+        change == "up",
+        .nudge_base * abs(f.nudge),
+        -.nudge_base * abs(f.nudge)
+      )
+    )
+
+    data_lab <- dplyr::ungroup(data_lab)
+  }
+
+  p <- ggplot(
+    data,
+    aes(
+      x = .fc,
+      y = .neg_log10_p,
+      color = change
+    )
+  ) +
+    geom_point(alpha = .8, stroke = 0, size = 1.5) +
+    scale_color_manual(
+      values = c(
+        down = pal[1L],
+        stable = "grey90",
+        up = pal[2L]
+      ),
+      drop = FALSE
+    ) +
+    geom_hline(
+      yintercept = -log10(cut.p),
+      linetype = 4L,
+      size = .8
+    ) +
+    geom_vline(
+      xintercept = xintercept,
+      linetype = 4L,
+      size = .8
+    ) +
+    facet_wrap(
+      stats::as.formula(paste0("~", facet)),
+      scales = facet_scales,
+      ncol = facet_ncol
+    ) +
+    labs(
+      x = label.fc,
+      y = label.p
+    ) +
+    rstyle("theme") +
+    geom_blank()
+
+  if (nrow(data_lab) > 0L) {
+    p <- p + ggrepel::geom_label_repel(
+      data = data_lab,
+      nudge_x = data_lab$.nudge_x,
+      nudge_y = nudge_y,
+      show.legend = FALSE,
+      max.overlaps = max.overlaps,
+      seed = seed,
+      size = label_size,
+      aes(
+        x = .fc,
+        y = .neg_log10_p,
+        label = !!rlang::sym(label)
+      )
+    )
+  }
+
+  if (isTRUE(show_count)) {
+    message("Use count in volcano plot.")
+    data_count <- dplyr::group_by(
+      data,
+      !!rlang::sym(facet)
+    )
+
+    data_count <- dplyr::summarise(
+      data_count,
+      n_up = sum(change == "up", na.rm = TRUE),
+      n_down = sum(change == "down", na.rm = TRUE),
+      .groups = "drop"
+    )
+
+    data_count <- dplyr::mutate(
+      data_count,
+      .x = -Inf,
+      .y = -Inf,
+      .count_label = paste0(
+        "Up: ", n_up,
+        "\nDown: ", n_down
+      )
+    )
+
+    p <- p + geom_label(
+      data = data_count,
+      show.legend = FALSE,
+      inherit.aes = FALSE,
+      size = count_size,
+      label.size = 0,
+      alpha = .85,
+      hjust = -.05,
+      vjust = -.8,
+      aes(
+        x = .x,
+        y = .y,
+        label = .count_label
+      )
+    )
+  }
+
+  if (!show_legend) {
+    p <- p + theme(legend.position = "none")
+  }
+
+  p
+}
+
+

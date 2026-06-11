@@ -67,6 +67,7 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     filter.exp = 0, filter.text = 0, MCC = TRUE, args_spiral = list())
   {
     step_message("Create PPI network.")
+    set.seed(x$seed)
     require(ggraph)
     x$network_type <- network_type <- match.arg(network_type, c("physical", "full"))
     if (!dir.exists(input_directory)) {
@@ -128,10 +129,10 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     if (FALSE && network_type == "full") {
       p.ppi <- NULL
     } else {
-      p.ppi <- plot_network.str(graph, label = label)
+      p.ppi <- ppiFuns$plot_network_str(graph, label = label)
       h.ppi <- nrow(x$res.str$mapped) %/% 10
       p.ppi <- set_lab_legend(
-        wrap(p.ppi, h.ppi + 2, h.ppi),
+        wrap(p.ppi, (h.ppi + 1.5) * 1.5, h.ppi * 1.5),
         glue::glue("{x@sig} PPI network"),
         glue::glue("PPI 网络图|||每个节点表示一个蛋白 (基因)，连线表示可能存在的相互作用。")
       )
@@ -171,6 +172,71 @@ setMethod("step1", signature = c(x = "job_stringdb"),
     x <- snapAdd(x, "PPI 网络图 {aref(p.ppi)} 共包含 {nAll} 个蛋白 (基因)，存在 {nrow(edges)} 对相互作用，孤立蛋白数量为{nIsolate}。")
     return(x)
   })
+
+setMethod("step2", signature = c(x = "job_stringdb"),
+  function(x, n_top = 10L, component = "largest", as_key = TRUE, ...)
+  {
+    step_message("Screening hub genes by PPI topology.")
+
+    res_cytohubba <- ppiFuns$run_ppi_cytohubba_like(
+      edges = x$edges,
+      col_from = "from",
+      col_to = "to",
+      n_top = n_top,
+      directed = FALSE,
+      component = component
+    )
+
+    x$res_cytohubba <- res_cytohubba
+
+    meth_cytohubba <- ppiFuns$get_ppi_topology_method_text(
+      n_top = n_top,
+      component = component
+    )
+    x <- methodAdd(x, "{meth_cytohubba}")
+
+    p.venn <- new_venn(
+      lst = res_cytohubba$lst_top,
+      force_upset = FALSE,
+      ...
+    )
+
+    text_intersect <- if (length(p.venn$ins) > 0L) {
+      less(p.venn$ins, 20L)
+    } else {
+      "None"
+    }
+
+    p.venn <- set_lab_legend(
+      p.venn,
+      glue::glue("{x@sig} intersection of PPI hub genes"),
+      glue::glue(
+        "PPI 核心基因交集图|||",
+        "该图展示基于 PPI 网络拓扑中心性筛选得到的核心基因交集。分别按照 Degree、Betweenness Centrality ",
+        "和 Closeness Centrality 对网络节点进行降序排序，并选取每种算法排名前 {n_top} 的基因进行交集分析。",
+        "图中 {length(p.venn$ins)} 个交集基因为：{text_intersect}。"
+      )
+    )
+
+    x <- plotsAdd(x, p.venn)
+
+    x <- snapAdd(
+      x,
+      glue::glue(
+        "基于 STRING PPI 网络，分别采用 Degree、Betweenness Centrality 和 Closeness Centrality ",
+        "筛选排名前 {n_top} 的核心节点，并对三种拓扑算法的候选基因取交集，",
+        "最终获得 {length(p.venn$ins)} 个基因{aref(p.venn)}。"
+      )
+    )
+    if (as_key) {
+      x <- snapAdd(x, "⟦mark$red('将交集基因 ({text_intersect}) 定义为关键基因')⟧。")
+      x$.feature <- as_feature(p.venn$ins, "关键基因")
+    }
+
+    return(x)
+  })
+
+
 
 setMethod("filter", signature = c(x = "job_stringdb"),
   function(x, ref.x, ref.y, lab.x = "Source", lab.y = "Target",
@@ -406,7 +472,7 @@ plot_network.str <- function(graph, scale.x = 1.1, scale.y = 1.1,
     theme_minimal() +
     theme(axis.text = element_blank(), axis.title = element_blank())
   if (!label) {
-    pal <- color_set2()
+    pal <- c("#7d1339", "#fba8ad")
     p <- p + geom_node_text(aes(label = name), size = 4) +
       ggplot2::scale_color_gradient(low = pal[2], high = pal[1])
   }
@@ -569,3 +635,576 @@ getBelong_edges <- function(edges) {
     function(data) unlist(data[, 2], use.names = FALSE))
   lst.belong
 }
+
+# ==========================================================================
+# functions
+
+ppiFuns <- new.env(parent = emptyenv())
+
+ppiFuns$resolve_col <- function(data, col, arg_name = "col")
+{
+  if (is.numeric(col) && length(col) == 1L) {
+    if (col < 1L || col > ncol(data)) {
+      stop(sprintf("%s is out of range.", arg_name))
+    }
+
+    return(colnames(data)[col])
+  }
+
+  if (is.character(col) && length(col) == 1L) {
+    if (!col %in% colnames(data)) {
+      stop(sprintf("%s column was not found: %s.", arg_name, col))
+    }
+
+    return(col)
+  }
+
+  stop(sprintf("%s should be one column name or one column index.", arg_name))
+}
+
+ppiFuns$prepare_ppi_edges <- function(edges,
+  col_from,
+  col_to,
+  remove_self_loop = TRUE
+)
+{
+  data_edges <- as.data.frame(edges, stringsAsFactors = FALSE)
+
+  col_from <- ppiFuns$resolve_col(data_edges, col_from, "col_from")
+  col_to <- ppiFuns$resolve_col(data_edges, col_to, "col_to")
+
+  data_edges <- data.frame(
+    from = trimws(as.character(data_edges[[col_from]])),
+    to = trimws(as.character(data_edges[[col_to]])),
+    stringsAsFactors = FALSE
+  )
+
+  data_edges <- data_edges[
+    !is.na(data_edges$from) &
+      !is.na(data_edges$to) &
+      data_edges$from != "" &
+      data_edges$to != "",
+    ,
+    drop = FALSE
+  ]
+
+  if (isTRUE(remove_self_loop)) {
+    data_edges <- data_edges[
+      data_edges$from != data_edges$to,
+      ,
+      drop = FALSE
+    ]
+  }
+
+  data_edges
+}
+
+ppiFuns$prepare_ppi_graph <- function(edges,
+  col_from,
+  col_to,
+  directed = FALSE,
+  remove_self_loop = TRUE,
+  simplify_graph = TRUE,
+  component = c("all", "largest")
+)
+{
+  if (!requireNamespace("igraph", quietly = TRUE)) {
+    stop('Package "igraph" is required.')
+  }
+
+  component <- match.arg(component)
+
+  data_edges <- ppiFuns$prepare_ppi_edges(
+    edges = edges,
+    col_from = col_from,
+    col_to = col_to,
+    remove_self_loop = remove_self_loop
+  )
+
+  if (nrow(data_edges) == 0L) {
+    stop("No valid PPI edge was found.")
+  }
+
+  graph <- igraph::graph_from_data_frame(
+    d = data_edges,
+    directed = directed
+  )
+
+  if (isTRUE(simplify_graph)) {
+    graph <- igraph::simplify(
+      graph,
+      remove.multiple = TRUE,
+      remove.loops = remove_self_loop
+    )
+  }
+
+  if (component == "largest") {
+    vec_comp <- igraph::components(graph)$membership
+    tab_comp <- table(vec_comp)
+    id_comp <- names(tab_comp)[which.max(tab_comp)]
+
+    graph <- igraph::induced_subgraph(
+      graph,
+      vids = igraph::V(graph)[vec_comp == id_comp]
+    )
+  }
+
+  graph
+}
+
+ppiFuns$run_ppi_topology_score <- function(edges,
+  col_from,
+  col_to,
+  n_top = 10L,
+  directed = FALSE,
+  normalized = FALSE,
+  remove_self_loop = TRUE,
+  simplify_graph = TRUE,
+  component = c("all", "largest"),
+  rank_ties_method = "min"
+)
+{
+  graph <- ppiFuns$prepare_ppi_graph(
+    edges = edges,
+    col_from = col_from,
+    col_to = col_to,
+    directed = directed,
+    remove_self_loop = remove_self_loop,
+    simplify_graph = simplify_graph,
+    component = component
+  )
+
+  vec_gene <- igraph::V(graph)$name
+
+  vec_degree <- igraph::degree(
+    graph = graph,
+    v = igraph::V(graph),
+    mode = "all",
+    loops = FALSE,
+    normalized = normalized
+  )
+
+  vec_betweenness <- igraph::betweenness(
+    graph = graph,
+    v = igraph::V(graph),
+    directed = directed,
+    weights = NULL,
+    normalized = normalized,
+    cutoff = -1L
+  )
+
+  vec_closeness <- igraph::closeness(
+    graph = graph,
+    vids = igraph::V(graph),
+    mode = "all",
+    weights = NULL,
+    normalized = normalized,
+    cutoff = -1L
+  )
+
+  data_score <- data.frame(
+    gene = vec_gene,
+    degree = as.numeric(vec_degree),
+    betweenness = as.numeric(vec_betweenness),
+    closeness = as.numeric(vec_closeness),
+    stringsAsFactors = FALSE
+  )
+
+  vec_score_col <- c("degree", "betweenness", "closeness")
+
+  data_score[vec_score_col] <- lapply(
+    data_score[vec_score_col],
+    function(vec_score) {
+      vec_score[!is.finite(vec_score)] <- 0
+      vec_score
+    }
+  )
+
+  data_score$degree_rank <- rank(
+    -data_score$degree,
+    ties.method = rank_ties_method,
+    na.last = "keep"
+  )
+
+  data_score$betweenness_rank <- rank(
+    -data_score$betweenness,
+    ties.method = rank_ties_method,
+    na.last = "keep"
+  )
+
+  data_score$closeness_rank <- rank(
+    -data_score$closeness,
+    ties.method = rank_ties_method,
+    na.last = "keep"
+  )
+
+  data_score$is_top_degree <- data_score$degree_rank <= n_top
+  data_score$is_top_betweenness <- data_score$betweenness_rank <= n_top
+  data_score$is_top_closeness <- data_score$closeness_rank <= n_top
+
+  data_score$n_top_method <- rowSums(
+    data_score[
+      c("is_top_degree", "is_top_betweenness", "is_top_closeness")
+    ]
+  )
+
+  data_score$rank_sum <- data_score$degree_rank +
+    data_score$betweenness_rank +
+    data_score$closeness_rank
+
+  data_score <- data_score[
+    order(data_score$rank_sum, data_score$gene),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(data_score) <- NULL
+
+  data_score
+}
+
+ppiFuns$get_top_table <- function(data_score,
+  score_col,
+  method_name,
+  n_top = 10L
+)
+{
+  data_top <- data_score[
+    order(-data_score[[score_col]], data_score$gene),
+    ,
+    drop = FALSE
+  ]
+
+  data_top <- data_top[
+    seq_len(min(n_top, nrow(data_top))),
+    ,
+    drop = FALSE
+  ]
+
+  data.frame(
+    method = method_name,
+    rank = seq_len(nrow(data_top)),
+    gene = data_top$gene,
+    score = data_top[[score_col]],
+    stringsAsFactors = FALSE
+  )
+}
+
+ppiFuns$run_ppi_cytohubba_like <- function(edges,
+  col_from,
+  col_to,
+  n_top = 10L,
+  directed = FALSE,
+  normalized = FALSE,
+  remove_self_loop = TRUE,
+  simplify_graph = TRUE,
+  component = c("all", "largest"),
+  rank_ties_method = "min"
+)
+{
+  data_score <- ppiFuns$run_ppi_topology_score(
+    edges = edges,
+    col_from = col_from,
+    col_to = col_to,
+    n_top = n_top,
+    directed = directed,
+    normalized = normalized,
+    remove_self_loop = remove_self_loop,
+    simplify_graph = simplify_graph,
+    component = component,
+    rank_ties_method = rank_ties_method
+  )
+
+  lst_method <- list(
+    Degree = "degree",
+    Betweenness = "betweenness",
+    Closeness = "closeness"
+  )
+
+  data_top <- do.call(
+    rbind,
+    lapply(
+      names(lst_method),
+      function(method_name) {
+        ppiFuns$get_top_table(
+          data_score = data_score,
+          score_col = lst_method[[method_name]],
+          method_name = method_name,
+          n_top = n_top
+        )
+      }
+    )
+  )
+
+  rownames(data_top) <- NULL
+
+  lst_top <- lapply(
+    names(lst_method),
+    function(method_name) {
+      data_top$gene[data_top$method == method_name]
+    }
+  )
+
+  names(lst_top) <- names(lst_method)
+
+  vec_intersect <- Reduce(intersect, lst_top)
+
+  data_key <- data_score[
+    data_score$gene %in% vec_intersect,
+    ,
+    drop = FALSE
+  ]
+
+  data_key <- data_key[
+    order(data_key$rank_sum, data_key$gene),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(data_key) <- NULL
+
+  list(
+    data_score = data_score,
+    data_top = data_top,
+    lst_top = lst_top,
+    vec_intersect = vec_intersect,
+    data_key = data_key
+  )
+}
+
+ppiFuns$get_ppi_topology_method_text <- function(n_top = 10L,
+  component = c("all", "largest")
+)
+{
+  component <- match.arg(component)
+
+  text_component <- if (component == "largest") {
+    "为减少离散小网络对中心性排序的影响，本分析进一步提取 PPI 网络中的最大连通子图用于拓扑中心性计算。"
+  } else {
+    "本分析保留过滤后的全部非游离 PPI 网络节点用于拓扑中心性计算。"
+  }
+
+  glue::glue(
+    "为识别 PPI 网络中的核心调控节点，本研究基于 STRING 数据库获得的蛋白互作边表构建无向、无权重 PPI 网络，",
+    "并在 R 环境中采用 igraph 包计算节点拓扑中心性指标。{text_component}",
+    "设 PPI 网络为 $G=(V,E)$，其中 $V$ 表示蛋白节点集合，$E$ 表示蛋白互作边集合。",
+    "对任意节点 $v \\in V$，度值中心性用于衡量该节点直接连接的邻居数量，定义为：",
+    "\n\n",
+    "$$\n",
+    "Degree(v)=|N(v)|\n",
+    "$$\n",
+    "\n\n",
+    "其中 $N(v)$ 表示与节点 $v$ 直接相连的邻居节点集合。介数中心性用于衡量节点位于其他节点最短路径上的程度，定义为：",
+    "\n\n",
+    "$$\n",
+    "Betweenness(v)=\\sum_{s \\ne v \\ne t}\\frac{\\sigma_{st}(v)}{\\sigma_{st}}\n",
+    "$$\n",
+    "\n\n",
+    "其中 $\\sigma_{st}$ 表示节点 $s$ 与节点 $t$ 之间的最短路径总数，$\\sigma_{st}(v)$ 表示这些最短路径中经过节点 $v$ 的路径数。",
+    "接近中心性用于衡量节点到网络中其他节点的整体距离，定义为：",
+    "\n\n",
+    "$$\n",
+    "Closeness(v)=\\frac{1}{\\sum_{u \\in V, u \\ne v}d(v,u)}\n",
+    "$$\n",
+    "\n\n",
+    "其中 $d(v,u)$ 表示节点 $v$ 与节点 $u$ 之间的最短路径长度。",
+    "分别按 Degree、Betweenness Centrality 和 Closeness Centrality 对所有节点进行降序排序，",
+    "选取每种指标排名前 {n_top} 的基因，并取三种指标 Top {n_top} 基因的交集作为候选关键基因。",
+    "该流程在 R 语言中完成 (主要使用 R 包 `igraph` ⟦pkgInfo('igraph')⟧)，与 Cytoscape cytoHubba 中 Degree、Betweenness 和 Closeness 三类拓扑算法的核心计算逻辑一致，",
+    "避免了手动软件操作带来的重复性和效率问题。",
+    .open = "<<",
+    .close = ">>"
+  )
+}
+
+
+ppiFuns$prepare_radial_label_layout <- function(graph,
+  center_x = NULL,
+  center_y = NULL,
+  label_nudge = .035,
+  nudge_mode = c("relative", "absolute"),
+  keep_upright = TRUE
+)
+{
+  nudge_mode <- match.arg(nudge_mode)
+
+  if (!all(c("x", "y") %in% colnames(graph))) {
+    stop('The graph layout should contain columns "x" and "y".')
+  }
+
+  data_graph <- graph
+
+  vec_x <- data_graph$x
+  vec_y <- data_graph$y
+
+  if (is.null(center_x)) {
+    center_x <- mean(range(vec_x, na.rm = TRUE))
+  }
+
+  if (is.null(center_y)) {
+    center_y <- mean(range(vec_y, na.rm = TRUE))
+  }
+
+  vec_dx <- vec_x - center_x
+  vec_dy <- vec_y - center_y
+  vec_radius <- sqrt(vec_dx^2 + vec_dy^2)
+
+  vec_unit_x <- ifelse(vec_radius > 0, vec_dx / vec_radius, 1)
+  vec_unit_y <- ifelse(vec_radius > 0, vec_dy / vec_radius, 0)
+
+  range_x <- range(vec_x, na.rm = TRUE)
+  range_y <- range(vec_y, na.rm = TRUE)
+  span_xy <- max(diff(range_x), diff(range_y), na.rm = TRUE)
+
+  if (!is.finite(span_xy) || span_xy <= 0) {
+    span_xy <- 1
+  }
+
+  if (nudge_mode == "relative") {
+    label_nudge <- label_nudge * span_xy
+  }
+
+  vec_angle <- atan2(vec_dy, vec_dx) * 180 / pi
+  vec_left <- vec_angle > 90 | vec_angle < -90
+
+  vec_label_angle <- vec_angle
+
+  if (isTRUE(keep_upright)) {
+    vec_label_angle <- ifelse(
+      vec_left,
+      vec_label_angle + 180,
+      vec_label_angle
+    )
+  }
+
+  vec_label_angle <- ifelse(
+    vec_label_angle > 180,
+    vec_label_angle - 360,
+    vec_label_angle
+  )
+
+  vec_label_angle <- ifelse(
+    vec_label_angle < -180,
+    vec_label_angle + 360,
+    vec_label_angle
+  )
+
+  data_graph$.label_x <- vec_x + vec_unit_x * label_nudge
+  data_graph$.label_y <- vec_y + vec_unit_y * label_nudge
+  data_graph$.label_angle <- vec_label_angle
+  data_graph$.label_hjust <- ifelse(vec_left & keep_upright, 1, 0)
+  data_graph$.label_vjust <- .5
+
+  data_graph
+}
+
+ppiFuns$plot_network_str <- function(graph,
+  scale.x = 1.1,
+  scale.y = 1.1,
+  label.size = 4,
+  sc = 5,
+  ec = 5,
+  arr.len = 2,
+  edge.color = "grey80",
+  edge.width = .4,
+  label = FALSE,
+  radial_label = TRUE,
+  radial_nudge = .035,
+  radial_nudge_mode = c("relative", "absolute"),
+  radial_center_x = NULL,
+  radial_center_y = NULL,
+  keep_label_upright = TRUE,
+  check_overlap = FALSE,
+  centrality_col = "centrality_degree",
+  node_size = 8,
+  node_alpha = .8,
+  pal = c("#7d1339", "#fba8ad")
+)
+{
+  radial_nudge_mode <- match.arg(radial_nudge_mode)
+
+  if (isTRUE(radial_label)) {
+    graph <- ppiFuns$prepare_radial_label_layout(
+      graph = graph,
+      center_x = radial_center_x,
+      center_y = radial_center_y,
+      label_nudge = radial_nudge,
+      nudge_mode = radial_nudge_mode,
+      keep_upright = keep_label_upright
+    )
+  }
+
+  data_label <- as.data.frame(graph)
+
+  if (!centrality_col %in% colnames(data_label)) {
+    stop(glue::glue("Column was not found: {centrality_col}."))
+  }
+
+  if (isTRUE(label)) {
+    layer_nodes <- ggraph::geom_node_label(
+      ggplot2::aes(label = name),
+      size = label.size
+    )
+  } else {
+    layer_nodes <- ggraph::geom_node_point(
+      ggplot2::aes(color = .data[[centrality_col]]),
+      stroke = .3,
+      alpha = node_alpha,
+      size = node_size
+    )
+  }
+
+  p <- ggraph::ggraph(graph) +
+    ggraph::geom_edge_fan(
+      color = edge.color,
+      width = edge.width
+    ) +
+    layer_nodes +
+    ggplot2::scale_x_continuous(
+      limits = zoRange(graph$x, scale.x)
+    ) +
+    ggplot2::scale_y_continuous(
+      limits = zoRange(graph$y, scale.y)
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      axis.text = ggplot2::element_blank(),
+      axis.title = ggplot2::element_blank()
+    )
+
+  if (!isTRUE(label)) {
+    if (isTRUE(radial_label)) {
+      p <- p +
+        ggplot2::geom_text(
+          data = data_label,
+          inherit.aes = FALSE,
+          check_overlap = check_overlap,
+          size = label.size,
+          ggplot2::aes(
+            x = .label_x,
+            y = .label_y,
+            label = name,
+            angle = .label_angle,
+            hjust = .label_hjust,
+            vjust = .label_vjust
+          )
+        )
+    } else {
+      p <- p +
+        ggraph::geom_node_text(
+          ggplot2::aes(label = name),
+          size = label.size
+        )
+    }
+
+    p <- p +
+      ggplot2::scale_color_gradient(
+        low = pal[2L],
+        high = pal[1L],
+        name = centrality_col
+      )
+  }
+
+  p
+}
+

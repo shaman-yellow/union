@@ -121,7 +121,7 @@ setMethod("step2", signature = c(x = "job_seurat"),
   })
 
 setMethod("step3", signature = c(x = "job_seurat"),
-  function(x, dims = 1:15, resolution = 1.2, features = NULL, reset = FALSE,
+  function(x, dims = 1:15, resolution = .2, features = NULL, reset = FALSE,
     reduction = if (is.null(features)) "pca" else "features_pca", force = FALSE)
   {
     step_message("This contains several execution: Cluster the cells, UMAP...")
@@ -141,7 +141,13 @@ setMethod("step3", signature = c(x = "job_seurat"),
     }
     object(x) <- e(Seurat::FindNeighbors(object(x), dims = dims, reduction = reduction))
     object(x) <- e(Seurat::FindClusters(object(x), resolution = resolution))
-    object(x) <- e(Seurat::RunUMAP(object(x), dims = dims, reduction = reduction))
+    object(x) <- e(
+      Seurat::RunUMAP(
+        object(x), dims = dims, reduction = reduction,
+        n.neighbors = 50L,
+        min.dist = 0.45
+      )
+    )
     p.umap <- e(Seurat::DimPlot(object(x), cols = color_set(TRUE)))
     p.umap <- set_lab_legend(
       wrap(p.umap, 6, 5),
@@ -724,7 +730,8 @@ as_type_group <- function(type, group) {
 
 setMethod("diff", signature = c(x = "job_seurat"),
   function(x, compare.by, contrasts, groups = NULL, group.by = x$group.by,
-    name = "contrasts", cut.fc = .3, cut.p = .05, min.pct = .25, force = FALSE)
+    name = "contrasts", cut.fc = .3, cut.p = .05, use.p = c("p_val_adj", "p_val"), 
+    min.pct = .1, force = FALSE)
   {
     message("Differential analysis for cells.")
     if (is.null(object(x)@meta.data[[ compare.by ]])) {
@@ -742,6 +749,7 @@ setMethod("diff", signature = c(x = "job_seurat"),
     if (is(contrasts, "list") && !all(lengths(contrasts) == 2)) {
       stop('is(contrasts, "list") && !all(lengths(contrasts) == 2).')
     }
+    use.p <- match.arg(use.p)
     init(snap(x)) <- TRUE
     if (!is.null(groups) && !is.null(group.by)) {
       message(glue::glue("Get subset for comparison: {bind(groups)}"))
@@ -777,21 +785,19 @@ setMethod("diff", signature = c(x = "job_seurat"),
       names(res) <- vapply(contrasts, function(x) paste0(x[1], "_vs_", x[2]), character(1))
       res <- dplyr::as_tibble(data.table::rbindlist(res, idcol = TRUE))
       res_nofilter <- res <- dplyr::rename(res, contrast = .id)
-      res <- dplyr::filter(res, p_val_adj < cut.p, abs(avg_log2FC) > cut.fc)
+      res <- dplyr::filter(res, !!rlang::sym(use.p) < cut.p, abs(avg_log2FC) > cut.fc)
       res <- set_lab_legend(
         res,
         glue::glue("{x@sig} DEGs of the contrasts"),
         glue::glue("细胞群差异表达基因附表 (其中 'contrast' 列为比较的两类细胞) (|log~2~(FC)| &gt; {cut.fc}, P-Adjust &lt; {cut.p})。")
       )
-      lst_res$contrast <- res
-      lst_res$contrast_nofilter <- res_nofilter
     } else {
       res <- x[[ glue::glue("diff_{name}")]]$contrast
       res_nofilter <- x[[ glue::glue("diff_{name}")]]$contrast_nofilter
     }
     snap_compare <- vapply(contrasts, bind, character(1), co = " vs ")
     x <- snapAdd(
-      x, "以 `Seurat::FindMarkers` 差异分析 (依据 {compare.by}, 分析 {less(snap_compare)}) (⟦mark$blue('|log~2~(FC)| &gt; {cut.fc}, P-Adjust &lt; {cut.p}')⟧) 筛选差异表达基因。",
+      x, "以 `Seurat::FindMarkers` 差异分析 (依据 {compare.by}, 分析 {less(snap_compare)}) (⟦mark$blue('|log~2~(FC)| &gt; {cut.fc}, {use.p} &lt; {cut.p}')⟧) 筛选差异表达基因。",
       step = paste0("diff_", name)
     )
     ## contrast intersection
@@ -823,18 +829,20 @@ setMethod("diff", signature = c(x = "job_seurat"),
     )
     message("Stat significant genes number.")
     tops <- unlist(tops, recursive = FALSE)
-    p.volcano <- plot_volcano(
-      res_nofilter, "gene", use = "p_val_adj", use.fc = "avg_log2FC", fc = cut.fc, keep_cols = TRUE
+    p.volcano <- plot_volcano_facet(
+      res_nofilter, facet = "contrast", label = "gene", use = use.p, use.fc = "avg_log2FC",
+      fc = cut.fc, keep_cols = TRUE, label_by = "abs_fc"
     )
-    p.volcano <- p.volcano + facet_wrap(~ contrast)
     p.volcano <- set_lab_legend(
       wrap(p.volcano),
       glue::glue("{x@sig} cell differential expression volcano plot"),
-      glue::glue("细胞群差异表达基因火山图|||横坐标为Log2(Fold Change)，纵坐标为-Log10({detail('p_val_adj')})，每个点代表一个基因；横向参考线代表-Log10({cut.p})=1.3，纵向参考线代表log2FC = ± {cut.fc}；以参考线为划分，右上角的基因为疾病组相较对照组显著上调的差异表达基因，左上角的基因为显著下调的差异表达基因，其余基因为不具有显著统计学意义的基因（用灰色表示）。")
+      glue::glue("细胞群差异表达基因火山图|||横坐标为Log2(Fold Change)，纵坐标为-Log10({detail(use.p)})，每个点代表一个基因；横向参考线代表-Log10({cut.p})=1.3，纵向参考线代表log2FC = ± {cut.fc}；以参考线为划分，右上角的基因为疾病组相较对照组显著上调的差异表达基因，左上角的基因为显著下调的差异表达基因，其余基因为不具有显著统计学意义的基因（用灰色表示）。")
     )
     # 图中标注基因为按 |log2FC| 从高到低上下调 Top 10 差异表达基因。
     lst_res$p.volcano <- p.volcano
     lst_res$ins <- tops
+    lst_res$contrast <- res
+    lst_res$contrast_nofilter <- res_nofilter
     if (FALSE) {
       p.sets_intersection <- new_upset(lst = tops, trunc = NULL)
       p.sets_intersection <- .set_lab(p.sets_intersection, sig(x), "contrasts-DEGs-intersection")
@@ -1095,13 +1103,14 @@ setMethod("vis", signature = c(x = "job_seurat"),
       )
       group.by <- "Cell_Sample"
     }
-    p <- wrap(as_grob(e(Seurat::DimPlot(
-            object(x), reduction = reduction, label = FALSE, pt.size = pt.size,
+    p <- wrap(Seurat::DimPlot(
+            object(x), reduction = reduction, label = FALSE,
             group.by = group.by, cols = palette, ...
-            ))), 7, 4)
-    p <- setLegend(p, "为 {group.by} 的 {reduction} 聚类图。")
-    .set_lab(
-      p, paste(sig(x), name), "The", gs(group.by, "_", "-")
+            ), 7, 4)
+    set_lab_legend(
+      p,
+      glue::glue("{x@sig} {reduction} of {group.by}"),
+      glue::glue("{group.by} 的 {reduction} 聚类图")
     )
   })
 
@@ -1114,6 +1123,8 @@ setMethod("focus", signature = c(x = "job_seurat"),
   {
     if (is(features, "feature")) {
       refea <- features <- resolve_feature(features)
+    } else {
+      refea <- features
     }
     renameFeature <- FALSE
     if (!is.null(recode)) {
@@ -1389,7 +1400,7 @@ setMethod("focus", signature = c(x = "job_seurat"),
   if (length(levels) > 2) {
     stop('length(levels) > 2, can not guess levels from group number greater than 2.')
   }
-  pattern <- "healthy|normal|control|^hc$|^scissor_neg"
+  pattern <- "healthy|normal|control|^hc$|^scissor_neg|[^a-z]wt$"
   isControl <- grpl(levels, pattern, ignore.case = TRUE)
   if (all(isControl)) {
     stop('all(isControl), too many group of control matched')
@@ -2191,7 +2202,7 @@ scsa_annotation <- function(
   ## plot
   p.map_scsa <- e(Seurat::DimPlot(
       object(x), label = add_label,
-      pt.size = if (dim(object(x))[2] > 30000) .3 else .5,
+      # pt.size = if (dim(object(x))[2] > 30000) .3 else .5,
       group.by = res.col, cols = color_set()
       ))
   p.map_scsa <- wrap(as_grob(p.map_scsa), 7, 4)

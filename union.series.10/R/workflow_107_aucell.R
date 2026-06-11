@@ -18,11 +18,20 @@ setGeneric("asjob_aucell",
 
 setMethod("asjob_aucell", signature = c(x = "job_seurat"),
   function(x, sets, name = names(sets)[1], join = TRUE,
-    sets_feature = NULL, assay = SeuratObject::DefaultAssay(object(x)), ...)
+    sets_feature = NULL, assay = SeuratObject::DefaultAssay(object(x)),
+    id_kegg = NULL, ...)
   {
     mtx <- Seurat::GetAssayData(object(x), assay = assay, layer = "data")
     if (is.null(mtx) || is.null(rownames(mtx))) {
       stop('is.null(mtx) || is.null(rownames(mtx)).')
+    }
+    if (!is.null(id_kegg)) {
+      data_kegg <- geneFuns$get_kegg_pathway_gene_table(
+        pathway_ids = id_kegg,
+        species = "hsa"
+      )
+      sets <- split(data_kegg$symbol, data_kegg$pathway_name)
+      sets <- as_feature(sets, name)
     }
     if (!is(sets, "feature")) {
       stop('!is(sets, "feature").')
@@ -430,7 +439,8 @@ setMethod("clear", signature = c(x = "job_aucell"),
   })
 
 setMethod("map", signature = c(x = "job_seurat", ref = "job_aucell"),
-  function(x, ref, type = "AUC", scale = FALSE){
+  function(x, ref, type = "AUC", scale = FALSE, run_focus = TRUE)
+  {
     if (ref@step < 1L) {
       stop('ref@step < 1L.')
     }
@@ -444,7 +454,7 @@ setMethod("map", signature = c(x = "job_seurat", ref = "job_aucell"),
     }
     object(x)@meta.data <- object(x)@meta.data[, !colnames(object(x)@meta.data) %in% colnames(res)]
     object(x)@meta.data <- cbind(object(x)@meta.data, res)
-    if (ncol(res) <= 20) {
+    if (ncol(res) <= 20 && run_focus) {
       x <- focus(x, colnames(res), name = "AUCell", cols = c("skyblue", "blue", "black"))
     }
     return(x)
@@ -456,4 +466,278 @@ setMethod("set_remote", signature = c(x = "job_aucell"),
     rem_dir.create(wd, wd = ".")
     return(x)
   })
+
+# ==========================================================================
+
+geneFuns <- new.env(parent = baseenv())
+
+geneFuns$check_pkg <- function(pkg)
+{
+  if (!base::requireNamespace(pkg, quietly = TRUE)) {
+    base::stop(glue::glue("Package `{pkg}` is required but not installed."))
+  }
+
+  base::invisible(TRUE)
+}
+
+geneFuns$set_kegg_pathway_id <- function(pathway_id, species = "hsa")
+{
+  vec_id <- base::trimws(base::as.character(pathway_id))
+  vec_id <- base::sub("^path:", "", vec_id)
+
+  vec_id <- base::ifelse(
+    base::grepl("^\\d{5}$", vec_id),
+    base::paste0(species, vec_id),
+    vec_id
+  )
+
+  vec_id <- base::ifelse(
+    base::grepl("^map\\d{5}$", vec_id),
+    base::paste0(species, base::sub("^map", "", vec_id)),
+    vec_id
+  )
+
+  vec_id
+}
+
+geneFuns$get_cache_file <- function(cache_dir, key)
+{
+  if (base::is.null(cache_dir)) {
+    return(NULL)
+  }
+
+  if (!base::dir.exists(cache_dir)) {
+    base::dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  key <- base::gsub("[^A-Za-z0-9_.-]+", "_", key)
+  base::file.path(cache_dir, base::paste0(key, ".rds"))
+}
+
+geneFuns$get_kegg_pathway_table <- function(species = "hsa",
+  cache_dir = "cache/kegg", refresh = FALSE)
+{
+  geneFuns$check_pkg("KEGGREST")
+
+  cache_file <- geneFuns$get_cache_file(
+    cache_dir,
+    base::paste0("kegg_pathway_table_", species)
+  )
+
+  if (!refresh && !base::is.null(cache_file) && base::file.exists(cache_file)) {
+    return(base::readRDS(cache_file))
+  }
+
+  base::message(glue::glue("Download KEGG pathway table: {species}."))
+  vec_pathway <- KEGGREST::keggList("pathway", species)
+
+  data_pathway <- data.frame(
+    pathway_id = base::sub("^path:", "", base::names(vec_pathway)),
+    pathway_name = base::as.character(vec_pathway),
+    stringsAsFactors = FALSE
+  )
+
+  data_pathway$pathway_name <- base::sub(" - .*$", "", data_pathway$pathway_name)
+
+  if (!base::is.null(cache_file)) {
+    base::saveRDS(data_pathway, cache_file)
+  }
+
+  data_pathway
+}
+
+geneFuns$search_kegg_pathway <- function(query, species = "hsa",
+  cache_dir = "cache/kegg", refresh = FALSE, ignore.case = TRUE)
+{
+  data_pathway <- geneFuns$get_kegg_pathway_table(
+    species = species,
+    cache_dir = cache_dir,
+    refresh = refresh
+  )
+
+  vec_keep <- base::grepl(
+    query,
+    data_pathway$pathway_name,
+    ignore.case = ignore.case
+  )
+
+  data_pathway[vec_keep, , drop = FALSE]
+}
+
+geneFuns$get_kegg_pathway_entry <- function(pathway_id, species = "hsa",
+  cache_dir = "cache/kegg", refresh = FALSE)
+{
+  geneFuns$check_pkg("KEGGREST")
+
+  pathway_id <- geneFuns$set_kegg_pathway_id(pathway_id, species = species)
+
+  cache_file <- geneFuns$get_cache_file(
+    cache_dir,
+    base::paste0("kegg_pathway_entry_", pathway_id)
+  )
+
+  if (!refresh && !base::is.null(cache_file) && base::file.exists(cache_file)) {
+    return(base::readRDS(cache_file))
+  }
+
+  base::message(glue::glue("Download KEGG pathway entry: {pathway_id}."))
+  lst_entry <- KEGGREST::keggGet(pathway_id)
+
+  if (base::length(lst_entry) == 0L) {
+    base::stop(glue::glue("No KEGG entry was returned: {pathway_id}."))
+  }
+
+  entry <- lst_entry[[ 1L ]]
+
+  if (!base::is.null(cache_file)) {
+    base::saveRDS(entry, cache_file)
+  }
+
+  entry
+}
+
+geneFuns$get_gene_table_from_kegg_entry <- function(entry, pathway_id)
+{
+  if (base::is.null(entry$GENE) || base::length(entry$GENE) == 0L) {
+    return(data.frame(
+      pathway_id = character(),
+      pathway_name = character(),
+      entrez_id = character(),
+      symbol = character(),
+      description = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  vec_gene <- entry$GENE
+  vec_desc <- base::as.character(vec_gene)
+  vec_entrez <- base::names(vec_gene)
+
+  if (base::is.null(vec_entrez) || base::length(vec_entrez) == 0L ||
+      base::all(base::is.na(vec_entrez)) || base::all(vec_entrez == "")) {
+    vec_entrez <- vec_desc[base::seq(1L, base::length(vec_desc), by = 2L)]
+    vec_desc <- vec_desc[base::seq(2L, base::length(vec_desc), by = 2L)]
+  }
+
+  vec_entrez <- base::sub("^.+:", "", base::as.character(vec_entrez))
+  vec_symbol <- base::trimws(base::sub(",.*$", "", base::sub(";.*$", "", vec_desc)))
+
+  pathway_name <- NA_character_
+
+  if (!base::is.null(entry$NAME) && base::length(entry$NAME) > 0L) {
+    pathway_name <- base::paste(base::as.character(entry$NAME), collapse = " ")
+    pathway_name <- base::sub(" - .*$", "", pathway_name)
+
+    if (base::length(pathway_name) == 0L || base::is.na(pathway_name) ||
+        pathway_name == "") {
+      pathway_name <- NA_character_
+    }
+  }
+
+  data_gene <- data.frame(
+    pathway_id = base::rep(pathway_id, base::length(vec_entrez)),
+    pathway_name = base::rep(pathway_name, base::length(vec_entrez)),
+    entrez_id = vec_entrez,
+    symbol = vec_symbol,
+    description = vec_desc,
+    stringsAsFactors = FALSE
+  )
+
+  data_gene <- data_gene[!base::is.na(data_gene$entrez_id), , drop = FALSE]
+  data_gene <- data_gene[data_gene$entrez_id != "", , drop = FALSE]
+  data_gene <- data_gene[!base::duplicated(data_gene$entrez_id), , drop = FALSE]
+  row.names(data_gene) <- NULL
+
+  data_gene
+}
+
+
+geneFuns$get_kegg_pathway_gene_table <- function(pathway_ids,
+  species = "hsa", cache_dir = "cache/kegg", refresh = FALSE)
+{
+  vec_pathway_id <- geneFuns$set_kegg_pathway_id(
+    pathway_ids,
+    species = species
+  )
+
+  lst_gene <- base::lapply(vec_pathway_id, function(pathway_id) {
+    entry <- geneFuns$get_kegg_pathway_entry(
+      pathway_id = pathway_id,
+      species = species,
+      cache_dir = cache_dir,
+      refresh = refresh
+    )
+
+    geneFuns$get_gene_table_from_kegg_entry(
+      entry = entry,
+      pathway_id = pathway_id
+    )
+  })
+
+  data_gene <- do.call(rbind, lst_gene)
+
+  if (base::is.null(data_gene) || base::nrow(data_gene) == 0L) {
+    base::warning("No genes were obtained from KEGG pathways.")
+    return(data.frame(
+      pathway_id = character(),
+      pathway_name = character(),
+      entrez_id = character(),
+      symbol = character(),
+      description = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  data_gene <- data_gene[!base::duplicated(
+    base::paste(data_gene$pathway_id, data_gene$entrez_id, sep = "|||")
+  ), , drop = FALSE]
+
+  row.names(data_gene) <- NULL
+  data_gene
+}
+
+geneFuns$get_kegg_pathway_gene_list <- function(pathway_ids,
+  species = "hsa", gene_id_type = c("symbol", "entrez"),
+  cache_dir = "cache/kegg", refresh = FALSE, min_genes = 5L)
+{
+  gene_id_type <- base::match.arg(gene_id_type)
+
+  data_gene <- geneFuns$get_kegg_pathway_gene_table(
+    pathway_ids = pathway_ids,
+    species = species,
+    cache_dir = cache_dir,
+    refresh = refresh
+  )
+
+  if (base::nrow(data_gene) == 0L) {
+    return(list())
+  }
+
+  id_col <- switch(
+    gene_id_type,
+    symbol = "symbol",
+    entrez = "entrez_id"
+  )
+
+  data_gene$gene_id <- base::as.character(data_gene[[ id_col ]])
+  data_gene <- data_gene[!base::is.na(data_gene$gene_id), , drop = FALSE]
+  data_gene <- data_gene[data_gene$gene_id != "", , drop = FALSE]
+
+  data_gene$gene_set_name <- base::ifelse(
+    !base::is.na(data_gene$pathway_name) & data_gene$pathway_name != "",
+    base::paste0(data_gene$pathway_id, " | ", data_gene$pathway_name),
+    data_gene$pathway_id
+  )
+
+  lst_gene <- base::split(data_gene$gene_id, data_gene$gene_set_name)
+  lst_gene <- base::lapply(lst_gene, unique)
+
+  vec_keep <- base::vapply(
+    lst_gene,
+    function(vec_gene) base::length(vec_gene) >= min_genes,
+    logical(1L)
+  )
+
+  lst_gene[vec_keep]
+}
 

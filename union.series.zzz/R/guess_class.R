@@ -35,7 +35,9 @@
     fea = "feature",
     corgsea = "job_corgsea",
     iobr = "job_iobr",
-    gn = "job_genecard"
+    gn = "job_genecard",
+    mti = "job_metaInte",
+    mdiff = "job_metaboDiff"
   )
   if (any(duplicated(names(prefix)))) {
     stop('any(duplicated(names(prefix))), in `.general_prefix_of_class`')

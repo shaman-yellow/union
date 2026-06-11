@@ -20,7 +20,7 @@ setGeneric("asjob_hdwgcna",
   function(x, ...) standardGeneric("asjob_hdwgcna"))
 
 setMethod("asjob_hdwgcna", signature = c(x = "job_seurat"),
-  function(x, workers = 5, assay = SeuratObject::DefaultAssay(object(x)),
+  function(x, workers = 10L, assay = SeuratObject::DefaultAssay(object(x)),
     name = "wgcna")
   {
     object <- object(x)
@@ -276,6 +276,12 @@ setMethod("step6", signature = c(x = "job_hdwgcna"),
       }
     }
     if (!debug) {
+      message(glue::glue("ModuleTraitCorrelation Use trait: {bind(use.trait)}"))
+      theGroups <- object(x)@meta.data[[ group.by ]]
+      if (!all(levels(theGroups) %in% theGroups)) {
+        message("Auto droplevels for avoiding error.")
+        object(x)@meta.data[[ group.by ]] <- droplevels(theGroups)
+      }
       object(x) <- e(
         hdWGCNA::ModuleTraitCorrelation(
           object(x), traits = use.trait, group.by = group.by
@@ -522,6 +528,13 @@ setMethod("step7", signature = c(x = "job_hdwgcna"),
     return(x)
   })
 
+setMethod("mutate", signature = c(x = "job_hdwgcna"),
+  function(x, ...){
+    object(x)@meta.data <- dplyr::mutate(object(x)@meta.data, ...)
+    return(x)
+  })
+
+
 .stat_ggcor_table_list <- function(object, label.x, 
   label.y, show = 3, identical = FALSE, cut.r = NULL)
 {
@@ -684,4 +697,11 @@ safe_as_cor_tbl <- function(lst, name_cor, name_pvalue) {
     min_cells = min_cells, group_sizes = counts,
     est_metacells = est_metacells, snap = snap)
 }
+
+.description_select_module <- function(r = .3, p = .05) {
+  glue::glue(
+    "模块-性状相关分析中，相关系数用于衡量模块与分组性状的关联方向和效应强度，p 值用于评估相关性的统计显著性。本研究优先筛选 ∣r∣ > {r} 且 p < {p} 的模块；若无模块同时满足该阈值，则进一步在 p < {p} 的显著相关模块中选择 ∣r∣ 最高的模块作为 trait 相关核心模块 (PMID: 38737676, PMID: 41957356, PMID: 41742201)。"
+  )
+}
+
 

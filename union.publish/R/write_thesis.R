@@ -677,7 +677,8 @@ custom_docx_document2 <- function(...){
     lines <- readLines(output_file)
     lines <- vapply(lines, FUN.VALUE = character(1),
       function(x) {
-        res <- try(glue::glue(x, .open = "⟦", .close = "⟧"), TRUE)
+        # res <- try(glue::glue(x, .open = "⟦", .close = "⟧"), TRUE)
+        res <- try(snap_glue(x, envir = parent.frame()), TRUE)
         if (inherits(res, "try-error")) {
           Terror <<- x
           stop(
@@ -715,7 +716,157 @@ custom_docx_document2 <- function(...){
   output_formats
 }
 
+.snap_strip_outer_quotes <- function(value)
+{
+  value0 <- trimws(value)
+  n_char <- nchar(value0, type = "chars")
 
+  if (n_char < 2L) {
+    return(value0)
+  }
+
+  first_char <- substr(value0, 1L, 1L)
+  last_char <- substr(value0, n_char, n_char)
+
+  if (first_char %in% c("'", "\"") && identical(first_char, last_char)) {
+    return(substr(value0, 2L, n_char - 1L))
+  }
+
+  value0
+}
+
+.snap_get_mark_fun <- function(fun_name, envir)
+{
+  mark <- get("mark", envir = envir, inherits = TRUE)
+
+  if (is.environment(mark)) {
+    if (!exists(fun_name, envir = mark, inherits = TRUE)) {
+      stop(sprintf("mark$%s was not found.", fun_name))
+    }
+
+    fun <- get(fun_name, envir = mark, inherits = TRUE)
+  } else {
+    fun <- mark[[ fun_name ]]
+  }
+
+  if (!is.function(fun)) {
+    stop(sprintf("mark$%s is not a function.", fun_name))
+  }
+
+  fun
+}
+
+.snap_eval_segment <- function(text, envir, allow_r_code = TRUE)
+{
+  text0 <- trimws(text)
+
+  pat_mark <- "^mark\\$([A-Za-z][A-Za-z0-9_.]*)\\s*\\("
+  mat_mark <- regexec(pat_mark, text0, perl = TRUE)
+  reg_mark <- regmatches(text0, mat_mark)[[ 1L ]]
+
+  if (length(reg_mark) == 2L && grepl("\\)\\s*$", text0, perl = TRUE)) {
+    fun_name <- reg_mark[[ 2L ]]
+
+    value <- sub(pat_mark, "", text0, perl = TRUE)
+    value <- sub("\\)\\s*$", "", value, perl = TRUE)
+    value <- .snap_strip_outer_quotes(value)
+
+    fun <- .snap_get_mark_fun(fun_name, envir)
+
+    return(fun(value))
+  }
+
+  if (!allow_r_code) {
+    stop(sprintf("Unsupported snap expression: %s", text0))
+  }
+
+  value <- eval(parse(text = text0), envir = envir)
+
+  if (length(value) == 0L) {
+    return("")
+  }
+
+  as.character(value)
+}
+
+.snap_glue_one <- function(text, envir, open, close, allow_r_code)
+{
+  if (is.na(text)) {
+    return(NA_character_)
+  }
+
+  n_text <- nchar(text, type = "chars")
+
+  if (n_text == 0L) {
+    return("")
+  }
+
+  n_open <- nchar(open, type = "chars")
+  n_close <- nchar(close, type = "chars")
+
+  pos <- 1L
+  vec_out <- character()
+
+  while (pos <= n_text) {
+    text_sub <- substr(text, pos, n_text)
+    open_rel <- regexpr(open, text_sub, fixed = TRUE)[[ 1L ]]
+
+    if (open_rel < 0L) {
+      vec_out <- c(vec_out, text_sub)
+      break
+    }
+
+    open_abs <- pos + open_rel - 1L
+
+    if (open_abs > pos) {
+      vec_out <- c(vec_out, substr(text, pos, open_abs - 1L))
+    }
+
+    expr_start <- open_abs + n_open
+    text_search <- substr(text, expr_start, n_text)
+    close_rel <- regexpr(close, text_search, fixed = TRUE)[[ 1L ]]
+
+    if (close_rel < 0L) {
+      stop(sprintf("Missing close delimiter: %s", close))
+    }
+
+    close_abs <- expr_start + close_rel - 1L
+
+    if (close_abs > expr_start) {
+      expr <- substr(text, expr_start, close_abs - 1L)
+    } else {
+      expr <- ""
+    }
+
+    value <- .snap_eval_segment(
+      expr,
+      envir = envir,
+      allow_r_code = allow_r_code
+    )
+
+    vec_out <- c(vec_out, as.character(value))
+    pos <- close_abs + n_close
+  }
+
+  paste0(vec_out, collapse = "")
+}
+
+snap_glue <- function(x, envir = parent.frame(), open = "⟦", close = "⟧",
+  allow_r_code = TRUE)
+{
+  vec_x <- as.character(x)
+
+  vapply(
+    vec_x,
+    .snap_glue_one,
+    character(1L),
+    envir = envir,
+    open = open,
+    close = close,
+    allow_r_code = allow_r_code,
+    USE.NAMES = FALSE
+  )
+}
 
 # ==========================================================================
 # xml tools

@@ -37,6 +37,7 @@ send_job_to_remote <- function(path, to = "rds_jobSave", remote = "remote") {
 
 
 mark_text <- function(string, color, bold = TRUE, ...) {
+  string <- gs(string, "`", "")
   string <- gs(string, "&lt;", "<")
   string <- gs(string, "&gt;", ">")
   ftext <- officer::ftext(

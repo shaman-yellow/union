@@ -3105,40 +3105,193 @@ setGeneric("clear",
 setMethod("clear", signature = c(x = "job"),
   function(x, save = TRUE, lite = TRUE, suffix = NULL,
     name = rlang::expr_text(substitute(x, parent.frame(1))),
-    path_jobSave = getOption("path_jobSave", "."), 
-    path_lite = file.path(path_jobSave, "lite"), 
+    path_jobSave = getOption("path_jobSave", "."),
+    path_lite = file.path(path_jobSave, "lite"),
     expr_lite = NULL,
-    allow_qs = TRUE, nthreads = 5)
+    allow_qs = TRUE, nthreads = 5L)
   {
-    dir.create(path_jobSave, FALSE)
     filename <- paste0(name, ".", x@step, suffix, ".rds")
+
     if (save) {
       file <- file.path(path_jobSave, filename)
+
       if (allow_qs && object.size(x) > 5e8) {
-        fileQs <- paste0(tools::file_path_sans_ext(file), ".qs")
+        file_qs <- paste0(tools::file_path_sans_ext(file), ".qs")
         message(glue::glue("Too large object ('{obj.size(x)}' > 478.6 Mb), use `qs::qsave`"))
-        message("Save qs: ", fileQs)
-        qs::qsave(x, fileQs, nthreads = nthreads)
+
+        jobFuns$run_save_qs_safe(
+          object = x,
+          file = file_qs,
+          nthreads = nthreads
+        )
       } else {
-        message("Save RDS: ", file)
-        saveRDS(x, file)
+        jobFuns$run_save_rds_safe(
+          object = x,
+          file = file
+        )
       }
     }
+
     object(x) <- NULL
-    dir.create(path_lite, FALSE)
+
     if (!is.null(expr_lite)) {
       if (!is.expression(expr_lite)) {
         stop('!is.expression(expr_lite).')
       }
+
       eval(expr_lite)
     }
+
     if (lite) {
       file <- file.path(path_lite, filename)
-      message("Save RDS: ", file)
-      saveRDS(x, file)
+
+      jobFuns$run_save_rds_safe(
+        object = x,
+        file = file
+      )
     }
+
     return(x)
   })
+
+if (!exists("jobFuns", inherits = FALSE)) {
+  jobFuns <- new.env(parent = emptyenv())
+}
+
+jobFuns$get_current_user <- function()
+{
+  user <- Sys.info()[["user"]]
+  if (!is.na(user) && nzchar(user)) {
+    return(user)
+  }
+
+  vec_env <- Sys.getenv(c("USER", "LOGNAME", "USERNAME"))
+  vec_env <- vec_env[nzchar(vec_env)]
+
+  if (length(vec_env) > 0L) {
+    return(vec_env[[1L]])
+  }
+
+  user <- tryCatch(
+    system2("whoami", stdout = TRUE, stderr = FALSE),
+    error = function(e) NA_character_
+  )
+
+  if (length(user) > 0L && !is.na(user[[1L]]) && nzchar(user[[1L]])) {
+    return(user[[1L]])
+  }
+
+  return("unknown")
+}
+
+jobFuns$can_write_file <- function(file)
+{
+  dir_file <- dirname(file)
+
+  if (!dir.exists(dir_file)) {
+    dir_ok <- tryCatch(
+      dir.create(dir_file, recursive = TRUE, showWarnings = FALSE),
+      warning = function(w) FALSE,
+      error = function(e) FALSE
+    )
+
+    if (!isTRUE(dir_ok) && !dir.exists(dir_file)) {
+      return(FALSE)
+    }
+  }
+
+  if (file.exists(file)) {
+    return(file.access(file, mode = 2L) == 0L)
+  }
+
+  return(file.access(dir_file, mode = 2L) == 0L)
+}
+
+jobFuns$message_skip_save <- function(file, reason = "target file or directory is not writable")
+{
+  user <- jobFuns$get_current_user()
+
+  msg <- glue::glue(
+    "Skip file writing: {file}\n",
+    "Reason: {reason}.\n",
+    "Current user: {user}.\n",
+    "This account may be a reviewer or another non-analysis account without overwrite permission.\n",
+    "To disable this auto-skip behavior and expose the original write error, set:\n",
+    "options(job.clear.skip_unwritable = FALSE)"
+  )
+
+  if (requireNamespace("crayon", quietly = TRUE)) {
+    message(crayon::red(msg))
+  } else {
+    message(msg)
+  }
+
+  invisible(NULL)
+}
+
+jobFuns$run_save_rds_safe <- function(object, file)
+{
+  skip_unwritable <- isTRUE(getOption("job.clear.skip_unwritable", TRUE))
+
+  if (skip_unwritable && !jobFuns$can_write_file(file)) {
+    jobFuns$message_skip_save(file)
+    return(FALSE)
+  }
+
+  message("Save RDS: ", file)
+
+  tryCatch(
+    {
+      saveRDS(object, file)
+      TRUE
+    },
+    error = function(e) {
+      if (!skip_unwritable) {
+        stop(e)
+      }
+
+      jobFuns$message_skip_save(
+        file,
+        reason = conditionMessage(e)
+      )
+
+      FALSE
+    }
+  )
+}
+
+jobFuns$run_save_qs_safe <- function(object, file, nthreads = 5L)
+{
+  skip_unwritable <- isTRUE(getOption("job.clear.skip_unwritable", TRUE))
+
+  if (skip_unwritable && !jobFuns$can_write_file(file)) {
+    jobFuns$message_skip_save(file)
+    return(FALSE)
+  }
+
+  message("Save qs: ", file)
+
+  tryCatch(
+    {
+      qs::qsave(object, file, nthreads = nthreads)
+      TRUE
+    },
+    error = function(e) {
+      if (!skip_unwritable) {
+        stop(e)
+      }
+
+      jobFuns$message_skip_save(
+        file,
+        reason = conditionMessage(e)
+      )
+
+      FALSE
+    }
+  )
+}
+
+# ==========================================================================
 
 setGeneric("via_symbol",
   function(x, ...) standardGeneric("via_symbol"))

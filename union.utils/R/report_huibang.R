@@ -573,10 +573,18 @@ push_mirror_to_remote.hb <- function(dir_scripts = "scripts_mirror", path = "rem
 }
 
 push_mirror_runtime_remote.hb <- function(dir_scripts = "scripts_mirror", 
-  project = guess_project(), path = "remote")
+  project = guess_project(), 
+  path = "remote", mode = c("release", "tune")
+)
 {
   if (!is_sshfs_mount(path)) {
     stop('!is_sshfs_mount(path).')
+  }
+  mode <- match.arg(mode)
+  if (mode == "release") {
+    path_pkg <- "./union/union.utils"
+  } else {
+    path_pkg <- "./tmp/f3256d7e/union/union.utils"
   }
   files <- list.files(dir_scripts, "^r\\.", full.names = TRUE)
   vapply(files, FUN.VALUE = logical(1L),
@@ -585,11 +593,11 @@ push_mirror_runtime_remote.hb <- function(dir_scripts = "scripts_mirror",
       if (length(which <- grp(lines, "# .{{{SETUP}}}.", fixed = TRUE)) == 1L) {
         lines[ which ] <- ""
         codes <- generate_setup_codes.huibang(
-          file, project, TRUE
+          file, project, TRUE, path_pkg = path_pkg
         )
         lines <- append(lines, codes, after = which)
       }
-      writeLines(file, file.path(path, basename(file)))
+      writeLines(lines, file.path(path, basename(file)))
       TRUE
     })
 }
@@ -818,24 +826,74 @@ setup.huibang <- function() {
   options("download.file.method" = "wget", "download.file.extra" = "--no-check-certificate")
 }
 
-run_in_project_nohup.hb <- function(script, ...) {
+run_in_project_nohup.hb <- function(script, ..., limit_blas = FALSE,
+  blas_threads = 1L, login_shell = FALSE, num_file = 1L)
+{
   run_in_project.hb(
-    script, ..., wait = FALSE, ex1 = "nohup", ex2 = "> task_nohup.log 2>&1 &"
+    script,
+    ...,
+    wait = FALSE,
+    ex1 = "nohup",
+    ex2 = glue::glue("> task_nohup_{num_file}.log 2>&1 &"),
+    limit_blas = limit_blas,
+    blas_threads = blas_threads,
+    login_shell = login_shell
   )
 }
 
-run_in_project.hb <- function(script = "", remote = "remote", 
-  fun_map = NULL, wait = TRUE, ex1 = "", ex2 = "")
+
+run_in_project.hb <- function(script = "", remote = "remote",
+  fun_map = NULL, wait = TRUE, ex1 = "", ex2 = "",
+  limit_blas = FALSE, blas_threads = 1L, login_shell = FALSE,
+  ssh_tty = FALSE, ssh_stdin_null = NULL)
 {
   if (!is.null(fun_map)) {
     script <- fun_map(script)
   }
+
   ws <- getRemoteWs()
   pr <- guess_project()
   dir_project <- paste0(ws, "/", pr)
-  cmd <- glue::glue("cd {dir_project} && {ex1} Rscript {script} {ex2}")
-  cdRun("ssh ", remote, " '", cmd, "'", wait = wait)
+
+  cmd_env <- ""
+  if (isTRUE(limit_blas)) {
+    cmd_env <- glue::glue(
+      "env ",
+      "OPENBLAS_NUM_THREADS={blas_threads} ",
+      "OPENBLAS_DEFAULT_NUM_THREADS={blas_threads} ",
+      "OMP_NUM_THREADS={blas_threads} ",
+      "MKL_NUM_THREADS={blas_threads} ",
+      "BLIS_NUM_THREADS={blas_threads} ",
+      "VECLIB_MAXIMUM_THREADS={blas_threads} "
+    )
+  }
+
+  script <- shQuote(script)
+
+  cmd_inner <- glue::glue(
+    "cd {shQuote(dir_project)} && ",
+    "{ex1} {cmd_env}Rscript {script} {ex2}"
+  )
+
+  if (isTRUE(login_shell)) {
+    cmd_inner <- glue::glue("bash -l -c {shQuote(cmd_inner)}")
+  }
+
+  if (is.null(ssh_stdin_null)) {
+    ssh_stdin_null <- !wait
+  }
+
+  vec_ssh_opt <- c(
+    if (isTRUE(ssh_tty)) "-t" else character(0L),
+    if (isTRUE(ssh_stdin_null)) "-n" else character(0L)
+  )
+
+  str_ssh_opt <- paste(vec_ssh_opt, collapse = " ")
+  str_ssh_opt <- if (nzchar(str_ssh_opt)) paste0(str_ssh_opt, " ") else ""
+
+  cdRun("ssh ", str_ssh_opt, remote, " ", shQuote(cmd_inner), wait = wait)
 }
+
 
 name.hb <- list()
 

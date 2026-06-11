@@ -25,8 +25,10 @@ setMethod("asjob_mebocost", signature = c(x = "job_seurat"),
     # object <- scCustomize::Convert_Assay(
     #   object(x), "RNA", convert_to = "V3"
     # )
-    if (is(object(x)[["RNA"]], "Assay5")) {
-      object(x)[["RNA"]] <- as(object(x)[["RNA"]], "Assay")
+    requireNamespace("Seurat")
+    assay <- SeuratObject::DefaultAssay(object(x))
+    if (is(object(x)[[ assay ]], "Assay5")) {
+      object(x)[[ assay ]] <- as(object(x)[[ assay ]], "Assay")
     }
     hash <- digest::digest(
       list(cells = colnames(object(x)), genes = rownames(object(x))), 
@@ -37,7 +39,7 @@ setMethod("asjob_mebocost", signature = c(x = "job_seurat"),
       activate_env(conda_env, pg("conda"))
       cli::cli_alert_info("sceasy::convertFormat")
       sceasy::convertFormat(
-        object, from = "seurat", to = "anndata",
+        object(x), from = "seurat", to = "anndata", assay = assay,
         outFile = file_anndata
       )
     } else {
@@ -74,62 +76,153 @@ setMethod("activate", signature = c(x = "job_mebocost"),
   })
 
 setMethod("step1", signature = c(x = "job_mebocost"),
-  function(x, workers = 10, species = "human", path_mebocost = pg("path_mebocost"),
-    try_compass = FALSE)
+  function(x, workers = 10L, species = "human",
+    path_mebocost = pg("path_mebocost"), try_compass = FALSE,
+    cutoff_exp = 0, cutoff_met = 0, cutoff_prop = 0.01,
+    sensor_type = "All")
   {
     step_message("Create mebocost object.")
-    # scrub <- import("scrublet")
+
     x <- activate(x)
     anndata <- x$scanpy$read_h5ad(x$file_anndata)
     x$file_config <- file.path(path_mebocost, "mebocost.conf")
+
     if (!is.null(x$metadata$group)) {
       x$compare.by <- "group"
     } else {
       x$compare.by <- NULL
     }
+
+    x$mebocost_param <- list(
+      species = species,
+      cutoff_exp = cutoff_exp,
+      cutoff_met = cutoff_met,
+      cutoff_prop = cutoff_prop,
+      sensor_type = sensor_type,
+      workers = workers
+    )
+
     cli::cli_alert_info("Run: mebocost.create_obj")
+
     object(x) <- x$mebocost$create_obj(
       adata = anndata,
       group_col = x$group.by,
       condition_col = x$compare.by,
       met_est = "mebocost",
       config_path = x$file_config,
-      exp_mat = NULL, cell_ann = NULL, species = species,
-      met_pred = NULL, met_enzyme = NULL, met_sensor = NULL,
-      met_ann = NULL, scFEA_ann = NULL, compass_met_ann = NULL,
+      exp_mat = NULL,
+      cell_ann = NULL,
+      species = species,
+      met_pred = NULL,
+      met_enzyme = NULL,
+      met_sensor = NULL,
+      met_ann = NULL,
+      scFEA_ann = NULL,
+      compass_met_ann = NULL,
       compass_rxn_ann = NULL,
-      cutoff_exp = 'auto',
-      cutoff_met = 'auto',
-      cutoff_prop = 0.15,
-      sensor_type = 'All',
-      thread = workers
+      cutoff_exp = cutoff_exp,
+      cutoff_met = cutoff_met,
+      cutoff_prop = cutoff_prop,
+      sensor_type = sensor_type,
+      thread = as.integer(workers)
     )
+
     if (try_compass) {
       x$file_avgExp <- file.path(x$dir_cache, glue::glue("avgExp_{x$hash}.tsv"))
+
       if (file.exists(x$file_avgExp)) {
         message(glue::glue("file.exists: {x$file_avgExp}"))
       } else {
         pd <- reticulate::import("pandas")
         np <- reticulate::import("numpy")
+
         avg_exp <- x$scanpy$get$aggregate(
           anndata, by = list("group", x$group.by), func = "mean"
         )
         cols <- avg_exp$var_names$to_list()
-        rows <- paste0(avg_exp$obs[[ "group" ]], " ~ ", avg_exp$obs[[ x$group.by ]])
-        avg_exp <- as.data.frame(avg_exp$layers[[ "mean" ]])
+        rows <- paste0(avg_exp$obs[["group"]], " ~ ", avg_exp$obs[[x$group.by]])
+        avg_exp <- as.data.frame(avg_exp$layers[["mean"]])
         rownames(avg_exp) <- rows
         colnames(avg_exp) <- cols
         avg_exp <- t(avg_exp)
         avg_exp <- expm1(avg_exp)
+
         data.table::fwrite(
           avg_exp, x$file_avgExp, sep = "\t", row.names = TRUE
         )
       }
     }
-    x <- methodAdd(x, "**MEBOCOST** 是一种基于单细胞转录组数据推断代谢物介导细胞间通讯的计算方法，其主要目的是系统性解析不同细胞类型之间通过代谢物–受体轴所形成的潜在相互作用网络。该方法结合代谢酶表达信息与受体表达谱，推断细胞产生特定代谢物的能力及其被其他细胞感知的可能性，从而构建代谢通讯关系，并在此基础上识别具有显著性的通讯通路及关键调控分子。\n\n")
-    x <- methodAdd(x, "将单细胞数据集以 Python 工具 MEBOCOST (1.2.0) (<https://github.com/kaifuchenlab/MEBOCOST>) 分析细胞间代谢通讯。")
-    x <- methodAdd(x, "借助 MEBOCOST 内置的代谢物-聚合酶、代谢物-传感器先验知识库计算各细胞群体中聚合酶、传感器基因的平均表达量，作为该群体对该代谢物发送、接收潜力的评估指标。\n\n")
-    x <- methodAdd(x, "对于每个代谢物，将⟦mark$blue('聚合酶表达得分高于默认阈值')⟧（通常为所有细胞 25%）的细胞类型定义为潜在 Sender 亚群；将对应⟦mark$blue('传感器基因平均表达高于默认阈值')⟧的细胞类型定义为潜在 Receiver 亚群。同时要求⟦mark$blue('代谢物相关酶与传感器基因在相应细胞群体中的表达细胞比例不低于15%')⟧，以确保群体代表性。")
+
+    .describe_cutoff_value <- function(value, label) {
+      if (identical(value, "auto")) {
+        return(glue::glue(
+          "`{label} = auto`，即由 MEBOCOST 根据所有细胞中非零表达/丰度值的分布自动确定阈值。"
+        ))
+      }
+
+      if (is.numeric(value) && identical(as.numeric(value), 0)) {
+        return(glue::glue(
+          "`{label} = 0`，即以非零检出作为有效表达/丰度判断标准，保留所有非零信号。"
+        ))
+      }
+
+      glue::glue(
+        "`{label} = {value}`，即使用固定数值 {value} 作为有效表达/丰度判断阈值。"
+      )
+    }
+
+    .describe_prop_value <- function(value) {
+      value_pct <- round(as.numeric(value) * 100, 4L)
+
+      glue::glue(
+        "`cutoff_prop = {value}`，即要求代谢物或传感器在对应细胞群体中至少 {value_pct}% 的细胞达到有效检出阈值。"
+      )
+    }
+
+    .describe_sensor_type <- function(sensor_type) {
+      if (length(sensor_type) == 1L && identical(sensor_type, "All")) {
+        return("`sensor_type = All`，即纳入 MEBOCOST 数据库中的全部代谢物传感器类型。")
+      }
+
+      glue::glue(
+        "`sensor_type = {paste(sensor_type, collapse = ', ')}`，即仅纳入指定类型的代谢物传感器。"
+      )
+    }
+
+    text_cutoff_exp <- .describe_cutoff_value(cutoff_exp, "cutoff_exp")
+    text_cutoff_met <- .describe_cutoff_value(cutoff_met, "cutoff_met")
+    text_cutoff_prop <- .describe_prop_value(cutoff_prop)
+    text_sensor_type <- .describe_sensor_type(sensor_type)
+
+    if (identical(cutoff_exp, 0) && identical(cutoff_met, 0) &&
+        isTRUE(abs(cutoff_prop - 0.01) < .Machine$double.eps^0.5)) {
+      text_threshold_reason <- paste0(
+        "考虑到代谢物传感器、转运体及相关受体基因在单细胞转录组中通常存在较低检出率，",
+        "本研究参考既往 MEBOCOST 应用研究的参数设置 (PMID: 40474982)，将 `cutoff_exp` 和 `cutoff_met` 设为 0，",
+        "以保留所有非零代谢物或传感器信号，并将 `cutoff_prop` 设为 0.01，",
+        "要求至少 1% 细胞达到有效检出阈值。"
+      )
+    } else if (identical(cutoff_exp, "auto") || identical(cutoff_met, "auto")) {
+      text_threshold_reason <- paste0(
+        "本研究使用 MEBOCOST 的自动阈值模式或混合阈值模式进行通讯事件筛选；",
+        "其中 `auto` 表示根据数据中非零表达/丰度值的分布自动确定有效检出阈值。"
+      )
+    } else {
+      text_threshold_reason <- paste0(
+        "本研究根据数据中代谢物和传感器的检出特征设置固定阈值，",
+        "以避免在单细胞转录组中因低检出率导致潜在代谢通讯事件被过度过滤。"
+      )
+    }
+
+    x <- methodAdd(x, "**MEBOCOST** 是一种基于单细胞转录组数据推断代谢物介导细胞间通讯的计算方法，其主要目的是系统性解析不同细胞类型之间通过代谢物–传感器轴所形成的潜在相互作用网络。该方法结合代谢物相关酶表达信息与传感器基因表达谱，推断细胞产生或释放特定代谢物的潜力及其被其他细胞感知的可能性，从而构建代谢通讯关系，并在此基础上识别具有统计显著性的通讯事件及关键代谢物–传感器组合。\n\n")
+
+    x <- methodAdd(x, glue::glue("将单细胞数据集导入 Python 工具 MEBOCOST 进行细胞间代谢通讯分析。分析物种参数设置为 `{species}`，细胞群体依据 `{x$group.by}` 进行定义；若样本 metadata 中存在分组变量 `group`，则进一步按照该分组分别推断不同条件下的代谢通讯。"))
+
+    x <- methodAdd(x, "MEBOCOST 基于内置的代谢物–酶和代谢物–传感器先验知识库，首先聚合代谢物相关酶的表达信息以估计不同细胞群体的代谢物产生潜力，并计算接收细胞中对应传感器基因的表达水平。随后，对于每一组 Sender–Receiver 细胞类型及代谢物–传感器组合，计算代谢物介导的细胞间通讯得分。")
+
+    x <- methodAdd(x, glue::glue("本研究的 MEBOCOST 初始化参数为：{text_cutoff_exp} {text_cutoff_met} {text_cutoff_prop} {text_sensor_type}"))
+
+    x <- methodAdd(x, text_threshold_reason)
     return(x)
   })
 
@@ -154,7 +247,9 @@ setMethod("step3", signature = c(x = "job_mebocost"),
     step_message("Infer communication.")
     x <- activate(x)
     x$use.p <- use.p
-    fun_infer <- function(min_cell_number, cut.p, metadata) {
+    fun_infer <- function(min_cell_number, use.p, cut.p, 
+      metadata, ...)
+    {
       object(x)$infer_commu(
         n_shuffle = 1000L,
         seed = as.integer(x$seed),
@@ -162,16 +257,34 @@ setMethod("step3", signature = c(x = "job_mebocost"),
         thread = as.integer(x$.args$step1$workers),
         save_permuation = TRUE,
         min_cell_number = as.integer(min_cell_number),
-        pval_method = x$use.p,
+        pval_method = use.p,
         pval_cutoff = cut.p
       )
       object(x)
     }
     object(x) <- expect_local_data(
-      x$dir_cache, "mebocost", fun_infer, list(min_cell_number, cut.p, x$metadata),
+      x$dir_cache, "mebocost", fun_infer, list(
+        min_cell_number, use.p, cut.p, x$metadata,
+        x$.args$step1$cutoff_exp,
+        x$.args$step1$cutoff_met,
+        x$.args$step1$cutoff_prop
+      ),
       fun_read = x$mebocost$load_obj, fun_save = x$mebocost$save_obj, 
       ext = "pk", rerun = rerun
     )
+    x$data_original <- object(x)$original_result
+    x$data_cutoff_check <- dplyr::bind_rows(lapply(
+        c(0, 0.001, 0.005, 0.01, 0.03, 0.05, 0.10, 0.15),
+        function(cutoff_prop) {
+          run_check_cutoff_prop(
+            data_original = x$data_original,
+            cutoff_prop = cutoff_prop,
+            pval_method = use.p,
+            pval_cutoff = 0.05
+          )
+        }))
+    message(glue::glue("Check cutoff data:\n"))
+    print(x$data_cutoff_check)
     t.commu_res <- as_tibble(object(x)$commu_res)
     t.commu_res <- dplyr::filter(t.commu_res, !!rlang::sym(x$use.p) < !!cut.p)
     t.commu_res <- .mutate_get_chain_in_mebocost_table(t.commu_res)
@@ -200,7 +313,11 @@ setMethod("step3", signature = c(x = "job_mebocost"),
       glue::glue("通讯事件柱状图|||柱状图展示发送方与接收方的通讯数量，横轴为各细胞类型，纵轴为通讯事件数。")
     )
     x$cut.p <- cut.p
-    x <- methodAdd(x, "对每一对 Sender-Receiver 细胞类型及每一组代谢物-传感器对，计算酶-传感器共表达得分（Sender细胞中代谢物聚合酶表达均值 × Receiver 细胞中传感器表达均值）作为原始通讯强度。通过 1000 次细胞标签置换检验构建零分布，计算经验 p 值，并经 Benjamini‑Hochberg 法进行 FDR 校正，⟦mark$blue('以 FDR &lt; {cut.p} 为阈值筛选出显著的代谢物-传感器结合概率')⟧。")
+    if (use.p == "permutation_test_fdr") {
+      x <- methodAdd(x, "对每一对 Sender-Receiver 细胞类型及每一组代谢物-传感器对，计算酶-传感器共表达得分（Sender细胞中代谢物聚合酶表达均值 × Receiver 细胞中传感器表达均值）作为原始通讯强度。通过 1000 次细胞标签置换检验构建零分布，计算经验 p 值，并经 Benjamini‑Hochberg 法进行 FDR 校正，⟦mark$blue('以 FDR &lt; {cut.p} 为阈值筛选出显著的代谢物-传感器结合概率')⟧。")
+    } else if (use.p == "permutation_test_pval") {
+      x <- methodAdd(x, "对每一对 Sender-Receiver 细胞类型及每一组代谢物-传感器对，计算酶-传感器共表达得分（Sender细胞中代谢物聚合酶表达均值 × Receiver 细胞中传感器表达均值）作为原始通讯强度。通过 1000 次细胞标签置换检验构建零分布，计算经验 p 值，⟦mark$blue('以 p &lt; {cut.p} 为阈值筛选出显著的代谢物-传感器结合概率')⟧。")
+    }
     x <- tablesAdd(x, t.commu_res)
     x <- plotsAdd(x, ps.heatmaps, p.eventnum_bar)
     return(x)
@@ -413,7 +530,7 @@ setMethod("vis", signature = c(x = "job_mebocost"),
     pval_cutoff = 0.05,
     comm_score_col = "Norm_Commu_Score",
     comm_score_cutoff = 0,
-    cutoff_prop = 0.25,
+    cutoff_prop = x$.args$step1$cutoff_prop,
     figsize = c(1 + length(celltypes) * .5, 5),
     save = NULL,
     show_plot = FALSE,
@@ -447,7 +564,7 @@ setMethod("vis", signature = c(x = "job_mebocost"),
     comm_score_col = 'Commu_Score',
     comm_score_range = NULL,
     comm_score_cutoff = NULL,
-    cutoff_prop = NULL,
+    cutoff_prop = x$.args$step1$cutoff_prop,
     return_fig = TRUE
   )
 }
@@ -481,6 +598,29 @@ setMethod("vis", signature = c(x = "job_mebocost"),
     show_plot = FALSE,
     text_outline = FALSE,
     return_fig = TRUE
+  )
+}
+
+run_check_cutoff_prop <- function(data_original, cutoff_prop, pval_method, pval_cutoff) {
+  tibble::tibble(
+    cutoff_prop = cutoff_prop,
+    pval_method = pval_method,
+    pval_cutoff = pval_cutoff,
+    n_pass = sum(
+      data_original$Commu_Score >= 0 &
+        data_original$metabolite_prop_in_sender > cutoff_prop &
+        data_original$sensor_prop_in_receiver > cutoff_prop &
+        data_original[[pval_method]] < pval_cutoff,
+      na.rm = TRUE
+    ),
+    n_pass_abundance = sum(
+      data_original$Commu_Score >= 0 &
+        data_original$metabolite_prop_in_sender > cutoff_prop &
+        data_original$sensor_prop_in_receiver > cutoff_prop,
+      na.rm = TRUE
+    ),
+    n_pass_sensor = sum(data_original$sensor_prop_in_receiver > cutoff_prop, na.rm = TRUE),
+    n_pass_met = sum(data_original$metabolite_prop_in_sender > cutoff_prop, na.rm = TRUE)
   )
 }
 

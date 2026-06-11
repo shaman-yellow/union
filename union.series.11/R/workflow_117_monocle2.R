@@ -18,7 +18,7 @@ setGeneric("asjob_monocle2",
 
 setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
   function(x, compare = .guess_levels_from_job_seurat(x),
-    compare.by = "group", group.by = x$group.by, nfeatures = 1000)
+    compare.by = "group", group.by = x$group.by, nfeatures = 1000, min.pct = .1)
   {
     if (!requireNamespace("monocle", quietly = TRUE)) {
       stop('!requireNamespace("monocle").')
@@ -55,7 +55,9 @@ setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
         object(x) <- e(Seurat::NormalizeData(object(x)))
         object(x) <- e(Seurat::ScaleData(object(x)))
       }
-      diff_genes <- e(Seurat::FindMarkers(object(x), compare[1], compare[2]))
+      diff_genes <- e(
+        Seurat::FindMarkers(object(x), compare[1], compare[2], min.pct = min.pct)
+      )
       snap(diff_genes) <- glue::glue("使用 Seurat::FindMarkers 默认参数进行组间比较 {bind(compare, co = ' vs ')}")
     }
     # metadata$Cluster <- object(x)@active.ident
@@ -103,11 +105,12 @@ setMethod("step1", signature = c(x = "job_monocle2"),
 
 setMethod("step2", signature = c(x = "job_monocle2"),
   function(x, mode = c("diff", "var"), top = 300,
-    try_sig = TRUE, cut.fc = .5, use.p = c("p_val"), 
+    try_sig = TRUE, cut.fc = .5, use.p = c("p_val", "p_val_adj"), 
     group = "group")
   {
     step_message("DDRTree.")
     require(DDRTree)
+    use.p <- match.arg(use.p)
     if (!missing(mode) && length(mode) > 1) {
       order.by <- mode
       # message(glue::glue("Input genes will be `head` by `top` number."))
@@ -131,6 +134,11 @@ setMethod("step2", signature = c(x = "job_monocle2"),
             if (nrow(dataSig) < top) {
               top <- nrow(dataSig)
               message(glue::glue("Too less significant genes ({top})..."))
+            } else {
+              message(glue::glue("Ordering significant genes by `avg_log2FC` (n_top: {top})"))
+              dataSig <- dplyr::arrange(
+                dataSig, dplyr::desc(abs(avg_log2FC)), !!rlang::sym(use.p)
+              )
             }
             snap_ex <- glue::glue("(⟦mark$blue('{detail(use.p)} &lt; 0.05, |avg_log2FC| &gt; cut.fc')⟧)")
             data <- dataSig
