@@ -1,5 +1,6 @@
 # ========================================================================== 
 # workflow of metaInte
+# axis-aware round3: report text and candidate-axis output harmonized
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 .job_metaInte <- setClass("job_metaInte", 
@@ -55,10 +56,14 @@ setMethod("do_metaInte", signature = c(x = "job_mebocost", ref = "job_metaboDiff
       stop("job_metaboDiff@tables$step3$data_diff_report is NULL. Please run metaboDiff step3 first.")
     }
 
+    axis_info <- metaFuns$detect_mebocost_axis(data_overall_score, axis_level = "auto")
+
     x$data_sources <- list(
       mebocost = list(
         sig = tryCatch(job_mebo@sig, error = function(e) NA_character_),
         levels = tryCatch(as.character(job_mebo$levels), error = function(e) character(0L)),
+        axis_level = axis_info$axis_level,
+        axis_cols = axis_info$axis_cols,
         data_commu_res = tibble::as_tibble(data_commu_res),
         data_diff_commu = tibble::as_tibble(data_diff_commu),
         data_overall_score = tibble::as_tibble(data_overall_score)
@@ -70,6 +75,13 @@ setMethod("do_metaInte", signature = c(x = "job_mebocost", ref = "job_metaboDiff
         data_diff_report = tibble::as_tibble(data_metabo_diff)
       )
     )
+
+    x$axis_level <- axis_info$axis_level
+    x$axis_cols <- axis_info$axis_cols
+    x$axis_text_en <- axis_info$axis_text_en
+    x$axis_text_cn <- axis_info$axis_text_cn
+    x$axis_row_text_en <- metaFuns$get_axis_row_text(axis_info$axis_cols, language = "en")
+    x$axis_row_text_cn <- metaFuns$get_axis_row_text(axis_info$axis_cols, language = "cn")
 
     x$lst_refine <- list()
     x$compare <- list(
@@ -114,6 +126,7 @@ setMethod("step1", signature = c(x = "job_metaInte"),
       data_mebo_score = x$data_sources$mebocost$data_overall_score,
       data_diff_commu = x$data_sources$mebocost$data_diff_commu,
       data_metabo_diff = x$data_sources$metaboDiff$data_diff_report,
+      axis_cols = x$axis_cols,
       dir_cache = dir_cache,
       p_cutoff = p_cutoff,
       vip_cutoff = vip_cutoff,
@@ -160,13 +173,16 @@ setMethod("step1", signature = c(x = "job_metaInte"),
       lst_refine$data_final,
       dplyr::desc(integrated_score)
     )
+    axis_text_cn <- metaFuns$get_axis_text(x$axis_cols, language = "cn")
+    axis_text_en <- metaFuns$get_axis_text(x$axis_cols, language = "en")
+
     t.exact_intersection <- set_lab_legend(
       t.exact_intersection,
       glue::glue("{x@sig} exact metabolite-level integration candidates"),
       glue::glue(
         "MEBOCOST 与代谢组精确代谢物整合表|||通过 PubChem CID 将 MEBOCOST 差异代谢通讯结果",
         "与整体代谢组差异代谢物进行映射整合，用于筛选同时具有代谢通讯意义和整体代谢组差异证据的",
-        "候选关键代谢物及其 Receiver 细胞。"
+        "候选 {axis_text_cn}。"
       )
     )
     x <- tablesAdd(x, t.exact_intersection = t.exact_intersection)
@@ -180,7 +196,7 @@ setMethod("step1", signature = c(x = "job_metaInte"),
       "若设置调整后 p 值阈值，则进一步要求 padj 符合对应阈值。随后以 PubChem CID 为统一标识进行精确交集分析。",
       "对于每个交集候选，综合评分定义为：\n\n",
       "$$\nIntegratedScore = S_{MEBOCOST} \\times S_{Metabolomics}\n$$\n\n",
-      "其中 $S_{MEBOCOST}$ 为 MEBOCOST metabolite–Receiver 网络综合得分的 0–1 标准化值，",
+      "其中 $S_{MEBOCOST}$ 为 MEBOCOST <<axis_text_en>> overall_score 的 0–1 标准化值，",
       "$S_{Metabolomics}$ 为整体代谢组差异强度的 0–1 标准化值。",
       "代谢组差异强度由 $|log_2FC|$、VIP 和 $-log_{10}(pvalue)$ 共同构成。",
       if (use_direction) {
@@ -192,13 +208,15 @@ setMethod("step1", signature = c(x = "job_metaInte"),
     )
     x <- methodAdd(x, "{meth_text}")
 
-    snap_met <- t.exact_intersection$Metabolite_Name[1L]
-    snap_receiver <- t.exact_intersection$Receiver[1L]
+    snap_axis <- metaFuns$make_axis_label(
+      t.exact_intersection[1L, , drop = FALSE],
+      x$axis_cols
+    )
     x <- snapAdd(
       x,
       glue::glue(
-        "PubChem CID 精确整合共获得 {nrow(t.exact_intersection)} 条候选 metabolite–Receiver 组合；",
-        "综合得分最高的候选轴为 {snap_met} → {snap_receiver}。"
+        "PubChem CID 精确整合共获得 {nrow(t.exact_intersection)} 条候选 {axis_text_cn}；",
+        "综合得分最高的候选轴为 {snap_axis}。"
       )
     )
 
@@ -215,6 +233,8 @@ setMethod("step2", signature = c(x = "job_metaInte"),
     metaFuns$assert_metaInte_data_sources(x)
 
     mebo_source <- match.arg(mebo_source)
+    axis_text_cn <- metaFuns$get_axis_text(x$axis_cols, language = "cn")
+    axis_text_en <- metaFuns$get_axis_text(x$axis_cols, language = "en")
 
     data_kegg_bridge <- metaFuns$diagnose_kegg_pathway_overlap_from_data(
       data_commu_res = x$data_sources$mebocost$data_commu_res,
@@ -241,7 +261,7 @@ setMethod("step2", signature = c(x = "job_metaInte"),
       data_kegg_bridge$data_pathway_summary,
       glue::glue("{x@sig} KEGG pathway-level bridge candidates"),
       glue::glue(
-        "MEBOCOST 与代谢组 KEGG 桥接通路表|||该表展示同时包含 MEBOCOST 代谢通讯代谢物证据",
+        "MEBOCOST 与代谢组 KEGG 桥接通路表|||该表展示同时包含 MEBOCOST 候选通讯轴代谢物证据",
         "和整体代谢组显著差异代谢物证据的 KEGG 通路，用于进行通路层面的双组学衔接解释。"
       )
     )
@@ -260,7 +280,7 @@ setMethod("step2", signature = c(x = "job_metaInte"),
       p.kegg_bridge,
       glue::glue("{x@sig} KEGG pathway-level bridge coverage"),
       glue::glue(
-        "KEGG 通路桥接覆盖图|||该图展示 MEBOCOST 代谢通讯代谢物与整体代谢组显著差异代谢物在 KEGG 通路层面的共同覆盖情况。",
+        "KEGG 通路桥接覆盖图|||该图展示 MEBOCOST 候选通讯轴中的代谢物与整体代谢组显著差异代谢物在 KEGG 通路层面的共同覆盖情况。",
         "每一行代表一条 shared KEGG pathway，两个分面分别表示 MEBOCOST 和 Metabolomics 两个证据来源。",
         "横轴及柱上数字表示该数据源映射到对应通路的代谢物数量。",
         "该图用于展示两类组学结果在通路层面的共同定位关系，而非通路富集显著性。"
@@ -269,17 +289,17 @@ setMethod("step2", signature = c(x = "job_metaInte"),
 
     x <- plotsAdd(x, p.kegg_bridge)
 
-    x <- methodAdd(
-      x,
-      glue::glue(
-        "由于单细胞转录组推断得到的代谢通讯分子与整体代谢组实际检测到的化合物可能并不完全相同，",
-        "此处采用 KEGG Compound 和 KEGG Pathway 进行通路层面整合。",
-        "⟦mark$blue('MEBOCOST 侧使用 `{mebo_source}` 统计的代谢物集合代谢组侧保留 pvalue < {p_cutoff} 且 VIP >= {vip_cutoff} 的差异代谢物')⟧。",
-        "两类代谢物分别映射至 KEGG Compound 后，再通过 KEGG pathway membership 识别共同通路。",
-        "⟦mark$blue('某一通路被定义为 KEGG 桥接通路，需要同时满足：至少包含一个 MEBOCOST 代谢通讯代谢物，",
-        "且至少包含一个整体代谢组显著差异代谢物')⟧。因此，该结果代表通路层面的共同代谢背景。"
-      )
+    meth_text <- glue::glue(
+      "由于单细胞转录组推断得到的代谢通讯分子与整体代谢组实际检测到的化合物可能并不完全相同，",
+      "此处采用 KEGG Compound 和 KEGG Pathway 进行通路层面整合。",
+      "MEBOCOST 侧使用 `<<mebo_source>>` 统计的代谢通讯代谢物集合，该集合来源于候选 <<axis_text_en>>；",
+      "整体代谢组侧保留 pvalue &lt; <<p_cutoff>> 且 VIP ≥ <<vip_cutoff>> 的差异代谢物。",
+      "两类代谢物分别映射至 KEGG Compound 后，再通过 KEGG pathway membership 识别共同通路。",
+      "⟦mark$blue('某一通路被定义为 KEGG 桥接通路，需要同时满足：至少包含一个 MEBOCOST 候选通讯轴代谢物，且至少包含一个整体代谢组显著差异代谢物')⟧。",
+      "因此，该结果代表通路层面的共同代谢背景，用于将 MEBOCOST 候选 <<axis_text_cn>> 与整体代谢组差异证据衔接。",
+      .open = "<<", .close = ">>"
     )
+    x <- methodAdd(x, "{meth_text}")
 
     snap_path <- t.kegg_bridge$pathway_name[1L]
     snap_n <- nrow(t.kegg_bridge)
@@ -287,7 +307,7 @@ setMethod("step2", signature = c(x = "job_metaInte"),
       x,
       glue::glue(
         "KEGG 通路层面共识别到 {snap_n} 条同时包含两类组学证据的候选桥接通路{aref(p.kegg_bridge)}；",
-        "代谢组显著性最靠前的通路为 {snap_path}。"
+        "这些通路用于后续支持候选 {axis_text_cn} 的综合筛选，代谢组显著性最靠前的通路为 {snap_path}。"
       )
     )
 
@@ -306,6 +326,7 @@ setMethod("step3", signature = c(x = "job_metaInte"),
 
     method <- match.arg(method)
     compound_source <- match.arg(compound_source)
+    axis_text_cn <- metaFuns$get_axis_text(x$axis_cols, language = "cn")
 
     data_fella <- metaFuns$run_fella_from_kegg_bridge(
       data_kegg_bridge = x$lst_refine$kegg_bridge,
@@ -351,7 +372,7 @@ setMethod("step3", signature = c(x = "job_metaInte"),
       glue::glue("{x@sig} FELLA-supported KEGG bridge pathways"),
       glue::glue(
         "FELLA 支持的 KEGG 桥接通路|||该表展示同时满足 KEGG 双组学共同定位和 FELLA 富集支持的 KEGG 通路。",
-        "这些通路同时包含 MEBOCOST 代谢通讯代谢物和整体代谢组显著差异代谢物，并在 FELLA 知识图谱富集中达到设定阈值。"
+        "这些通路同时包含 MEBOCOST 候选通讯轴中的代谢物和整体代谢组显著差异代谢物，并在 FELLA 知识图谱富集中达到设定阈值。"
       )
     )
 
@@ -376,7 +397,7 @@ setMethod("step3", signature = c(x = "job_metaInte"),
     }
 
     x <- methodAdd(
-      x, "进一步采用 FELLA 对 KEGG 桥接相关化合物进行知识图谱层面的通路/网络富集分析。输入 compound 来源为 '{compound_source}'，⟦mark$blue('富集方法为 {method}，阈值为 {threshold} (&lt; {threshold})')⟧。{text_method} FELLA 富集结果随后与 KEGG 双组学共同通路取交集 {aref(x@plots$step2$p.kegg_bridge)}，仅保留同时满足 MEBOCOST 代谢通讯证据、整体代谢组差异代谢物证据和 FELLA 富集支持的通路。因此，本步骤得到的结果定义为 FELLA-supported KEGG bridge pathways，而不是单纯的合并代谢物富集结果。"
+      x, "进一步采用 FELLA 对 KEGG 桥接相关化合物进行知识图谱层面的通路/网络富集分析。输入 compound 来源为 '{compound_source}'，⟦mark$blue('富集方法为 {method}，阈值为 {threshold} (&lt; {threshold})')⟧。{text_method} FELLA 富集结果随后与 KEGG 双组学共同通路取交集 {aref(x@plots$step2$p.kegg_bridge)}，仅保留同时满足 MEBOCOST 候选 {axis_text_cn} 的代谢物证据、整体代谢组差异代谢物证据和 FELLA 富集支持的通路。因此，本步骤得到的结果定义为 FELLA-supported KEGG bridge pathways，而不是单纯的合并代谢物富集结果。"
     )
 
     p.fella_sankey <- metaFuns$plot_fella_bridge_sankey(
@@ -394,7 +415,7 @@ setMethod("step3", signature = c(x = "job_metaInte"),
         "FELLA 支持的通路-代谢物桥接图|||该图展示 FELLA 富集通路与其支持代谢物之间的连接关系。",
         "左侧气泡表示 FELLA 富集通路的富集特征，气泡大小表示通路命中化合物数量，颜色表示 FELLA p value 的 -log10 转换值；",
         "中间为 FELLA-supported KEGG pathway，右侧为映射到这些通路中的支持代谢物。",
-        "连线颜色表示代谢物证据来源，其中 MEBOCOST 表示单细胞代谢通讯侧代谢物，Metabolomics 表示整体代谢组显著差异代谢物。",
+        "连线颜色表示代谢物证据来源，其中 MEBOCOST 表示候选代谢通讯轴中的代谢物，Metabolomics 表示整体代谢组显著差异代谢物。",
         "该图用于展示两类组学代谢物如何在 FELLA 支持的 KEGG 通路中形成桥接关系。"
       )
     )
@@ -422,7 +443,7 @@ setMethod("step4", signature = c(x = "job_metaInte"),
     exclude_pathway_id = character(0L), exclude_pathway_name = character(0L),
     bridge_score_col = "bridge_integrated_score", n_top_per_pathway = 5L)
   {
-    step_message("Score FELLA-supported KEGG bridge pathways and candidate metabolite-receiver axes.")
+    step_message("Score FELLA-supported KEGG bridge pathways and candidate communication axes.")
 
     data_fella_bridge <- tibble::as_tibble(x$lst_refine$fella_bridge_core)
 
@@ -451,23 +472,35 @@ setMethod("step4", signature = c(x = "job_metaInte"),
       return(x)
     }
 
-    data_bridge_candidate <- metaFuns$get_bridge_metabolite_receiver_candidates(
+    axis_cols <- x$axis_cols
+    if (is.null(axis_cols)) {
+      axis_cols <- metaFuns$detect_mebocost_axis(
+        x$data_sources$mebocost$data_overall_score,
+        axis_level = "auto"
+      )$axis_cols
+    }
+    axis_text_cn <- metaFuns$get_axis_text(axis_cols, language = "cn")
+    axis_text_en <- metaFuns$get_axis_text(axis_cols, language = "en")
+    axis_row_text_cn <- metaFuns$get_axis_row_text(axis_cols, language = "cn")
+
+    data_bridge_candidate <- metaFuns$get_bridge_communication_axis_candidates(
       data_bridge = data_fella_bridge_ranked,
       data_overall_score = x$data_sources$mebocost$data_overall_score,
       bridge_score_col = bridge_score_col,
-      n_top_per_pathway = n_top_per_pathway
+      n_top_per_pathway = n_top_per_pathway,
+      axis_cols = axis_cols
     )
 
     t.bridge_candidate <- set_lab_legend(
       data_bridge_candidate,
-      glue::glue("{x@sig} candidate metabolite-receiver axes from bridge pathways data"),
-      glue::glue("候选代谢物-Receiver 细胞通讯轴|||在 FELLA-supported KEGG bridge pathway 背景下，回到 MEBOCOST 网络综合得分筛选得到的候选 metabolite–receiver 通讯轴。")
+      glue::glue("{x@sig} DATA candidate communication axes from bridge pathways"),
+      glue::glue("候选代谢通讯轴|||在 FELLA-supported KEGG bridge pathway 背景下，回到 MEBOCOST overall_score 筛选得到的候选 {axis_text_cn}。")
     )
 
     x <- tablesAdd(x, t.bridge_candidate)
 
     if (nrow(data_bridge_candidate) == 0L) {
-      warning("No metabolite-receiver candidate axis was obtained from FELLA-supported pathways in step4.")
+      warning("No candidate communication axis was obtained from FELLA-supported pathways in step4.")
       return(x)
     }
 
@@ -480,7 +513,7 @@ setMethod("step4", signature = c(x = "job_metaInte"),
     )
 
     meth_text <- glue::glue(
-      "在 KEGG pathway-level bridge 和 FELLA 富集结果的基础上，进一步筛选候选关键 metabolite–Receiver 通讯轴。",
+      "在 KEGG pathway-level bridge 和 FELLA 富集结果的基础上，进一步筛选候选关键 <<axis_text_en>>。",
       "⟦mark$blue('首先保留同时满足 KEGG 双组学共同定位且 FELLA pvalue &lt; <<fella_p_cutoff>> 的桥接通路')⟧；",
       "随后根据通路综合桥接得分进行排序。通路综合桥接得分由五个标准化分量构成：\n\n",
       "$$\nBridgeScore = w_1F + w_2M + w_3C + w_4S + w_5B\n$$\n\n",
@@ -490,12 +523,12 @@ setMethod("step4", signature = c(x = "job_metaInte"),
       "$S=CompoundHits/CompoundsInPathway$ 表示通路特异性，",
       "$B=\\min(log(1+n_{MEBOCOST}),log(1+n_{Metabolomics}))/\\max(log(1+n_{MEBOCOST}),log(1+n_{Metabolomics}))$ 表示双组学证据平衡性。",
       "各分量经 0–1 标准化后加权求和，当前权重为：<<text_weights>>。\n\n",
-      "最后，在每条 FELLA-supported KEGG bridge pathway 内，将通路桥接得分与 MEBOCOST metabolite–Receiver overall_score 结合，",
+      "最后，在每条 FELLA-supported KEGG bridge pathway 内，将通路桥接得分与 MEBOCOST <<axis_text_en>> overall_score 结合，",
       "计算候选通讯轴得分：\n\n",
       "$$\nCandidateScore = 0.65 \\times S_{overall} + 0.35 \\times S_{bridge}\n$$\n\n",
-      "其中 $S_{overall}$ 为 MEBOCOST 网络综合得分的 0–1 标准化值，",
-      "$S_{bridge}$ 为对应通路桥接得分的 0–1 标准化值。",
-      "该评分用于在通路层面证据支持下筛选关键代谢物及关键 Receiver 细胞。",
+      "其中 $S_{overall}$ 为 MEBOCOST 候选代谢通讯轴 overall_score 的 0–1 标准化值，",
+      "$S_{bridge}$ 为对应通路 BridgeScore 的 0–1 标准化值。",
+      "该评分用于在通路层面证据支持下筛选关键候选代谢通讯轴，并保持 MEBOCOST 轴级证据与代谢组通路桥接证据的层级区分。",
       .open = "<<", .close = ">>"
     )
     x <- methodAdd(x, "{meth_text}")
@@ -504,18 +537,19 @@ setMethod("step4", signature = c(x = "job_metaInte"),
       data_bridge_candidate,
       n_top_pathway = 6L,
       n_top_per_pathway = n_top_per_pathway,
-      pathway_rank_by = "bridge_score"
+      pathway_rank_by = "bridge_score",
+      axis_cols = axis_cols
     )
 
     p.bridge_candidate <- set_lab_legend(
       p.bridge_candidate,
-      glue::glue("{x@sig} candidate metabolite-receiver axes from bridge pathways"),
+      glue::glue("{x@sig} candidate communication axes from bridge pathways"),
       glue::glue(
-        "候选代谢物-Receiver 通讯轴综合图|||该图展示 FELLA-supported KEGG bridge pathway 背景下筛选得到的候选 MEBOCOST 代谢通讯轴。",
+        "候选代谢通讯轴综合图|||该图展示 FELLA-supported KEGG bridge pathway 背景下筛选得到的候选 {axis_text_cn}。",
         "左侧为 KEGG 桥接通路及其综合桥接得分 BridgeScore，条形长度和数值均表示通路层面的桥接优先级；",
-        "右侧为对应通路内的 metabolite–Receiver 通讯轴，横轴为 Receiver 细胞类型，纵向标签为 MEBOCOST 代谢物。",
+        "右侧为对应通路内的候选通讯轴矩阵，横轴为 Receiver 细胞类型，纵向标签为 {axis_row_text_cn}。",
         "气泡大小和颜色均表示候选通讯轴得分 CandidateScore。",
-        "该图同时展示通路层面的桥接优先级和通路内候选通讯轴的优先级，用于筛选关键代谢物及关键 Receiver 细胞。"
+        "该图同时展示通路层面的桥接优先级和通路内候选通讯轴的优先级，用于筛选关键候选代谢通讯轴。"
       )
     )
 
@@ -532,8 +566,10 @@ setMethod("step4", signature = c(x = "job_metaInte"),
       best_metabo_pvalue
     )
 
-    snap_met <- data_axis_ranked$Metabolite_Name[1L]
-    snap_receiver <- data_axis_ranked$Receiver[1L]
+    snap_axis <- metaFuns$make_axis_label(
+      data_axis_ranked[1L, , drop = FALSE],
+      axis_cols
+    )
     snap_path <- data_axis_ranked$pathway_name[1L]
     snap_axis_score <- signif(data_axis_ranked$candidate_score[1L], 3L)
     snap_bridge_score <- signif(data_axis_ranked$bridge_score[1L], 3L)
@@ -542,7 +578,7 @@ setMethod("step4", signature = c(x = "job_metaInte"),
       x,
       glue::glue(
         "综合 KEGG 双组学通路桥接、FELLA 网络富集支持和 MEBOCOST 通讯轴得分后{aref(p.bridge_candidate)}，",
-        "⟦mark$red('CandidateScore 最高的候选 metabolite–Receiver 通讯轴为 {snap_met} → {snap_receiver}')⟧，",
+        "⟦mark$red('CandidateScore 最高的候选 {axis_text_cn} 为 {snap_axis}')⟧，",
         "候选得分为 {snap_axis_score}。该轴所属桥接通路为 {snap_path}，",
         "其通路层面 BridgeScore 为 {snap_bridge_score}。"
       )
@@ -558,6 +594,7 @@ setMethod("step5", signature = c(x = "job_metaInte"),
     step_message("Visualize selected KEGG pathway by pathview.")
 
     select_by <- match.arg(select_by)
+    axis_text_cn <- metaFuns$get_axis_text(x$axis_cols, language = "cn")
 
     lst_pathview <- metaFuns$run_pathview_for_bridge_pathway(
       x = x,
@@ -574,7 +611,7 @@ setMethod("step5", signature = c(x = "job_metaInte"),
       glue::glue("{x@sig} pathview compound evidence table"),
       glue::glue(
         "Pathview 化合物映射证据表|||该表展示选定 KEGG 通路中用于 pathview 可视化的 compound 映射结果。",
-        "source 表示证据来源，log2FC 表示对应组学在该 compound 节点上的变化方向和幅度。",
+        "该通路由 step4 的候选 {axis_text_cn} 与整体代谢组桥接证据共同支持；source 表示证据来源，log2FC 表示对应组学在该 compound 节点上的变化方向和幅度。",
         "MEBOCOST_Log2FC 来源于单细胞代谢通讯差异结果，Metabolomics_Log2FC 来源于整体代谢组差异结果。"
       )
     )
@@ -583,14 +620,16 @@ setMethod("step5", signature = c(x = "job_metaInte"),
     x$lst_refine$pathview <- lst_pathview
     x$lst_refine$pathview$data_evidence <- t.pathview_evidence
 
+    p.pathview <- NULL
+
     if (!is.null(lst_pathview$plot)) {
       p.pathview <- set_lab_legend(
         lst_pathview$plot,
         glue::glue("{x@sig} pathview visualization of {lst_pathview$hsa_id}"),
         glue::glue(
-          "KEGG 通路 pathview 可视化图|||该图展示选定 KEGG 通路中 MEBOCOST 和整体代谢组数据在 compound 节点上的映射情况。",
+          "KEGG 通路 pathview 可视化图|||该图展示选定 KEGG 通路中 MEBOCOST 候选通讯轴和整体代谢组数据在 compound 节点上的映射情况。",
           "节点颜色表示 log2FC 方向和幅度；当同一 compound 同时存在 MEBOCOST_Log2FC 与 Metabolomics_Log2FC 时，pathview 以 multi-state 形式在同一节点中显示两类数据。",
-          "该图用于展示候选桥接通路中两类组学信号在 KEGG 通路图上的定位。"
+          "该图用于展示候选 {axis_text_cn} 与整体代谢组信号在 KEGG 通路图上的定位。"
         )
       )
 
@@ -601,17 +640,19 @@ setMethod("step5", signature = c(x = "job_metaInte"),
 
     x <- methodAdd(
       x,
-      glue::glue(
-        "在候选 metabolite–Receiver 通讯轴筛选结果的基础上，进一步采用 pathview 对选定 KEGG 通路进行可视化。",
-        "该分析将 MEBOCOST 差异通讯结果和整体代谢组差异结果分别整理为 MEBOCOST_Log2FC 与 Metabolomics_Log2FC 两个 compound-level 状态，",
-        "并映射至 KEGG compound 节点，以展示两类组学信号在同一通路背景下的定位和变化方向。"
-      )
+      "在候选代谢通讯轴筛选结果的基础上，进一步采用 pathview 对选定 KEGG 通路进行可视化。该分析将 MEBOCOST 候选 {axis_text_cn} 所涉及代谢物的差异通讯 Log2FC 和整体代谢组差异结果分别整理为 MEBOCOST_Log2FC 与 Metabolomics_Log2FC 两个 compound-level 状态，并映射至 KEGG compound 节点，以展示两类组学信号在同一通路背景下的定位和变化方向。"
     )
+
+    snap_plot_ref <- if (!is.null(p.pathview)) {
+      aref(p.pathview)
+    } else {
+      ""
+    }
 
     x <- snapAdd(x,
       glue::glue(
-        "对选定 KEGG 通路 {lst_pathview$hsa_id} 进行了 pathview 可视化{aref(p.pathview)}。",
-        "该图用于展示 MEBOCOST 与整体代谢组 log2FC 信号在 KEGG compound 节点上的共同定位。"
+        "对选定 KEGG 通路 {lst_pathview$hsa_id} 进行了 pathview 可视化{snap_plot_ref}。",
+        "该图用于展示候选 {axis_text_cn} 与整体代谢组 log2FC 信号在 KEGG compound 节点上的共同定位。"
       )
     )
 
@@ -622,6 +663,136 @@ setMethod("step5", signature = c(x = "job_metaInte"),
 # ==========================================================================
 
 metaFuns <- new.env(parent = emptyenv())
+
+# ------------------------------------------------------------------------------
+# MEBOCOST communication-axis helpers
+# ------------------------------------------------------------------------------
+
+metaFuns$detect_mebocost_axis <- function(data_overall_score,
+  axis_level = c("auto", "metabolite_receiver", "sender_metabolite_receiver"))
+{
+  axis_level <- match.arg(axis_level)
+  data_overall_score <- tibble::as_tibble(data_overall_score)
+
+  if (!"Metabolite_Name" %in% colnames(data_overall_score)) {
+    stop('"Metabolite_Name" was not found in MEBOCOST overall-score table.')
+  }
+  if (!"Receiver" %in% colnames(data_overall_score)) {
+    stop('"Receiver" was not found in MEBOCOST overall-score table.')
+  }
+  if (!"overall_score" %in% colnames(data_overall_score)) {
+    stop('"overall_score" was not found in MEBOCOST overall-score table.')
+  }
+
+  has_sender <- "Sender" %in% colnames(data_overall_score)
+
+  if (identical(axis_level, "auto")) {
+    axis_level <- if (has_sender) {
+      "sender_metabolite_receiver"
+    } else {
+      "metabolite_receiver"
+    }
+  }
+
+  if (identical(axis_level, "sender_metabolite_receiver") && !has_sender) {
+    stop('axis_level = "sender_metabolite_receiver" requires a "Sender" column.')
+  }
+
+  axis_cols <- if (identical(axis_level, "sender_metabolite_receiver")) {
+    c("Sender", "Metabolite_Name", "Receiver")
+  } else {
+    c("Metabolite_Name", "Receiver")
+  }
+
+  list(
+    axis_level = axis_level,
+    axis_cols = axis_cols,
+    axis_text_en = metaFuns$get_axis_text(axis_cols, language = "en"),
+    axis_text_cn = metaFuns$get_axis_text(axis_cols, language = "cn")
+  )
+}
+
+metaFuns$get_axis_text <- function(axis_cols, language = c("en", "cn"))
+{
+  language <- match.arg(language)
+  axis_cols <- as.character(axis_cols)
+
+  if (identical(axis_cols, c("Sender", "Metabolite_Name", "Receiver"))) {
+    if (language == "cn") {
+      return("Sender–Metabolite–Receiver 通讯轴")
+    }
+    return("Sender–Metabolite–Receiver communication axis")
+  }
+
+  if (identical(axis_cols, c("Metabolite_Name", "Receiver"))) {
+    if (language == "cn") {
+      return("Metabolite–Receiver 通讯轴")
+    }
+    return("Metabolite–Receiver communication axis")
+  }
+
+  paste(axis_cols, collapse = "–")
+}
+
+metaFuns$get_axis_row_text <- function(axis_cols, language = c("en", "cn"))
+{
+  language <- match.arg(language)
+  axis_cols <- as.character(axis_cols)
+
+  if ("Sender" %in% axis_cols) {
+    if (language == "cn") {
+      return("Sender–Metabolite 组合")
+    }
+    return("Sender–Metabolite combination")
+  }
+
+  if (language == "cn") {
+    return("Metabolite")
+  }
+
+  "Metabolite"
+}
+
+metaFuns$check_axis_cols <- function(data, axis_cols, context = "data")
+{
+  data <- tibble::as_tibble(data)
+  vec_missing <- setdiff(axis_cols, colnames(data))
+
+  if (length(vec_missing) > 0L) {
+    stop(glue::glue(
+      "Missing communication-axis column(s) in {context}: {paste(vec_missing, collapse = ', ')}."
+    ))
+  }
+
+  invisible(TRUE)
+}
+
+metaFuns$make_axis_label <- function(data, axis_cols, sep = " -> ")
+{
+  data <- tibble::as_tibble(data)
+  metaFuns$check_axis_cols(data, axis_cols, context = "axis label input")
+
+  vec_axis <- apply(
+    data[, axis_cols, drop = FALSE],
+    1L,
+    function(z) paste(as.character(z), collapse = sep)
+  )
+
+  as.character(vec_axis)
+}
+
+metaFuns$make_axis_row_label <- function(data, axis_cols, sep = " -> ")
+{
+  data <- tibble::as_tibble(data)
+  metaFuns$check_axis_cols(data, axis_cols, context = "axis row-label input")
+
+  if ("Sender" %in% axis_cols) {
+    return(paste(as.character(data$Sender), as.character(data$Metabolite_Name), sep = sep))
+  }
+
+  as.character(data$Metabolite_Name)
+}
+
 
 # ------------------------------------------------------------------------------
 # metaFuns helper modules for MEBOCOST-metabolomics integration
@@ -1756,7 +1927,7 @@ metaFuns$default_metabo_filter <- function(data_metabo_diff,
 }
 
 metaFuns$integrate_mebocost_metabolomics <- function(data_mebo_score,
-  data_diff_commu, data_metabo_diff, dir_cache = "tmp",
+  data_diff_commu, data_metabo_diff, axis_cols = NULL, dir_cache = "tmp",
   p_cutoff = 0.05, vip_cutoff = 1, padj_cutoff = NULL,
   namespace = "name", dic_name = NULL, use_direction = FALSE,
   direction_mode = c("same", "opposite"), fallback_if_empty = TRUE,
@@ -1769,8 +1940,16 @@ metaFuns$integrate_mebocost_metabolomics <- function(data_mebo_score,
   data_mebo_score <- tibble::as_tibble(data_mebo_score)
   data_metabo_diff <- tibble::as_tibble(data_metabo_diff)
 
-  if (!all(c("Metabolite_Name", "Receiver", "overall_score") %in% colnames(data_mebo_score))) {
-    stop('data_mebo_score must contain "Metabolite_Name", "Receiver", and "overall_score".')
+  axis_info <- metaFuns$detect_mebocost_axis(data_mebo_score, axis_level = "auto")
+
+  if (is.null(axis_cols)) {
+    axis_cols <- axis_info$axis_cols
+  }
+
+  metaFuns$check_axis_cols(data_mebo_score, axis_cols, context = "data_mebo_score")
+
+  if (!"overall_score" %in% colnames(data_mebo_score)) {
+    stop('data_mebo_score must contain "overall_score".')
   }
 
   if (!all(c("feature_name", "log2FC") %in% colnames(data_metabo_diff))) {
@@ -1819,15 +1998,17 @@ metaFuns$integrate_mebocost_metabolomics <- function(data_mebo_score,
   metaFuns$message_manual_cid_diagnostics(data_metabo_cid, "metabolomics metabolites")
 
 
+  metaFuns$check_axis_cols(data_diff_commu, axis_cols, context = "data_diff_commu")
+
   data_direction <- metaFuns$summarise_mebocost_direction(
     data_diff_commu,
-    group_by = c("Metabolite_Name", "Receiver")
+    group_by = axis_cols
   )
 
   data_mebo <- dplyr::left_join(
     data_mebo_score,
     data_direction,
-    by = c("Metabolite_Name", "Receiver")
+    by = axis_cols
   )
 
   data_mebo <- dplyr::left_join(
@@ -3509,9 +3690,9 @@ metaFuns$split_semicolon_names <- function(x)
   unique(x)
 }
 
-metaFuns$get_bridge_metabolite_receiver_candidates <- function(data_bridge,
+metaFuns$get_bridge_communication_axis_candidates <- function(data_bridge,
   data_overall_score, bridge_score_col = "bridge_integrated_score",
-  n_top_per_pathway = Inf)
+  n_top_per_pathway = Inf, axis_cols = NULL)
 {
   data_bridge <- tibble::as_tibble(data_bridge)
   data_overall_score <- tibble::as_tibble(data_overall_score)
@@ -3520,8 +3701,16 @@ metaFuns$get_bridge_metabolite_receiver_candidates <- function(data_bridge,
     stop('data_bridge must contain "pathway_id", "pathway_name", and "mebo_metabolites".')
   }
 
-  if (!all(c("Metabolite_Name", "Receiver", "overall_score") %in% colnames(data_overall_score))) {
-    stop('data_overall_score must contain "Metabolite_Name", "Receiver", and "overall_score".')
+  axis_info <- metaFuns$detect_mebocost_axis(data_overall_score, axis_level = "auto")
+
+  if (is.null(axis_cols)) {
+    axis_cols <- axis_info$axis_cols
+  }
+
+  metaFuns$check_axis_cols(data_overall_score, axis_cols, context = "data_overall_score")
+
+  if (!"overall_score" %in% colnames(data_overall_score)) {
+    stop('data_overall_score must contain "overall_score".')
   }
 
   if (!bridge_score_col %in% colnames(data_bridge)) {
@@ -3557,6 +3746,14 @@ metaFuns$get_bridge_metabolite_receiver_candidates <- function(data_bridge,
 
   if (nrow(data_candidate) == 0L) {
     return(data_candidate)
+  }
+
+  data_candidate$axis_label <- metaFuns$make_axis_label(data_candidate, axis_cols)
+  data_candidate$axis_row_label <- metaFuns$make_axis_row_label(data_candidate, axis_cols)
+  data_candidate$axis_level <- if ("Sender" %in% axis_cols) {
+    "sender_metabolite_receiver"
+  } else {
+    "metabolite_receiver"
   }
 
   data_candidate$score_overall_scaled <- metaFuns$scale01(data_candidate$overall_score)
@@ -3602,14 +3799,35 @@ metaFuns$get_bridge_metabolite_receiver_candidates <- function(data_bridge,
   data_candidate
 }
 
-metaFuns$summarise_bridge_metabolite_receiver <- function(data_candidate)
+metaFuns$get_bridge_metabolite_receiver_candidates <- function(data_bridge,
+  data_overall_score, bridge_score_col = "bridge_integrated_score",
+  n_top_per_pathway = Inf)
+{
+  metaFuns$get_bridge_communication_axis_candidates(
+    data_bridge = data_bridge,
+    data_overall_score = data_overall_score,
+    bridge_score_col = bridge_score_col,
+    n_top_per_pathway = n_top_per_pathway,
+    axis_cols = c("Metabolite_Name", "Receiver")
+  )
+}
+
+
+metaFuns$summarise_bridge_communication_axis <- function(data_candidate,
+  axis_cols = NULL)
 {
   data_candidate <- tibble::as_tibble(data_candidate)
 
+  if (is.null(axis_cols)) {
+    axis_cols <- metaFuns$detect_mebocost_axis(data_candidate, axis_level = "auto")$axis_cols
+  }
+
+  metaFuns$check_axis_cols(data_candidate, axis_cols, context = "data_candidate")
+
   vec_required <- c(
-    "Metabolite_Name", "Receiver", "overall_score", "pathway_id",
-    "pathway_name", "fella_pvalue", "best_metabo_pvalue",
-    "bridge_score", "metabo_features"
+    axis_cols, "overall_score", "pathway_id", "pathway_name",
+    "fella_pvalue", "best_metabo_pvalue", "bridge_score",
+    "metabo_features"
   )
 
   vec_missing <- setdiff(vec_required, colnames(data_candidate))
@@ -3620,10 +3838,11 @@ metaFuns$summarise_bridge_metabolite_receiver <- function(data_candidate)
     ))
   }
 
-  data_pair <- dplyr::group_by(data_candidate, Metabolite_Name, Receiver)
+  data_axis <- dplyr::group_by(data_candidate, !!!rlang::syms(axis_cols))
 
-  data_pair <- dplyr::summarise(
-    data_pair,
+  data_axis <- dplyr::summarise(
+    data_axis,
+    axis_label = metaFuns$make_axis_label(dplyr::cur_data(), axis_cols)[1L],
     overall_score = max(overall_score, na.rm = TRUE),
     n_bridge_pathway = dplyr::n_distinct(pathway_id),
     pathway_ids = metaFuns$collapse_non_na(pathway_id),
@@ -3635,32 +3854,46 @@ metaFuns$summarise_bridge_metabolite_receiver <- function(data_candidate)
     .groups = "drop"
   )
 
-  data_pair$score_overall_scaled <- metaFuns$scale01(data_pair$overall_score)
-  data_pair$score_bridge_scaled <- metaFuns$scale01(data_pair$max_bridge_score)
-  data_pair$score_pathway_count_scaled <- metaFuns$scale01(log1p(data_pair$n_bridge_pathway))
+  data_axis$score_overall_scaled <- metaFuns$scale01(data_axis$overall_score)
+  data_axis$score_bridge_scaled <- metaFuns$scale01(data_axis$max_bridge_score)
+  data_axis$score_pathway_count_scaled <- metaFuns$scale01(log1p(data_axis$n_bridge_pathway))
 
-  data_pair$key_axis_score <- 0.70 * data_pair$score_overall_scaled +
-    0.20 * data_pair$score_bridge_scaled +
-    0.10 * data_pair$score_pathway_count_scaled
+  data_axis$key_axis_score <- 0.70 * data_axis$score_overall_scaled +
+    0.20 * data_axis$score_bridge_scaled +
+    0.10 * data_axis$score_pathway_count_scaled
 
-  data_pair <- dplyr::arrange(
-    data_pair,
+  data_axis <- dplyr::arrange(
+    data_axis,
     dplyr::desc(key_axis_score),
     dplyr::desc(overall_score),
     best_fella_pvalue,
     best_metabo_pvalue
   )
 
-  data_pair
+  data_axis
+}
+
+metaFuns$summarise_bridge_metabolite_receiver <- function(data_candidate)
+{
+  metaFuns$summarise_bridge_communication_axis(
+    data_candidate = data_candidate,
+    axis_cols = c("Metabolite_Name", "Receiver")
+  )
 }
 
 metaFuns$rank_bridge_candidate_by_pathway <- function(data_candidate,
-  n_top_per_pathway = 3L)
+  n_top_per_pathway = 3L, axis_cols = NULL)
 {
   data_candidate <- tibble::as_tibble(data_candidate)
 
+  if (is.null(axis_cols)) {
+    axis_cols <- metaFuns$detect_mebocost_axis(data_candidate, axis_level = "auto")$axis_cols
+  }
+
+  metaFuns$check_axis_cols(data_candidate, axis_cols, context = "data_candidate")
+
   vec_required <- c(
-    "pathway_id", "pathway_name", "Metabolite_Name", "Receiver",
+    "pathway_id", "pathway_name", axis_cols,
     "overall_score", "fella_pvalue", "best_metabo_pvalue",
     "bridge_score", "metabo_features"
   )
@@ -3673,6 +3906,7 @@ metaFuns$rank_bridge_candidate_by_pathway <- function(data_candidate,
     ))
   }
 
+  data_candidate$axis_label <- metaFuns$make_axis_label(data_candidate, axis_cols)
   data_candidate$score_overall_scaled <- metaFuns$scale01(data_candidate$overall_score)
   data_candidate$score_bridge_scaled <- metaFuns$scale01(data_candidate$bridge_score)
 
@@ -4569,24 +4803,40 @@ metaFuns$plot_fella_bridge_sankey <- function(data_fella_bridge, data_kegg_bridg
 metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
   n_top_pathway = 6L, n_top_per_pathway = 5L,
   pathway_rank_by = c("bridge_score", "candidate_score", "fella_pvalue"),
+  axis_cols = NULL,
   point_pals = c("grey85", "#b22222"),
   point_size_range = c(2.2, 7.0),
   pathway_label_width = 30L,
-  metabolite_label_width = 22L,
+  axis_label_width = 34L,
+  metabolite_label_width = NULL,
   receiver_label_angle = 45,
-  x_bridge_min = 0,
-  x_bridge_max = 1,
-  x_receiver_start = 1.8,
+  x_path_label = -3.35,
+  x_bridge_min = -1.35,
+  x_bridge_max = -0.35,
+  x_bridge_text = -0.18,
+  x_axis_text = 0.15,
+  x_receiver_start = 2.65,
+  x_receiver_step = 0.72,
+  section_vline = c(-1.55, 2.40),
   row_gap = 0.7,
   group_gap = 0.9)
 {
   pathway_rank_by <- match.arg(pathway_rank_by)
   data_axis <- tibble::as_tibble(data_bridge_candidate)
 
+  if (!is.null(metabolite_label_width)) {
+    axis_label_width <- metabolite_label_width
+  }
+
+  axis_info <- metaFuns$detect_mebocost_axis(data_axis, axis_level = "auto")
+
+  if (is.null(axis_cols)) {
+    axis_cols <- axis_info$axis_cols
+  }
+
   vec_required <- c(
-    "Metabolite_Name", "Receiver", "candidate_score",
-    "pathway_id", "pathway_name", "fella_pvalue",
-    "best_metabo_pvalue", "bridge_score"
+    axis_cols, "candidate_score", "pathway_id", "pathway_name",
+    "fella_pvalue", "best_metabo_pvalue", "bridge_score"
   )
 
   vec_missing <- setdiff(vec_required, colnames(data_axis))
@@ -4600,7 +4850,8 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
   .wrap_text <- function(x, width)
   {
     vapply(as.character(x), function(s) {
-      paste(strwrap(s, width = as.integer(width)), collapse = "\n")
+      paste(strwrap(s, width = as.integer(width)), collapse = "
+")
     }, character(1L))
   }
 
@@ -4616,16 +4867,25 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     (x - vec_range[1L]) / diff(vec_range)
   }
 
-  data_axis <- data_axis[
-    !is.na(data_axis$Metabolite_Name) &
-      nzchar(data_axis$Metabolite_Name) &
-      !is.na(data_axis$Receiver) &
-      nzchar(data_axis$Receiver) &
-      !is.na(data_axis$candidate_score) &
-      !is.na(data_axis$bridge_score),
-    ,
-    drop = FALSE
-  ]
+  data_axis$axis_row_label_raw <- metaFuns$make_axis_row_label(data_axis, axis_cols)
+  data_axis$axis_label <- metaFuns$make_axis_label(data_axis, axis_cols)
+
+  idx_valid <- !is.na(data_axis$Metabolite_Name) &
+    nzchar(data_axis$Metabolite_Name) &
+    !is.na(data_axis$Receiver) &
+    nzchar(data_axis$Receiver) &
+    !is.na(data_axis$axis_row_label_raw) &
+    nzchar(data_axis$axis_row_label_raw) &
+    !is.na(data_axis$candidate_score) &
+    !is.na(data_axis$bridge_score)
+
+  if ("Sender" %in% axis_cols) {
+    idx_valid <- idx_valid &
+      !is.na(data_axis$Sender) &
+      nzchar(data_axis$Sender)
+  }
+
+  data_axis <- data_axis[idx_valid, , drop = FALSE]
 
   if (nrow(data_axis) == 0L) {
     stop("No valid bridge candidate axis remained for plotting.")
@@ -4727,13 +4987,22 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     dplyr::desc(candidate_score),
     Receiver
   )
-  data_receiver$x_receiver <- seq_len(nrow(data_receiver)) + x_receiver_start
+  data_receiver$x_receiver <- x_receiver_start +
+    (seq_len(nrow(data_receiver)) - 1L) * x_receiver_step
 
-  data_axis <- dplyr::left_join(data_axis, data_receiver[, c("Receiver", "x_receiver")],
-    by = "Receiver")
+  data_axis <- dplyr::left_join(
+    data_axis,
+    data_receiver[, c("Receiver", "x_receiver")],
+    by = "Receiver"
+  )
 
-  data_row <- dplyr::group_by(data_axis, pathway_id, pathway_order,
-    pathway_label, Metabolite_Name)
+  data_row <- dplyr::group_by(
+    data_axis,
+    pathway_id,
+    pathway_order,
+    pathway_label,
+    axis_row_label_raw
+  )
   data_row <- dplyr::summarise(
     data_row,
     row_score = max(candidate_score, na.rm = TRUE),
@@ -4743,7 +5012,7 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     data_row,
     pathway_order,
     dplyr::desc(row_score),
-    Metabolite_Name
+    axis_row_label_raw
   )
 
   data_row$y <- NA_real_
@@ -4789,22 +5058,19 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     length.out = nrow(data_group)
   )
 
-  data_row$metabolite_label <- .wrap_text(
-    data_row$Metabolite_Name,
-    metabolite_label_width
+  data_row$axis_row_label <- .wrap_text(
+    data_row$axis_row_label_raw,
+    axis_label_width
   )
 
   data_axis <- dplyr::left_join(
     data_axis,
-    data_row[, c("pathway_id", "Metabolite_Name", "y", "metabolite_label")],
-    by = c("pathway_id", "Metabolite_Name")
+    data_row[, c("pathway_id", "axis_row_label_raw", "y", "axis_row_label")],
+    by = c("pathway_id", "axis_row_label_raw")
   )
 
-  x_limit_left <- -1.75
-  x_limit_right <- max(data_receiver$x_receiver) + 0.7
-  x_path_label <- -1.65
-  x_bridge_text <- x_bridge_max + 0.08
-  x_metabolite_text <- x_receiver_start + 0.55
+  x_limit_left <- x_path_label - 0.15
+  x_limit_right <- max(data_receiver$x_receiver) + 0.35
 
   p <- ggplot2::ggplot() +
     ggplot2::geom_rect(
@@ -4819,6 +5085,12 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
       colour = NA,
       inherit.aes = FALSE,
       show.legend = FALSE
+    ) +
+    ggplot2::geom_vline(
+      xintercept = section_vline,
+      colour = "grey85",
+      linewidth = 0.4,
+      inherit.aes = FALSE
     ) +
     ggplot2::geom_text(
       data = data_group,
@@ -4862,13 +5134,14 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     ggplot2::geom_text(
       data = data_row,
       ggplot2::aes(
-        x = x_metabolite_text,
+        x = x_axis_text,
         y = y,
-        label = metabolite_label
+        label = axis_row_label
       ),
-      hjust = 1,
+      hjust = 0,
       vjust = 0.5,
       size = 2.7,
+      lineheight = 0.9,
       inherit.aes = FALSE
     ) +
     ggplot2::geom_point(
@@ -4886,11 +5159,13 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
     ggplot2::scale_colour_gradient(
       low = point_pals[1L],
       high = point_pals[2L],
-      name = "Axis\nCandidateScore"
+      name = "Axis
+CandidateScore"
     ) +
     ggplot2::scale_size_continuous(
       range = point_size_range,
-      name = "Axis\nCandidateScore",
+      name = "Axis
+CandidateScore",
       guide = "none"
     ) +
     ggplot2::scale_x_continuous(
@@ -4899,7 +5174,8 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
         data_receiver$x_receiver
       ),
       labels = c(
-        "Pathway\nBridgeScore",
+        "Pathway
+BridgeScore",
         as.character(data_receiver$Receiver)
       ),
       limits = c(x_limit_left, x_limit_right),
@@ -4934,6 +5210,8 @@ metaFuns$plot_bridge_candidate_axis_grouped <- function(data_bridge_candidate,
 
   p
 }
+
+
 
 # ==========================================================================
 # pathview

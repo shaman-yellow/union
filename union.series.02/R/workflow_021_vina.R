@@ -2,6 +2,10 @@
 # workflow of vina
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+if (!exists("vinaFuns")) {
+  vinaFuns <- new.env(parent = emptyenv())
+}
+
 .job_vina <- setClass("job_vina", 
   contains = c("job"),
   representation = representation(
@@ -190,22 +194,40 @@ setMethod("step1", signature = c(x = "job_vina"),
 
 setMethod("step2", signature = c(x = "job_vina"),
   function(x, try_cluster_random = FALSE, nGroup = 100, 
-    nMember = 3, cl = 5, sdf.3d = NULL, dir_save = paste0(x@sig, "_cpd"), conda_env = "base")
+    nMember = 3, cl = 5, sdf.3d = NULL, dir_save = paste0(x@sig, "_cpd"),
+    conda_env = "base", use_pubchem_3d = TRUE, use_obgen = TRUE,
+    rdkit_fallback = TRUE, obabel_fallback = TRUE,
+    strip_salts = TRUE, neutralize_ligand = FALSE,
+    ligand_forcefield = c("MMFF", "UFF"), ligand_minimize = TRUE,
+    ligand_per_molecule = TRUE, obabel_partialcharge = "gasteiger",
+    overwrite_sdf = FALSE, overwrite_pubchem_3d = FALSE,
+    overwrite_obgen = FALSE)
   {
     step_message("Download sdf files and convert as pdbqt for ligands.")
+    ligand_forcefield <- match.arg(ligand_forcefield)
     if (!is.null(conda_env)) {
       activate_env(conda_env)
     }
-    sdfFile <- query_sdfs(
-      unique(names(x$dock_layout)), 
-      paste0(dir_save, "_SDF"),
-      curl_cl = cl, filename = add_filename_suffix("all_compounds.sdf", x@sig)
+    input_cids <- unique(as.character(names(x$dock_layout)))
+    dir_sdf <- paste0(dir_save, "_SDF")
+    file_sdf <- file.path(
+      dir_sdf, add_filename_suffix("all_compounds.sdf", x@sig)
     )
+    if (!overwrite_sdf && file.exists(file_sdf) && file.size(file_sdf) > 0L) {
+      message("Use existing 2D SDF: ", file_sdf)
+      sdfFile <- file_sdf
+    } else {
+      sdfFile <- query_sdfs(
+        input_cids,
+        dir_sdf,
+        curl_cl = cl, filename = add_filename_suffix("all_compounds.sdf", x@sig)
+      )
+    }
+    x$sdf_2d_file <- sdfFile
     x <- methodAdd(x, "以 PubChem API
       (<https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest>) 获取化合物 SDF
       结构文件。"
     )
-    # x <- snapAdd(x, "从 PubChem 获取化合物 SDF 结构文件(2D)。")
     Show_filter <- FALSE
     if (try_cluster_random && length(object(x)$cids) > nGroup) {
       message("To reduce docking candidates, clustering the molecules, and random sample each group to get `n`")
@@ -237,8 +259,9 @@ setMethod("step2", signature = c(x = "job_vina"),
           dim(sdfset[[x]][[2]])[2] < 3
         })
       sdfset <- sdfset[which(!MaybeError)]
-      sdfFile <- add_filename_suffix(suffix, "random")
+      sdfFile <- add_filename_suffix(sdfFile, "random")
       e(ChemmineR::write.SDF(sdfset, sdfFile))
+      input_cids <- intersect(input_cids, as.character(ChemmineR::cid(sdfset)))
       Show_filter <- TRUE
       .add_internal_job(.job(method = "R package `ChemmineR` used for similar chemical compounds clustering",
           cite = "[@ChemminerACoCaoY2008]"
@@ -251,40 +274,46 @@ setMethod("step2", signature = c(x = "job_vina"),
           )
       )
     }
-    if (is.null(sdf.3d)) {
-      message("Overwrite exists 3D SDF file.")
-      guess_sdf.3d <- add_filename_suffix(sdfFile, "3D")
-      if (file.exists(guess_sdf.3d)) {
-        if (sureThat("File exists: {guess_sdf.3d}, use it?")) {
-          sdfFile <- guess_sdf.3d
-        } else {
-          sdfFile <- cal_3d_sdf(sdfFile)
-        }
-      } else {
-        sdfFile <- cal_3d_sdf(sdfFile, cl = cl)
-      }
-      x <- methodAdd(x, "使用 `openbabel` 的工具 (`obgen`) 计算 SDF 文件的 3D 构象 (转化为 3D SDF文件)。")
-      # x <- snapAdd(x, "以 `openbabel` 计算化合物的 3D 构象。")
-    } else if (file.exists(sdf.3d)) {
-      message("Use '", sdf.3d, "'")
-      sdfFile <- sdf.3d
-    } else {
-      stop("file.exists(sdf.3d) == FALSE")
-    }
     if (Show_filter) {
       message("Filter out (Due to Chemmine bug): ", length(which(MaybeError)))
       message("Now, Total docking molecules: ", length(sdfset))
     }
-    res.pdbqt <- mk_prepare_ligand.sdf(sdfFile, paste0(dir_save, "_pdbqt"))
-    x <- methodAdd(x, "以 Python `meeko` 包 (`mk_prepare_ligand.py`) 转化 SDF 文件获取配体 PDBQT 用于分子对接。")
-    # x <- snapAdd(x, "以 `meeko` 从 SDF 转化得到配体的 PDBQT 文件。")
+    if (!is.null(sdf.3d) && !file.exists(sdf.3d)) {
+      stop("file.exists(sdf.3d) == FALSE")
+    }
+    res.pdbqt <- vinaFuns$prepare_ligand_pdbqt_recovery(
+      cids = input_cids,
+      sdf_2d = sdfFile,
+      sdf_3d = sdf.3d,
+      dir_save = dir_save,
+      mkdir.pdbqt = paste0(dir_save, "_pdbqt"),
+      use_pubchem_3d = use_pubchem_3d,
+      use_obgen = use_obgen,
+      rdkit_fallback = rdkit_fallback,
+      obabel_fallback = obabel_fallback,
+      strip_salts = strip_salts,
+      neutralize_ligand = neutralize_ligand,
+      ligand_forcefield = ligand_forcefield,
+      ligand_minimize = ligand_minimize,
+      ligand_per_molecule = ligand_per_molecule,
+      obabel_partialcharge = obabel_partialcharge,
+      overwrite_pubchem_3d = overwrite_pubchem_3d,
+      overwrite_obgen = overwrite_obgen,
+      cl = cl
+    )
+    x <- methodAdd(x, "配体结构准备采用多级策略：优先使用 PubChem 已计算的 3D conformer；对于无可用 3D 记录或未能成功转化的化合物，使用 `openbabel` 生成 3D 构象；对于仍未成功的结构，进一步使用 RDKit 进行结构标准化、去除游离盐或反离子并重新生成 3D 构象。随后优先以 Python `meeko` 包 (`mk_prepare_ligand.py`) 转化得到配体 PDBQT 文件；若 `meeko` 对复杂盐型、多片段或电荷结构未能完成转化，则使用 `openbabel` 作为备选 PDBQT 转换工具，并记录每个配体的结构来源和转换工具。")
+    x$ligand_prepare_stat <- res.pdbqt$stat
+    x$ligand_prepare_status <- res.pdbqt$status
+    x$ligand_prepare_sdf_files <- res.pdbqt$sdf_files
     x$res.ligand <- nl(res.pdbqt$pdbqt.cid, res.pdbqt$pdbqt)
-    message("Got (filter out in `mk_prepare_ligand.sdf`): ", length(x$res.ligand))
-    alls <- unique(as.character(object(x)$cid))
+    message("Got ligand PDBQT: ", length(x$res.ligand))
+    alls <- unique(as.character(input_cids))
     notGot <- alls[!alls %in% names(x$res.ligand)]
-    message("Not got:", paste0(notGot, collapse = ", "))
+    message("Not got: ", paste0(notGot, collapse = ", "))
     if (length(notGot)) {
-      x <- methodAdd(x, "SDF 输入 分子数量为 {length(alls)}，`meeko` 标准化 (`RDKit`) 过程中发现 {length(notGot)} 个不合法结构，因此输出 PDBQT 的分子数量为 {length(x$res.ligand)}。")
+      x <- methodAdd(x, "SDF 输入分子数量为 {length(alls)}，经多级配体结构准备后输出 PDBQT 的分子数量为 {length(x$res.ligand)}；其余 {length(notGot)} 个化合物因结构标准化、3D 构象生成或 PDBQT 转换未成功而未进入后续分子对接。")
+    } else {
+      x <- methodAdd(x, "SDF 输入分子数量为 {length(alls)}，经多级配体结构准备后均成功获得 PDBQT 文件。")
     }
     x$ligand_notGot <- notGot
     message("Filter the `x$dock_layout`")
@@ -1116,7 +1145,7 @@ vinaShow <- function(Combn, recep, subdir = Combn, dir = "vina_space",
     res <- paste0("detail_", res)
   }
   .cdRun <- function(...) cdRun(..., path = wd)
-  img <- paste0(wd, "/", res)
+  img <- file.path(wd, res)
   if (file.exists(img)) {
     file.remove(img)
   }
@@ -1214,8 +1243,10 @@ ld_cutRead <- function(file, cols, abnum = TRUE, sep = "\t", tmp = "/tmp/ldtmp.t
   ftibble(tmp)
 }
 
-mk_prepare_ligand.sdf <- function(sdf_file, mkdir.pdbqt = "pdbqt", check = FALSE) {
-  dir.create(mkdir.pdbqt, FALSE)
+mk_prepare_ligand.sdf <- function(sdf_file, mkdir.pdbqt = "pdbqt",
+  check = FALSE, per_molecule = TRUE)
+{
+  dir.create(mkdir.pdbqt, FALSE, recursive = TRUE)
   check_sdf_validity <- function(file) {
     lst <- sep_list(readLines(file), "^\\${4,}$")
     lst <- lst[ - length(lst) ]
@@ -1223,8 +1254,9 @@ mk_prepare_ligand.sdf <- function(sdf_file, mkdir.pdbqt = "pdbqt", check = FALSE
     lst <- lapply(lst,
       function(line) {
         pos <- grep("^\\s*-OEChem|M\\s*END", line)
-        if (pos[2] - pos[1] > 5)
+        if (length(pos) >= 2L && pos[2] - pos[1] > 5) {
           line
+        }
       })
     lst <- lst[ !vapply(lst, is.null, logical(1)) ]
     nsum <- length(lst)
@@ -1238,13 +1270,531 @@ mk_prepare_ligand.sdf <- function(sdf_file, mkdir.pdbqt = "pdbqt", check = FALSE
   } else {
     lst <- list(file = sdf_file)
   }
-  cdRun(pg("mk_prepare_ligand.py"), " -i ", sdf_file,
-    " --multimol_outdir ", mkdir.pdbqt)
+  if (per_molecule) {
+    records <- vinaFuns$split_sdf_records(sdf_file)
+    split_dir <- file.path(
+      dirname(sdf_file),
+      paste0(tools::file_path_sans_ext(basename(sdf_file)), "_split_for_meeko")
+    )
+    dir.create(split_dir, FALSE, recursive = TRUE)
+    status <- lapply(seq_along(records),
+      function(i) {
+        cid <- vinaFuns$sdf_record_id(records[[ i ]], fallback = as.character(i))
+        cid_file <- gsub("[^A-Za-z0-9_.-]", "_", cid)
+        one_sdf <- file.path(split_dir, paste0(cid_file, ".sdf"))
+        log_file <- file.path(split_dir, paste0(cid_file, ".meeko.log"))
+        writeLines(records[[ i ]], one_sdf)
+        cmd <- paste(
+          pg("mk_prepare_ligand.py"),
+          "-i", shQuote(one_sdf),
+          "--multimol_outdir", shQuote(mkdir.pdbqt)
+        )
+        res <- try(cdRun(cmd), TRUE)
+        data.frame(
+          CID = cid,
+          input_sdf = one_sdf,
+          meeko_ok = !inherits(res, "try-error"),
+          log_file = log_file,
+          stringsAsFactors = FALSE
+        )
+      })
+    lst$meeko_status <- if (length(status)) {
+      tibble::as_tibble(do.call(rbind, status))
+    } else {
+      tibble::tibble()
+    }
+  } else {
+    cdRun(pg("mk_prepare_ligand.py"), " -i ", sdf_file,
+      " --multimol_outdir ", mkdir.pdbqt)
+    lst$meeko_status <- tibble::tibble()
+  }
+  got <- vinaFuns$collect_pdbqt(mkdir.pdbqt)
   lst$file <- sdf_file
-  lst$pdbqt <- list.files(mkdir.pdbqt, "\\.pdbqt$", full.names = TRUE)
+  lst$pdbqt <- got$pdbqt
   lst$pdbqt.num <- length(lst$pdbqt)
-  lst$pdbqt.cid <- stringr::str_extract(lst$pdbqt, "(?<=/|^)[0-9]{1,}")
+  lst$pdbqt.cid <- got$pdbqt.cid
   return(lst)
+}
+
+vinaFuns$split_sdf_records <- function(file)
+{
+  lines <- readLines(file, warn = FALSE)
+  if (!length(lines)) {
+    return(list())
+  }
+  end <- grep("^\\$\\$\\$\\$", lines)
+  if (!length(end)) {
+    return(list(lines))
+  }
+  start <- c(1L, end[-length(end)] + 1L)
+  records <- Map(function(i, j) lines[i:j], start, end)
+  records <- records[lengths(records) > 1L]
+  records
+}
+
+vinaFuns$sdf_record_id <- function(record, fallback = NA_character_)
+{
+  if (!length(record)) {
+    return(fallback)
+  }
+  title <- trimws(record[[ 1L ]])
+  if (grepl("^[0-9]+$", title)) {
+    return(title)
+  }
+  pos <- grep("^> *<PUBCHEM_COMPOUND_CID>", record)
+  if (length(pos) && length(record) >= pos[[ 1L ]] + 1L) {
+    cid <- trimws(record[[ pos[[ 1L ]] + 1L ]])
+    if (grepl("^[0-9]+$", cid)) {
+      return(cid)
+    }
+  }
+  cid <- stringr::str_extract(title, "[0-9]+")
+  if (!is.na(cid)) {
+    return(cid)
+  }
+  fallback
+}
+
+vinaFuns$sdf_ids <- function(file)
+{
+  records <- vinaFuns$split_sdf_records(file)
+  ids <- vapply(records, vinaFuns$sdf_record_id, character(1), fallback = NA_character_)
+  ids[!is.na(ids)]
+}
+
+vinaFuns$filter_sdf_records <- function(file, ids, output)
+{
+  ids <- as.character(ids)
+  records <- vinaFuns$split_sdf_records(file)
+  keep <- vapply(records,
+    function(record) {
+      vinaFuns$sdf_record_id(record) %in% ids
+    }, logical(1))
+  records <- records[keep]
+  if (!length(records)) {
+    return(NULL)
+  }
+  writeLines(unlist(records, use.names = FALSE), output)
+  output
+}
+
+vinaFuns$sdf_file_has_records <- function(file)
+{
+  file.exists(file) && file.size(file) > 0L &&
+    any(grepl("^\\$\\$\\$\\$", readLines(file, warn = FALSE)))
+}
+
+vinaFuns$collect_pdbqt <- function(mkdir.pdbqt)
+{
+  files <- list.files(mkdir.pdbqt, "\\.pdbqt$", full.names = TRUE)
+  cid <- tools::file_path_sans_ext(basename(files))
+  cid <- stringr::str_extract(cid, "[0-9]+")
+  keep <- !is.na(cid)
+  list(pdbqt = files[keep], pdbqt.cid = cid[keep])
+}
+
+vinaFuns$query_pubchem_3d_sdfs <- function(cids, dir_save = "pubchem_3d_sdf",
+  filename = "pubchem_3d.sdf", record_type = c("3d", "2d"),
+  overwrite = FALSE, download_method = "libcurl")
+{
+  record_type <- match.arg(record_type)
+  cids <- unique(as.character(cids))
+  dir.create(dir_save, FALSE, recursive = TRUE)
+  output <- file.path(dir_save, filename)
+  empty_status <- tibble::tibble(
+    CID = character(), record_type = character(),
+    sdf_file = character(), got_sdf = logical(), from_cache = logical(),
+    reason = character()
+  )
+  if (!length(cids)) {
+    return(list(file = NULL, status = empty_status))
+  }
+  if (!overwrite && vinaFuns$sdf_file_has_records(output)) {
+    ids_output <- unique(as.character(vinaFuns$sdf_ids(output)))
+    if (all(cids %in% ids_output)) {
+      message("Use existing PubChem ", record_type, " SDF: ", output)
+      status <- tibble::tibble(
+        CID = cids, record_type = record_type,
+        sdf_file = output, got_sdf = TRUE, from_cache = TRUE,
+        reason = "combined_sdf_cache"
+      )
+      return(list(file = output, status = status))
+    }
+  }
+  files <- character()
+  status <- lapply(cids,
+    function(cid) {
+      file <- file.path(dir_save, paste0(cid, "_", record_type, ".sdf"))
+      url <- glue::glue(
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/SDF?record_type={record_type}"
+      )
+      ok <- FALSE
+      from_cache <- FALSE
+      reason <- ""
+      if (!overwrite && file.exists(file) && file.size(file) > 0L) {
+        ok <- vinaFuns$sdf_file_has_records(file)
+        from_cache <- ok
+        reason <- if (ok) "cid_sdf_cache" else "invalid_cached_sdf"
+      }
+      if (!ok) {
+        message("Download PubChem ", record_type, " SDF: CID ", cid)
+        res <- try(utils::download.file(
+          url, file, quiet = FALSE, mode = "wb", method = download_method
+        ), TRUE)
+        ok <- !inherits(res, "try-error") && vinaFuns$sdf_file_has_records(file)
+        reason <- if (ok) "downloaded" else "download_or_sdf_validation_failed"
+      }
+      if (ok) {
+        files <<- c(files, file)
+      } else {
+        warning("Failed to obtain PubChem ", record_type, " SDF for CID ", cid,
+          call. = FALSE)
+      }
+      data.frame(
+        CID = as.character(cid), record_type = record_type,
+        sdf_file = if (ok) file else NA_character_,
+        got_sdf = ok, from_cache = from_cache, reason = reason,
+        stringsAsFactors = FALSE
+      )
+    })
+  status <- tibble::as_tibble(do.call(rbind, status))
+  if (length(files)) {
+    writeLines(unlist(lapply(files, readLines, warn = FALSE), use.names = FALSE), output)
+  } else {
+    output <- NULL
+  }
+  list(file = output, status = status)
+}
+
+vinaFuns$standardize_ligand_sdf_rdkit <- function(sdf_file, output,
+  strip_salts = TRUE, neutralize_ligand = FALSE, ligand_minimize = TRUE,
+  ligand_forcefield = c("MMFF", "UFF"), seed = 614L)
+{
+  ligand_forcefield <- match.arg(ligand_forcefield)
+  py <- tempfile("vina_rdkit_ligand_", fileext = ".py")
+  code <- c(
+    "import sys, csv",
+    "from rdkit import Chem",
+    "from rdkit.Chem import AllChem",
+    "try:",
+    "    from rdkit.Chem.MolStandardize import rdMolStandardize",
+    "except Exception:",
+    "    rdMolStandardize = None",
+    "infile, outfile = sys.argv[1], sys.argv[2]",
+    "strip_salts = bool(int(sys.argv[3]))",
+    "neutralize = bool(int(sys.argv[4]))",
+    "minimize = bool(int(sys.argv[5]))",
+    "forcefield = sys.argv[6]",
+    "seed = int(sys.argv[7])",
+    "suppl = Chem.SDMolSupplier(infile, sanitize=False, removeHs=False)",
+    "writer = Chem.SDWriter(outfile)",
+    "rows = []",
+    "for i, mol in enumerate(suppl):",
+    "    name = str(i + 1)",
+    "    try:",
+    "        if mol is None:",
+    "            raise ValueError('RDKit returned None')",
+    "        if mol.HasProp('_Name') and mol.GetProp('_Name').strip():",
+    "            name = mol.GetProp('_Name').strip()",
+    "        try:",
+    "            Chem.SanitizeMol(mol)",
+    "        except Exception:",
+    "            mol.UpdatePropertyCache(strict=False)",
+    "            Chem.SanitizeMol(mol, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES)",
+    "        fragment_count = len(Chem.GetMolFrags(mol))",
+    "        if strip_salts and fragment_count > 1 and rdMolStandardize is not None:",
+    "            mol = rdMolStandardize.LargestFragmentChooser().choose(mol)",
+    "        if neutralize and rdMolStandardize is not None:",
+    "            mol = rdMolStandardize.Uncharger().uncharge(mol)",
+    "        mol = Chem.AddHs(mol, addCoords=True)",
+    "        params = AllChem.ETKDGv3()",
+    "        params.randomSeed = seed + i",
+    "        params.useRandomCoords = True",
+    "        emb = AllChem.EmbedMolecule(mol, params)",
+    "        if emb != 0:",
+    "            emb = AllChem.EmbedMolecule(mol, randomSeed=seed + i, useRandomCoords=True)",
+    "        if emb != 0:",
+    "            raise ValueError('3D embedding failed')",
+    "        if minimize:",
+    "            try:",
+    "                if forcefield.upper() == 'MMFF' and AllChem.MMFFHasAllMoleculeParams(mol):",
+    "                    AllChem.MMFFOptimizeMolecule(mol, maxIters=500)",
+    "                else:",
+    "                    AllChem.UFFOptimizeMolecule(mol, maxIters=500)",
+    "            except Exception:",
+    "                pass",
+    "        mol.SetProp('_Name', name)",
+    "        writer.write(mol)",
+    "        rows.append([name, 'TRUE', str(fragment_count), ''])",
+    "    except Exception as e:",
+    "        rows.append([name, 'FALSE', '', str(e)])",
+    "writer.close()",
+    "with open(outfile + '.status.tsv', 'w', newline='') as f:",
+    "    w = csv.writer(f, delimiter='\\t')",
+    "    w.writerow(['CID', 'rdkit_ok', 'fragment_count_before', 'reason'])",
+    "    w.writerows(rows)"
+  )
+  writeLines(code, py)
+  cmd <- paste(
+    pg("docking_python"), shQuote(py), shQuote(sdf_file), shQuote(output),
+    as.integer(strip_salts), as.integer(neutralize_ligand),
+    as.integer(ligand_minimize), ligand_forcefield, as.integer(seed)
+  )
+  res <- try(cdRun(cmd), TRUE)
+  status_file <- paste0(output, ".status.tsv")
+  status <- if (file.exists(status_file)) {
+    tibble::as_tibble(utils::read.delim(status_file, stringsAsFactors = FALSE))
+  } else {
+    tibble::tibble()
+  }
+  list(
+    file = if (!inherits(res, "try-error") && file.exists(output) && file.size(output)) output else NULL,
+    status = status,
+    error = inherits(res, "try-error")
+  )
+}
+
+vinaFuns$prepare_ligand_pdbqt_obabel <- function(sdf_file, mkdir.pdbqt = "pdbqt",
+  ids = NULL, partialcharge = "gasteiger")
+{
+  dir.create(mkdir.pdbqt, FALSE, recursive = TRUE)
+  records <- vinaFuns$split_sdf_records(sdf_file)
+  if (!is.null(ids)) {
+    ids <- as.character(ids)
+    keep <- vapply(records,
+      function(record) vinaFuns$sdf_record_id(record) %in% ids,
+      logical(1)
+    )
+    records <- records[keep]
+  }
+  if (!length(records)) {
+    return(list(
+      pdbqt = character(), pdbqt.cid = character(),
+      status = tibble::tibble(
+        CID = character(), input_sdf = character(), pdbqt_file = character(),
+        obabel_ok = logical(), reason = character()
+      )
+    ))
+  }
+  split_dir <- file.path(dirname(sdf_file), paste0(
+    tools::file_path_sans_ext(basename(sdf_file)), "_split_for_obabel"
+  ))
+  dir.create(split_dir, FALSE, recursive = TRUE)
+  status <- lapply(seq_along(records), function(i) {
+    cid <- vinaFuns$sdf_record_id(records[[ i ]], fallback = as.character(i))
+    cid_file <- gsub("[^A-Za-z0-9_.-]", "_", cid)
+    one_sdf <- file.path(split_dir, paste0(cid_file, ".sdf"))
+    out <- file.path(mkdir.pdbqt, paste0(cid_file, ".pdbqt"))
+    writeLines(records[[ i ]], one_sdf)
+    base_cmd <- paste(
+      pg("obabel"),
+      "-isdf", shQuote(one_sdf),
+      "-opdbqt", "-O", shQuote(out),
+      "-r", "-h"
+    )
+    cmd <- if (!is.null(partialcharge) && nchar(partialcharge)) {
+      paste(base_cmd, "--partialcharge", shQuote(partialcharge))
+    } else {
+      base_cmd
+    }
+    res <- try(cdRun(cmd), TRUE)
+    ok <- !inherits(res, "try-error") && file.exists(out) && file.size(out) > 0L
+    reason <- if (ok) "" else as.character(res)[1]
+    if (!ok && !is.null(partialcharge) && nchar(partialcharge)) {
+      message("Open Babel retry without partial charge for CID ", cid)
+      res2 <- try(cdRun(base_cmd), TRUE)
+      ok <- !inherits(res2, "try-error") && file.exists(out) && file.size(out) > 0L
+      reason <- if (ok) "partialcharge_failed_retry_without_partialcharge" else as.character(res2)[1]
+    }
+    data.frame(
+      CID = as.character(cid), input_sdf = one_sdf,
+      pdbqt_file = if (ok) out else NA_character_,
+      obabel_ok = ok, reason = reason, stringsAsFactors = FALSE
+    )
+  })
+  status <- tibble::as_tibble(do.call(rbind, status))
+  status_ok <- status[status$obabel_ok %in% TRUE, , drop = FALSE]
+  list(
+    pdbqt = status_ok$pdbqt_file,
+    pdbqt.cid = as.character(status_ok$CID),
+    status = status
+  )
+}
+
+vinaFuns$prepare_ligand_pdbqt_recovery <- function(cids, sdf_2d, sdf_3d = NULL,
+  dir_save = "ligand", mkdir.pdbqt = "pdbqt", use_pubchem_3d = TRUE,
+  use_obgen = TRUE, rdkit_fallback = TRUE, obabel_fallback = TRUE,
+  strip_salts = TRUE, neutralize_ligand = FALSE,
+  ligand_forcefield = c("MMFF", "UFF"), ligand_minimize = TRUE,
+  ligand_per_molecule = TRUE, obabel_partialcharge = "gasteiger",
+  overwrite_pubchem_3d = FALSE, overwrite_obgen = FALSE, cl = NULL)
+{
+  ligand_forcefield <- match.arg(ligand_forcefield)
+  cids <- unique(as.character(cids))
+  dir.create(dir_save, FALSE, recursive = TRUE)
+  dir.create(mkdir.pdbqt, FALSE, recursive = TRUE)
+  got_files <- character()
+  got_cids <- character()
+  lst_status <- list()
+  lst_sdf <- list()
+
+  register_pdbqt <- function(res, label) {
+    if (is.null(res$pdbqt) || !length(res$pdbqt)) {
+      return(invisible(NULL))
+    }
+    keep <- !as.character(res$pdbqt.cid) %in% got_cids
+    if (any(keep)) {
+      got_files <<- c(got_files, res$pdbqt[keep])
+      got_cids <<- c(got_cids, as.character(res$pdbqt.cid[keep]))
+    }
+    invisible(NULL)
+  }
+
+  run_meeko <- function(label, sdf_file, ids, suffix = "meeko") {
+    if (!length(ids)) {
+      return(invisible(NULL))
+    }
+    filtered <- file.path(dir_save, paste0(label, "_", suffix, "_input.sdf"))
+    filtered <- vinaFuns$filter_sdf_records(sdf_file, ids, filtered)
+    if (is.null(filtered)) {
+      return(invisible(NULL))
+    }
+    outdir <- file.path(mkdir.pdbqt, paste0(label, "_", suffix))
+    res <- mk_prepare_ligand.sdf(filtered, outdir, per_molecule = ligand_per_molecule)
+    if (!is.null(res$meeko_status) && nrow(res$meeko_status)) {
+      lst_status[[ paste0(label, "_", suffix) ]] <<- dplyr::mutate(
+        res$meeko_status,
+        strategy = label, tool = "meeko", input_stage = suffix
+      )
+    }
+    register_pdbqt(res, label)
+    invisible(NULL)
+  }
+
+  run_rdkit_meeko <- function(label, sdf_file, ids) {
+    if (!rdkit_fallback || !length(ids)) {
+      return(invisible(NULL))
+    }
+    filtered <- file.path(dir_save, paste0(label, "_rdkit_input.sdf"))
+    filtered <- vinaFuns$filter_sdf_records(sdf_file, ids, filtered)
+    if (is.null(filtered)) {
+      return(invisible(NULL))
+    }
+    rdkit_file <- file.path(dir_save, paste0(label, "_rdkit3D.sdf"))
+    rdkit_res <- vinaFuns$standardize_ligand_sdf_rdkit(
+      filtered, rdkit_file,
+      strip_salts = strip_salts,
+      neutralize_ligand = neutralize_ligand,
+      ligand_minimize = ligand_minimize,
+      ligand_forcefield = ligand_forcefield
+    )
+    if (nrow(rdkit_res$status)) {
+      lst_status[[ paste0(label, "_rdkit") ]] <<- dplyr::mutate(
+        rdkit_res$status,
+        strategy = label, tool = "rdkit", input_stage = "standardize"
+      )
+    }
+    if (!is.null(rdkit_res$file)) {
+      lst_sdf[[ paste0(label, "_rdkit") ]] <<- rdkit_res$file
+      run_meeko(label, rdkit_res$file, setdiff(ids, got_cids), suffix = "rdkit_meeko")
+    }
+    invisible(NULL)
+  }
+
+  run_obabel <- function(label, sdf_file, ids) {
+    if (!obabel_fallback || !length(ids)) {
+      return(invisible(NULL))
+    }
+    obabel_dir <- file.path(mkdir.pdbqt, paste0(label, "_obabel"))
+    obabel_res <- vinaFuns$prepare_ligand_pdbqt_obabel(
+      sdf_file,
+      mkdir.pdbqt = obabel_dir,
+      ids = ids,
+      partialcharge = obabel_partialcharge
+    )
+    if (!is.null(obabel_res$status) && nrow(obabel_res$status)) {
+      lst_status[[ paste0(label, "_obabel") ]] <<- dplyr::mutate(
+        obabel_res$status,
+        strategy = label, tool = "obabel", input_stage = "fallback"
+      )
+    }
+    register_pdbqt(obabel_res, label)
+    invisible(NULL)
+  }
+
+  run_source <- function(label, sdf_file) {
+    if (is.null(sdf_file) || !file.exists(sdf_file) || !file.size(sdf_file)) {
+      return(invisible(NULL))
+    }
+    remaining <- setdiff(cids, got_cids)
+    if (!length(remaining)) {
+      return(invisible(NULL))
+    }
+    message("Ligand preparation source: ", label,
+      " (remaining CID: ", length(remaining), ")")
+    lst_sdf[[ label ]] <<- sdf_file
+    run_meeko(label, sdf_file, remaining, suffix = "raw_meeko")
+    remaining <- setdiff(cids, got_cids)
+    run_rdkit_meeko(label, sdf_file, remaining)
+    remaining <- setdiff(cids, got_cids)
+    run_obabel(label, sdf_file, remaining)
+    invisible(NULL)
+  }
+
+  if (!is.null(sdf_3d)) {
+    run_source("user_3d_sdf", sdf_3d)
+  }
+
+  if (use_pubchem_3d && length(setdiff(cids, got_cids))) {
+    q3d <- vinaFuns$query_pubchem_3d_sdfs(
+      setdiff(cids, got_cids),
+      dir_save = paste0(dir_save, "_PubChem3D"),
+      filename = add_filename_suffix("pubchem_3d.sdf", basename(dir_save)),
+      record_type = "3d",
+      overwrite = overwrite_pubchem_3d
+    )
+    lst_status[[ "pubchem_3d_download" ]] <- q3d$status
+    run_source("pubchem_3d", q3d$file)
+  }
+
+  if (use_obgen && length(setdiff(cids, got_cids))) {
+    message("PubChem 3D source did not yield PDBQT for all ligands; start obgen fallback.")
+    sdf_obgen <- cal_3d_sdf(sdf_2d, cl = cl, overwrite = overwrite_obgen)
+    run_source("obgen_3d", sdf_obgen)
+  }
+
+  if (rdkit_fallback && length(setdiff(cids, got_cids))) {
+    message("Use RDKit from 2D SDF fallback for remaining ligands.")
+    run_source("rdkit_from_2d_sdf", sdf_2d)
+  }
+
+  status <- if (length(lst_status)) {
+    lst_status <- lapply(lst_status, function(dat) {
+      dat <- tibble::as_tibble(dat)
+      if ("CID" %in% colnames(dat)) {
+        dat$CID <- as.character(dat$CID)
+      }
+      dat
+    })
+    dplyr::bind_rows(lst_status)
+  } else {
+    tibble::tibble()
+  }
+  stat <- tibble::tibble(
+    Strategy = names(lst_sdf),
+    SDF = unname(unlist(lst_sdf)),
+    Prepared_total = vapply(names(lst_sdf),
+      function(nm) {
+        as.integer(sum(got_cids %in% vinaFuns$sdf_ids(lst_sdf[[ nm ]])))
+      }, integer(1))
+  )
+  list(
+    pdbqt = got_files,
+    pdbqt.cid = got_cids,
+    status = status,
+    stat = stat,
+    sdf_files = lst_sdf
+  )
 }
 
 select_files_by_grep <- function(files, pattern){
@@ -1294,13 +1844,11 @@ setMethod("set_remote", signature = c(x = "job_vina"),
     return(x)
   })
 
-cal_3d_sdf <- function(sdf, group = 10, cl = NULL) {
+cal_3d_sdf <- function(sdf, group = 10, cl = NULL, overwrite = FALSE) {
   output <- add_filename_suffix(sdf, "3D")
-  if (file.exists(output)) {
-    isThat <- usethis::ui_yeah("Overwrite the exists file?")
-    if (!isThat) {
-      return(output)
-    }
+  if (!overwrite && file.exists(output) && file.size(output) > 0L) {
+    message("Use existing obgen 3D SDF: ", output)
+    return(output)
   }
   db <- sep_list(readLines(sdf), sep = "^\\$\\$\\$\\$")
   valid <- TRUE
@@ -1337,7 +1885,7 @@ cal_3d_sdf <- function(sdf, group = 10, cl = NULL) {
     pg <- pg('obgen')
     pbapply::pblapply(seq_len(N), cl = cl,
       function(n) {
-        cdRun(glue::glue("{pg} {file_groups[n]} -ff UFF > {output_groups[n]} 2>/dev/null"))
+        cdRun(glue::glue("{pg} {file_groups[n]} -ff UFF > {output_groups[n]}"))
       })
     lines <- unlist(lapply(output_groups, readLines))
     writeLines(lines, output)

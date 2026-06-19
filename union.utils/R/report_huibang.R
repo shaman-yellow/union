@@ -222,7 +222,8 @@ push_script.hb <- function(..., .project = guess_project(),
 }
 
 push_script_runtime.hb <- function(..., .project = guess_project(), 
-  .ws = getRemoteWs(), .path = "scripts_mirror", .exlibrary = getOption("remote_R_library", ""))
+  .ws = getRemoteWs(), 
+  .path = "scripts_mirror", .exlibrary = getOption("remote_R_library", ""), confirm = TRUE)
 {
   project <- .project
   ws <- .ws
@@ -248,7 +249,10 @@ push_script_runtime.hb <- function(..., .project = guess_project(),
           rlang::abort(glue::glue("Theme of {theme} found multiple files: {bind(existFiles)}"))
         } else {
           numReal <- strx(existFiles, "[0-9]+")
-          if (numReal != num && sureThat("File exists: {existFiles}, rename to r.{num}_{theme}.r?")) {
+          if (is.null(confirm)) {
+            confirm <- sureThat("File exists: {existFiles}, rename to r.{num}_{theme}.r?")
+          }
+          if (numReal != num && confirm) {
             file.rename(file.path(path, existFiles), pathScript)
             return(file.path(pathScript))
           }
@@ -431,7 +435,7 @@ pkgVersion_remote <- function(pkgs, path = "remote",
 
 release_remote_package <- function(name = "union", 
   pkg_leader = "union/union.utils", pkg_clear = "union/union.publish",
-  from = "tmp/f3256d7e", to = ".", path = "remote", strip = TRUE)
+  from = "tmp/f3256d7e", to = ".", path = "remote", strip = FALSE)
 {
   if (!is_sshfs_mount(path)) {
     stop('!is_sshfs_mount(path).')
@@ -809,6 +813,8 @@ setup.huibang <- function() {
       dir_eqtl = "/data/nas2/database/MR/eQTL_vcf",
       plink_bfile = "/data/nas2/database/MR/g1000_eur/g1000_eur",
       db_drugbank = "/data/nas2/database/graphban/db/Grugbank/id2smiles.csv",
+      db_local_batman = "/data/nas2/database/graphban/db/BATMAN_TCM",
+      db_local_tcmsp = "/data/nas2/database/graphban/db/TCMSP",
       db_scenic = "/data/nas1/huanglichuang_OD/project/SCENIC",
       # db_scenic = "/data/nas2/database/SCENIC",
       pyscenic = "conda run -n pyscenic pyscenic",

@@ -1775,75 +1775,6 @@ touch_dir <- function(dir_output, check = TRUE) {
   return(dir_output)
 }
 
-pg_local_recode <- function() {
-  conda <- getOption("conda", "~/miniconda3")
-  lst <- list(
-    fusion = "~/fusion_twas",
-    ldscPython = "{conda}/bin/conda run -n ldsc python",
-    ldsc = "~/ldsc",
-    annovar = "~/disk_sda1/annovar",
-    vep = "~/ensembl-vep/vep",
-    vep_cache = "~/disk_sda1/.vep",
-    vina = "vina",
-    python = "{conda}/bin/python3",
-    conda = "{conda}/bin/conda",
-    conda_env = "{conda}/envs",
-    qiime = "{conda}/bin/conda run -n qiime2 qiime",
-    musitePython = "{conda}/bin/conda run -n musite python3",
-    musitePTM = "~/MusiteDeep_web/MusiteDeep/predict_multi_batch.py",
-    musitePTM2S = "~/MusiteDeep_web/PTM2S/ptm2Structure.py",
-    hobEnv = "hobpre",
-    hobPython = "{conda}/bin/conda run -n hobpre python",
-    hobPredict = "~/HOB/HOB_predict.py",
-    hobModel = "~/HOB/model",
-    hobExtra = "~/HOB/pca_hob.m",
-    dl = normalizePath("~/D-GCAN/DGCAN"),
-    dl_dataset = normalizePath("~/D-GCAN/dataset"),
-    dl_model = normalizePath("~/D-GCAN/DGCAN/model"),
-    scfeaPython = "{conda}/bin/conda run -n scFEA python",
-    scfea = "~/scFEA/src/scFEA.py",
-    scfea_db = "~/scFEA/data",
-    musiteModel = normalizePath("~/MusiteDeep_web/MusiteDeep/models"),
-    mk_prepare_ligand.py = "mk_prepare_ligand.py",
-    mk_prepare_receptor.py = "mk_prepare_receptor.py",
-    prepare_receptor = "prepare_receptor",
-    prepare_gpf.py = "prepare_gpf.py",
-    autogrid4 = "autogrid4",
-    scsaEnv = "scsa",
-    scsa = "{conda}/bin/conda run -n scsa python3 ~/SCSA/SCSA.py",
-    scsa_db = "~/SCSA/whole_v2.db",
-    pymol = "/usr/bin/python3 -m pymol",
-    # sirius = .prefix("sirius/bin/sirius", "op"),
-    obgen = "obgen"
-  )
-  envir <- environment()
-  lapply(lst, glue::glue, .envir = envir)
-}
-
-pg_remote_recode <- function() {
-  conda_remote <- getOption("conda_remote", "~/miniconda3")
-  lst <- list(
-    # vina = "{conda_remote}/bin/conda run -n vina vina",
-    vina = "vina",
-    qiime = "{conda_remote}/bin/conda run -n qiime2 qiime",
-    fastp = "{conda_remote}/bin/conda run -n base fastp",
-    bcftools = "{conda_remote}/bin/conda run -n base bcftools",
-    elprep = "{conda_remote}/bin/conda run -n base elprep",
-    # biobakery_workflows = "{conda_remote}/bin/conda run -n biobakery biobakery_workflows",
-    bowtie2 = "{conda_remote}/bin/conda run -n base bowtie2",
-    samtools = "{conda_remote}/bin/conda run -n base samtools",
-    metaphlan = "{conda_remote}/bin/conda run -n mpa metaphlan",
-    Rscript = "{conda_remote}/bin/conda run -n r4-base Rscript",
-    merge_metaphlan_tables.py = "{conda_remote}/bin/conda run -n mpa merge_metaphlan_tables.py",
-    sirius = "~/operation/sirius/bin/sirius",
-    scfeaPython = "{conda_remote}/bin/conda run -n scFEA python",
-    scfea = "~/scFEA/src/scFEA.py",
-    scfea_db = "~/scFEA/data"
-  )
-  envir <- environment()
-  lapply(lst, glue::glue, .envir = envir)
-}
-
 #' @exportMethod object
 setMethod("object", signature = c(x = "job"),
   function(x){
@@ -1965,7 +1896,7 @@ set_lab_legend <- function(object, lab, legend = lab, labs = NULL, ...) {
     }
   }
   object <- .set_lab(object, lab, labs)
-  object <- setLegend(object, legend)
+  object <- setLegend(object, legend, ...)
   object
 }
 

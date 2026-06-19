@@ -856,4 +856,449 @@ plot_volcano_facet <- function(top_table,
   p
 }
 
+pg_local_recode <- function() {
+  conda <- getOption("conda", "~/miniconda3")
+  lst <- list(
+    fusion = "~/fusion_twas",
+    ldscPython = "{conda}/bin/conda run -n ldsc python",
+    ldsc = "~/ldsc",
+    annovar = "~/disk_sda1/annovar",
+    vep = "~/ensembl-vep/vep",
+    vep_cache = "~/disk_sda1/.vep",
+    python = "{conda}/bin/python3",
+    conda = "{conda}/bin/conda",
+    conda_env = "{conda}/envs",
+    qiime = "{conda}/bin/conda run -n qiime2 qiime",
+    musitePython = "{conda}/bin/conda run -n musite python3",
+    musitePTM = "~/MusiteDeep_web/MusiteDeep/predict_multi_batch.py",
+    musitePTM2S = "~/MusiteDeep_web/PTM2S/ptm2Structure.py",
+    hobEnv = "hobpre",
+    hobPython = "{conda}/bin/conda run -n hobpre python",
+    hobPredict = "~/HOB/HOB_predict.py",
+    hobModel = "~/HOB/model",
+    hobExtra = "~/HOB/pca_hob.m",
+    dl = normalizePath("~/D-GCAN/DGCAN", mustWork = FALSE),
+    dl_dataset = normalizePath("~/D-GCAN/dataset", mustWork = FALSE),
+    dl_model = normalizePath("~/D-GCAN/DGCAN/model", mustWork = FALSE),
+    scfeaPython = "{conda}/bin/conda run -n scFEA python",
+    scfea = "~/scFEA/src/scFEA.py",
+    scfea_db = "~/scFEA/data",
+    musiteModel = normalizePath("~/MusiteDeep_web/MusiteDeep/models", mustWork = FALSE),
+    vina = "vina",
+    docking_python = "conda run -n docking python",
+    mk_prepare_ligand.py = "conda run -n docking mk_prepare_ligand.py",
+    mk_prepare_receptor.py = "conda run -n docking mk_prepare_receptor.py",
+    prepare_receptor = "~/operation/ADFRsuite_x86_64Linux_1.0/bin/prepare_receptor",
+    prepare_gpf.py = "~/operation/ADFRsuite_x86_64Linux_1.0/bin/pythonsh ~/autodock_vina/example/autodock_scripts/prepare_gpf.py",
+    autogrid4 = "~/operation/ADFRsuite_x86_64Linux_1.0/bin/autogrid4",
+    pymol = "QT_QPA_PLATFORM=xcb pymol",
+    scsaEnv = "scsa",
+    scsa = "{conda}/bin/conda run -n scsa python3 ~/SCSA/SCSA.py",
+    scsa_db = "~/SCSA/whole_v2.db",
+    # sirius = .prefix("sirius/bin/sirius", "op"),
+    obgen = "obgen"
+  )
+  envir <- environment()
+  lapply(lst, glue::glue, .envir = envir)
+}
 
+pg_remote_recode <- function() {
+  conda_remote <- getOption("conda_remote", "~/miniconda3")
+  lst <- list(
+    # vina = "{conda_remote}/bin/conda run -n vina vina",
+    vina = "vina",
+    qiime = "{conda_remote}/bin/conda run -n qiime2 qiime",
+    fastp = "{conda_remote}/bin/conda run -n base fastp",
+    bcftools = "{conda_remote}/bin/conda run -n base bcftools",
+    elprep = "{conda_remote}/bin/conda run -n base elprep",
+    # biobakery_workflows = "{conda_remote}/bin/conda run -n biobakery biobakery_workflows",
+    bowtie2 = "{conda_remote}/bin/conda run -n base bowtie2",
+    samtools = "{conda_remote}/bin/conda run -n base samtools",
+    metaphlan = "{conda_remote}/bin/conda run -n mpa metaphlan",
+    Rscript = "{conda_remote}/bin/conda run -n r4-base Rscript",
+    merge_metaphlan_tables.py = "{conda_remote}/bin/conda run -n mpa merge_metaphlan_tables.py",
+    sirius = "~/operation/sirius/bin/sirius",
+    scfeaPython = "{conda_remote}/bin/conda run -n scFEA python",
+    scfea = "~/scFEA/src/scFEA.py",
+    scfea_db = "~/scFEA/data"
+  )
+  envir <- environment()
+  lapply(lst, glue::glue, .envir = envir)
+}
+
+diagnose_object_links <- function(x,
+  max_depth = 4L,
+  inspect_attributes = TRUE,
+  inspect_env = c("record", "children", "none"),
+  skip_env_kinds = c("namespace", "package", "global", "base", "empty"),
+  skip_attr_names = c("names", "dim", "dimnames", "class", "row.names", "levels"),
+  max_env_bindings = 50L,
+  max_children_per_node = Inf,
+  max_nodes = 5000L,
+  calc_serialize = FALSE,
+  serialize_depth = 2L)
+{
+  inspect_env <- match.arg(inspect_env)
+  has_lobstr <- base::requireNamespace("lobstr", quietly = TRUE)
+
+  .human_size <- function(n) {
+    if (length(n) == 0L || is.na(n)) {
+      return(NA_character_)
+    }
+    units <- c("B", "KB", "MB", "GB", "TB")
+    n2 <- as.numeric(n)
+    idx <- 1L
+    while (n2 >= 1024 && idx < length(units)) {
+      n2 <- n2 / 1024
+      idx <- idx + 1L
+    }
+    paste0(format(round(n2, 2L), nsmall = 2L), " ", units[[idx]])
+  }
+
+  .safe_object_size <- function(obj) {
+    res <- try(as.numeric(utils::object.size(obj)), silent = TRUE)
+    if (inherits(res, "try-error")) {
+      return(NA_real_)
+    }
+    res
+  }
+
+  .safe_obj_size <- function(obj) {
+    if (!has_lobstr) {
+      return(NA_real_)
+    }
+    res <- try(as.numeric(lobstr::obj_size(obj)), silent = TRUE)
+    if (inherits(res, "try-error")) {
+      return(NA_real_)
+    }
+    res
+  }
+
+  .safe_addr <- function(obj) {
+    if (!has_lobstr) {
+      return(NA_character_)
+    }
+    res <- try(as.character(lobstr::obj_addr(obj)), silent = TRUE)
+    if (inherits(res, "try-error")) {
+      return(NA_character_)
+    }
+    res
+  }
+
+  .short_class <- function(obj) {
+    cls <- try(class(obj), silent = TRUE)
+    if (inherits(cls, "try-error") || length(cls) == 0L) {
+      return(NA_character_)
+    }
+    paste(cls, collapse = "/")
+  }
+
+  .env_kind <- function(env) {
+    if (!is.environment(env)) {
+      return(NA_character_)
+    }
+    if (identical(env, emptyenv())) {
+      return("empty")
+    }
+    if (identical(env, globalenv())) {
+      return("global")
+    }
+    if (identical(env, baseenv())) {
+      return("base")
+    }
+    env_name <- environmentName(env)
+    if (grepl("^package:", env_name)) {
+      return("package")
+    }
+    if (base::isNamespace(env) || grepl("^namespace:", env_name)) {
+      return("namespace")
+    }
+    "ordinary"
+  }
+
+  .env_label <- function(env) {
+    if (!is.environment(env)) {
+      return(NA_character_)
+    }
+    env_name <- environmentName(env)
+    if (!identical(env_name, "")) {
+      return(env_name)
+    }
+    paste0("<", .env_kind(env), "_env>")
+  }
+
+  .safe_serialize_size <- function(obj, depth) {
+    if (!isTRUE(calc_serialize) || depth > serialize_depth) {
+      return(NA_real_)
+    }
+    if (is.environment(obj) && .env_kind(obj) %in% skip_env_kinds) {
+      return(NA_real_)
+    }
+    res <- try(length(serialize(obj, NULL, xdr = FALSE)), silent = TRUE)
+    if (inherits(res, "try-error")) {
+      return(NA_real_)
+    }
+    as.numeric(res)
+  }
+
+  .path_list <- function(parent, nm, idx) {
+    if (!is.null(nm) && !is.na(nm) && nzchar(nm)) {
+      if (grepl("^[.A-Za-z][.A-Za-z0-9_]*$", nm)) {
+        return(paste0(parent, "$", nm))
+      }
+      return(paste0(parent, "[[\"", nm, "\"]]"))
+    }
+    paste0(parent, "[[", idx, "]]")
+  }
+
+  .path_slot <- function(parent, nm) {
+    paste0(parent, "@", nm)
+  }
+
+  .path_attr <- function(parent, nm) {
+    paste0(parent, " attr(", nm, ")")
+  }
+
+  .get_children <- function(obj, path, depth) {
+    if (depth >= max_depth) {
+      return(list())
+    }
+
+    out <- list()
+
+    if (methods::is(obj, "function") && !identical(inspect_env, "none")) {
+      env <- environment(obj)
+      out[[length(out) + 1L]] <- list(
+        path = paste0(path, " <closure_env>"),
+        value = env
+      )
+    }
+
+    if (is.environment(obj) && identical(inspect_env, "children")) {
+      kind <- .env_kind(obj)
+      if (!(kind %in% skip_env_kinds)) {
+        nms <- try(ls(envir = obj, all.names = TRUE), silent = TRUE)
+        if (!inherits(nms, "try-error") && length(nms) > 0L) {
+          nms <- utils::head(nms, max_env_bindings)
+          for (nm in nms) {
+            is_active <- try(bindingIsActive(nm, obj), silent = TRUE)
+            if (inherits(is_active, "try-error") || isTRUE(is_active)) {
+              next
+            }
+            val <- try(get(nm, envir = obj, inherits = FALSE), silent = TRUE)
+            if (inherits(val, "try-error")) {
+              next
+            }
+            out[[length(out) + 1L]] <- list(
+              path = paste0(path, "$", nm),
+              value = val
+            )
+          }
+        }
+      }
+    }
+
+    if (isS4(obj)) {
+      slots <- slotNames(obj)
+      if (length(slots) > 0L) {
+        slots <- utils::head(slots, max_children_per_node)
+        for (nm in slots) {
+          val <- try(methods::slot(obj, nm), silent = TRUE)
+          if (inherits(val, "try-error")) {
+            next
+          }
+          out[[length(out) + 1L]] <- list(
+            path = .path_slot(path, nm),
+            value = val
+          )
+        }
+      }
+    } else if (is.list(obj) || is.pairlist(obj)) {
+      nms <- names(obj)
+      n <- length(obj)
+      if (is.infinite(max_children_per_node)) {
+        idx <- seq_len(n)
+      } else {
+        idx <- seq_len(min(n, max_children_per_node))
+      }
+      for (i in idx) {
+        nm <- NA_character_
+        if (!is.null(nms) && length(nms) >= i) {
+          nm <- nms[[i]]
+        }
+        out[[length(out) + 1L]] <- list(
+          path = .path_list(path, nm, i),
+          value = obj[[i]]
+        )
+      }
+    }
+
+    if (isTRUE(inspect_attributes) && !isS4(obj)) {
+      attrs <- try(attributes(obj), silent = TRUE)
+      if (!inherits(attrs, "try-error") && length(attrs) > 0L) {
+        attr_nms <- setdiff(names(attrs), skip_attr_names)
+        if (length(attr_nms) > 0L) {
+          attr_nms <- utils::head(attr_nms, max_children_per_node)
+          for (nm in attr_nms) {
+            out[[length(out) + 1L]] <- list(
+              path = .path_attr(path, nm),
+              value = attrs[[nm]]
+            )
+          }
+        }
+      }
+    }
+
+    out
+  }
+
+  rows <- list()
+  visited <- new.env(parent = emptyenv())
+  reached_limit <- FALSE
+
+  .walk <- function(obj, path, depth) {
+    if (length(rows) >= max_nodes) {
+      reached_limit <<- TRUE
+      return(invisible(NULL))
+    }
+
+    addr <- .safe_addr(obj)
+    key <- NA_character_
+
+    is_container <- is.environment(obj) ||
+      is.function(obj) ||
+      is.list(obj) ||
+      isS4(obj) ||
+      !is.null(attributes(obj))
+
+    if (isTRUE(is_container) && !is.na(addr)) {
+      key <- paste0(typeof(obj), ":", addr)
+    }
+
+    duplicated_ref <- FALSE
+    if (!is.na(key)) {
+      if (exists(key, envir = visited, inherits = FALSE)) {
+        duplicated_ref <- TRUE
+      } else {
+        assign(key, TRUE, envir = visited)
+      }
+    }
+
+    env_kind <- if (is.environment(obj)) .env_kind(obj) else NA_character_
+    env_n_objects <- NA_integer_
+    if (is.environment(obj) && !(env_kind %in% skip_env_kinds)) {
+      nms <- try(ls(envir = obj, all.names = TRUE), silent = TRUE)
+      if (!inherits(nms, "try-error")) {
+        env_n_objects <- length(nms)
+      }
+    }
+
+    object_size_bytes <- .safe_object_size(obj)
+    true_size_bytes <- .safe_obj_size(obj)
+    serialize_bytes <- .safe_serialize_size(obj, depth)
+
+    rows[[length(rows) + 1L]] <<- list(
+      path = path,
+      depth = depth,
+      type = typeof(obj),
+      class = .short_class(obj),
+      object_size_bytes = object_size_bytes,
+      object_size = .human_size(object_size_bytes),
+      true_size_bytes = true_size_bytes,
+      true_size = .human_size(true_size_bytes),
+      serialize_bytes = serialize_bytes,
+      serialize_size = .human_size(serialize_bytes),
+      addr = addr,
+      duplicated_ref = duplicated_ref,
+      is_environment = is.environment(obj),
+      is_function = is.function(obj),
+      is_s4 = isS4(obj),
+      env_kind = env_kind,
+      env_label = if (is.environment(obj)) .env_label(obj) else NA_character_,
+      env_n_objects = env_n_objects
+    )
+
+    if (isTRUE(duplicated_ref)) {
+      return(invisible(NULL))
+    }
+
+    children <- .get_children(obj, path, depth)
+    if (length(children) == 0L) {
+      return(invisible(NULL))
+    }
+
+    for (child in children) {
+      .walk(child$value, child$path, depth + 1L)
+    }
+
+    invisible(NULL)
+  }
+
+  .walk(x, "x", 0L)
+
+  detail <- do.call(
+    rbind,
+    lapply(rows, function(z) {
+      data.frame(
+        path = z$path,
+        depth = z$depth,
+        type = z$type,
+        class = z$class,
+        object_size_bytes = z$object_size_bytes,
+        object_size = z$object_size,
+        true_size_bytes = z$true_size_bytes,
+        true_size = z$true_size,
+        serialize_bytes = z$serialize_bytes,
+        serialize_size = z$serialize_size,
+        addr = z$addr,
+        duplicated_ref = z$duplicated_ref,
+        is_environment = z$is_environment,
+        is_function = z$is_function,
+        is_s4 = z$is_s4,
+        env_kind = z$env_kind,
+        env_label = z$env_label,
+        env_n_objects = z$env_n_objects,
+        stringsAsFactors = FALSE
+      )
+    })
+  )
+
+  size_rank <- detail
+  score_size <- size_rank$true_size_bytes
+  score_size[is.na(score_size)] <- size_rank$object_size_bytes[is.na(score_size)]
+  score_size[is.na(score_size)] <- -Inf
+  size_rank <- size_rank[order(-score_size), , drop = FALSE]
+
+  env_refs <- detail[
+    detail$is_environment |
+      detail$is_function |
+      grepl("Environment|env|closure_env|quosure|quo|formula|plot_env",
+        detail$path,
+        ignore.case = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  serialize_rank <- detail
+  serialize_score <- serialize_rank$serialize_bytes
+  serialize_score[is.na(serialize_score)] <- -Inf
+  serialize_rank <- serialize_rank[order(-serialize_score), , drop = FALSE]
+
+  summary <- data.frame(
+    n_nodes = nrow(detail),
+    reached_max_nodes = reached_limit,
+    lobstr_available = has_lobstr,
+    root_object_size = .human_size(detail$object_size_bytes[[1L]]),
+    root_true_size = .human_size(detail$true_size_bytes[[1L]]),
+    root_serialize_size = .human_size(detail$serialize_bytes[[1L]]),
+    stringsAsFactors = FALSE
+  )
+
+  list(
+    summary = summary,
+    detail = detail,
+    top_size = utils::head(size_rank, 30L),
+    top_serialize = utils::head(serialize_rank, 30L),
+    env_refs = env_refs
+  )
+}

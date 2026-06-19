@@ -78,7 +78,13 @@ setMethod("step1", signature = c(x = "job_reactome"),
         )
       )
     }
+    if (!.reactome_gsa_available()) {
+      warning("ReactomeGSA remote service is currently unavailable. ")
+    }
     object(x) <- ReactomeGSA::perform_reactome_analysis(object(x), verbose = TRUE)
+    if (is.null(object(x))) {
+      stop('is.null(object(x)), failed to receive data.')
+    }
     x <- methodAdd(x, "反应组基因集分析（Reactome Gene Set Analysis，ReactomeGSA）是 Reactome 知识库旗下的多组学通路分析工具，可通过 Camera、PADOG 等方法将单细胞数据转化为通路水平信息，通过计算细胞集群平均表达量实现通路富集分析，识别细胞功能特征，解析细胞异质性。")
     x <- methodAdd(x, "使用 R 包 `ReactomeGSA` ⟦pkgInfo('ReactomeGSA')⟧ 基于基因表达量对 Reactome 通路进行“活性评分”。")
     return(x)
@@ -182,6 +188,37 @@ setMethod("step3", signature = c(x = "job_reactome"),
     x <- plotsAdd(x, p.hps)
     return(x)
   })
+
+.reactome_gsa_available <- function(verbose = TRUE)
+{
+  res <- tryCatch(
+    {
+      ReactomeGSA::get_reactome_methods(
+        print_methods = FALSE,
+        return_result = TRUE
+      )
+    },
+    error = function(e) {
+      if (isTRUE(verbose)) {
+        message("ReactomeGSA is not available: ", conditionMessage(e))
+      }
+      return(NULL)
+    }
+  )
+
+  if (is.null(res)) {
+    return(FALSE)
+  }
+
+  if (!"name" %in% colnames(res)) {
+    if (isTRUE(verbose)) {
+      message("ReactomeGSA returned an unexpected method table.")
+    }
+    return(FALSE)
+  }
+
+  return(nrow(res) > 0L)
+}
 
 heatmap_with_group <- function(.data, .row, .column, 
   .value, ..., group_by, split_by,

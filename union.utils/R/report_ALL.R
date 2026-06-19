@@ -435,6 +435,9 @@ expect_package <- function(pkg, version, prio_lib = getOption("prio_lib")) {
   if (!requireNamespace(pkg)) {
     stop('!requireNamespace(pkg)')
   }
+  if (missing(version)) {
+    return()
+  }
   if (packageVersion(pkg) >= version) {
     message("Pacakge ", pkg, " as expected.")
     return()
@@ -641,7 +644,10 @@ methodDefinition_as_setMethod_call <- function(m) {
     res <- .expr_resolve_S4(funCall, env_class = env_class)
     f <- try(selectMethod(res$callArgs$fun, signature = res$signature))
     if (inherits(f, "try-error")) {
-      stop(glue::glue("`{rlang::expr_text(funCall)}`: Can not found method `{res$fname}` for signature ..."))
+      message("----------------")
+      print(funCall)
+      message("----------------")
+      stop(glue::glue("`{rlang::expr_text(funCall)}`: Can not found method `{res$fname}` for signature: {res$signature}"))
     }
     mcall <- methodDefinition_as_setMethod_call(f)
     if (strip) {
@@ -659,7 +665,8 @@ methodDefinition_as_setMethod_call <- function(m) {
   }
 }
 
-.guess_class_from_lang <- function(lang, pattern = "job_[a-zA-Z0-9_]+", env_class = NULL)
+.guess_class_from_lang <- function(lang, pattern = "job_[a-zA-Z0-9_]+", 
+  env_class = NULL)
 {
   if (is(lang, "name")) {
     from <- rlang::expr_text(lang)
@@ -707,7 +714,7 @@ methodDefinition_as_setMethod_call <- function(m) {
     } else if (grpl(code, "qs::qread.*rds_jobSave")) {
       fun_matchClass(code, "qs")
     } else {
-      toolSub <- c("getsub")
+      toolSub <- c("getsub", paste0("step", 1:9))
       for (i in toolSub) {
         if (grpl(code, i) && identical(lang[[1]], as.name(i))) {
           fromJob <- rlang::expr_text(lang[[2]])

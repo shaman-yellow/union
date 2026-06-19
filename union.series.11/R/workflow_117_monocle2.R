@@ -84,7 +84,7 @@ setMethod("asjob_monocle2", signature = c(x = "job_seurat"),
     x$VariableFeatures <- VariableFeatures
     x$group.by <- group.by
     x$diff_genes <- diff_genes
-    x <- methodAdd(x, "基于 **Monocle2** 的单细胞转录组拟时序分析，本研究旨在利用其核心的反转图嵌入（Reversed Graph Embedding）算法，构建细胞分化或发育过程的动态轨迹，以解析细胞在连续生物学过程中的状态转换与谱系分支决策。通过识别随拟时间变化的关键基因，揭示驱动细胞命运决定的潜在分子调控机制。")
+    x <- methodAdd(x, "基于 **Monocle2** 的单细胞转录组拟时序分析，本研究利用其核心的反转图嵌入（Reversed Graph Embedding）算法，在低维空间中重构所选细胞的连续转录状态轨迹。Monocle2 可用于描述复杂生物过程中的细胞状态转换和分支结构（PMID: 28825705）；拟时序分析也可用于研究不同疾病状态或实验条件相关的连续转录变化，而不必局限于严格的发育分化过程（PMID: 37949861）。因此，本流程将根据 ordering genes 的来源对轨迹进行解释：若使用高变基因，则主要反映所选细胞的无监督转录异质性；若使用分组差异基因，则主要反映分组或疾病状态相关的连续转录状态谱。")
     return(x)
   })
 
@@ -94,11 +94,14 @@ setMethod("step0", signature = c(x = "job_monocle2"),
   })
 
 setMethod("step1", signature = c(x = "job_monocle2"),
-  function(x){
+  function(x, not_run = FALSE)
+  {
     step_message("Detect features.")
-    object(x) <- e(BiocGenerics::estimateSizeFactors(object(x)))
-    object(x) <- e(BiocGenerics::estimateDispersions(object(x)))
-    object(x) <- e(monocle::detectGenes(object(x), min_expr = 1))
+    if (!not_run) {
+      object(x) <- e(BiocGenerics::estimateSizeFactors(object(x)))
+      object(x) <- e(BiocGenerics::estimateDispersions(object(x)))
+      object(x) <- e(monocle::detectGenes(object(x), min_expr = 1))
+    }
     x <- methodAdd(x, "以 R 包 `monocle` ⟦pkgInfo('monocle')⟧ 对所选细胞进行细胞拟时序轨迹分析。")
     return(x)
   })
@@ -106,20 +109,25 @@ setMethod("step1", signature = c(x = "job_monocle2"),
 setMethod("step2", signature = c(x = "job_monocle2"),
   function(x, mode = c("diff", "var"), top = 300,
     try_sig = TRUE, cut.fc = .5, use.p = c("p_val", "p_val_adj"), 
-    group = "group")
+    group = "group", not_run = FALSE)
   {
     step_message("DDRTree.")
     require(DDRTree)
     use.p <- match.arg(use.p)
     if (!missing(mode) && length(mode) > 1) {
       order.by <- mode
+      x$order_mode <- "custom_genes"
+      x$order_by <- order.by
+      x <- methodAdd(x, "使用外部指定的 {length(order.by)} 个 ordering genes，并通过 `monocle::setOrderingFilter` 对细胞轨迹排序。该模式下拟时序反映指定基因集所代表的生物学过程或细胞状态连续变化，需结合输入基因集的来源和功能进行解释。")
       # message(glue::glue("Input genes will be `head` by `top` number."))
       # order.by <- head(order.by, n = top)
     } else {
       mode <- match.arg(mode)
       if (mode == "var") {
         order.by <- x$VariableFeatures
-        x <- methodAdd(x, "以 `Seurat::FindVariableFeatures` 选取 {length(order.by)} 个高变基因，以这些高变基因使用 `monocle::setOrderingFilter` 对细胞轨迹排序。")
+        x$order_mode <- "variable_features"
+        x$order_by <- order.by
+        x <- methodAdd(x, "以 `Seurat::FindVariableFeatures` 选取 {length(order.by)} 个高变基因，并使用 `monocle::setOrderingFilter` 对细胞轨迹排序。该模式属于无监督 ordering gene 策略，主要用于展示所选细胞内部由高变表达程序驱动的整体转录异质性和潜在状态连续谱，适合探索细胞亚型或未知状态变化。")
       } else {
         # use variable features, or use DEGs with control vs model?
         # [@An_atlas_of_epi_Han_G_2024] 38418883
@@ -129,7 +137,7 @@ setMethod("step2", signature = c(x = "job_monocle2"),
           snap_ex <- ""
           if (try_sig) {
             dataSig <- dplyr::filter(
-              data, abs(avg_log2FC) > .5, !!rlang::sym(use.p) < .05
+              data, abs(avg_log2FC) > cut.fc, !!rlang::sym(use.p) < .05
             )
             if (nrow(dataSig) < top) {
               top <- nrow(dataSig)
@@ -140,35 +148,39 @@ setMethod("step2", signature = c(x = "job_monocle2"),
                 dataSig, dplyr::desc(abs(avg_log2FC)), !!rlang::sym(use.p)
               )
             }
-            snap_ex <- glue::glue("(⟦mark$blue('{detail(use.p)} &lt; 0.05, |avg_log2FC| &gt; cut.fc')⟧)")
+            snap_ex <- glue::glue("(⟦mark$blue('{detail(use.p)} &lt; 0.05, |avg_log2FC| &gt; {cut.fc}')⟧)")
             data <- dataSig
           }
           order.by <- head(rownames(data), n = top)
+          x$order_mode <- "differential_genes"
+          x$order_by <- order.by
           if (any(!order.by %in% rownames(object(x)))) {
             stop('any(!order.by %in% rownames(object(x))).')
           }
-          x <- methodAdd(x, "参考已发表文献{cite_show('An_atlas_of_epi_Han_G_2024')}(PMID: 38418883)，根据差异表达基因排序选取 Top {top} ({snap(x$diff_genes)}){snap_ex}，进而以 `monocle::setOrderingFilter` 对细胞轨迹排序。")
+          x <- methodAdd(x, "参考已发表单细胞轨迹分析中使用差异表达基因作为 ordering genes 的策略{cite_show('An_atlas_of_epi_Han_G_2024')}(PMID: 38418883)，本研究根据分组差异表达基因排序选取 Top {top} ({snap(x$diff_genes)}){snap_ex}，并使用 `monocle::setOrderingFilter` 对细胞轨迹排序。该模式属于分组/疾病状态导向的 ordering gene 策略，更适合解析该组间比较相关转录状态在所选细胞中的连续分布；因此所得拟时序主要解释为分组相关细胞状态连续谱，而不直接等同于严格的发育分化方向。")
         } else {
           stop('!is.null(x$diff_genes).')
         }
       }
     }
-    object(x) <- e(monocle::setOrderingFilter(object(x), ordering_genes = order.by))
-    object(x) <- e(monocle::reduceDimension(object(x), reduction_method = "DDRTree"))
-    object(x) <- e(monocle::orderCells(object(x)))
+    if (!not_run) {
+      object(x) <- e(monocle::setOrderingFilter(object(x), ordering_genes = order.by))
+      object(x) <- e(monocle::reduceDimension(object(x), reduction_method = "DDRTree"))
+      object(x) <- e(monocle::orderCells(object(x)))
+    }
     return(x)
   })
 
 setMethod("step3", signature = c(x = "job_monocle2"),
   function(x, use = c("Pseudotime", "State", x$group.by), 
-    extra = "group", root = NULL)
+    extra = "group", root = NULL, not_run = FALSE)
   {
     step_message("Plot cell Trajectory")
     use <- c(use, extra)
     if (!is.character(use)) {
       stop('!is.character(use).')
     }
-    if (!is.null(root)) {
+    if (!is.null(root) && !not_run) {
       object(x) <- e(monocle::orderCells(object(x), root_state = root))
     }
     cli::cli_alert_info("monocle::plot_cell_trajectory")
@@ -182,10 +194,10 @@ setMethod("step3", signature = c(x = "job_monocle2"),
     message(glue::glue("Finished plot cell trajectory."))
     p.traj <- smart_wrap(lst, 5, max_ratio = 2)
     snaps <- c(
-      Pseudotime = "细胞发育时间的细胞轨迹图，不同颜色代表分化的早晚；",
-      State = "细胞分化的各个发育状态的细胞轨迹图，不同颜色代表细胞处于不同发育状态；",
-      cell = "不同细胞类型的细胞轨迹图，不同颜色代表细胞属于不同细胞类型；",
-      group = "不同分组的细胞轨迹图，不同颜色代表细胞属于不同样本分组。"
+      Pseudotime = "细胞拟时间连续状态轨迹图，不同颜色代表细胞在轨迹上的相对进程位置；",
+      State = "Monocle2 推断的轨迹状态图，不同颜色代表细胞处于不同轨迹状态或分支区域；",
+      cell = "不同细胞类型或细胞亚群的轨迹分布图，不同颜色代表不同细胞注释；",
+      group = "不同样本分组的轨迹分布图，不同颜色代表细胞所属分组。"
     )
     snaps <- snaps[ seq_along(use) ]
     snaps <- setNames(
@@ -196,12 +208,12 @@ setMethod("step3", signature = c(x = "job_monocle2"),
       p.traj,
       glue::glue("{x@sig} cell trajectories"),
       glue::glue(
-        "细胞拟时轨迹图。|||横纵坐标分别为拟时序的两个纬度，图中每个圆点代表一个细胞，黑色的圆圈内的数字代表轨迹分析中确定不同细胞状态的节点。从左到右，从上到下，各子图分别为：{snaps}"
+        "细胞拟时轨迹图。|||横纵坐标分别为拟时序降维后的两个维度，图中每个圆点代表一个细胞，黑色圆圈内的数字代表 Monocle2 推断的轨迹状态节点。Pseudotime 表示细胞在所构建轨迹上的相对进程位置；其生物学方向取决于 root_state 设置及所选 ordering genes，需要结合细胞注释、分组信息和关键基因表达共同解释。从左到右、从上到下，各子图分别为：{snaps}"
       )
     )
     x$use <- use
     x <- plotsAdd(x, p.traj)
-    x <- methodAdd(x, "使用 `monocle::plot_cell_trajectory` 函数绘制细胞的拟时轨迹图。")
+    x <- methodAdd(x, "使用 `monocle::plot_cell_trajectory` 函数绘制细胞拟时轨迹图，并分别展示 Pseudotime、State、细胞注释及分组信息在轨迹空间中的分布。需要说明的是，Monocle2 计算的 Pseudotime 是沿重构轨迹的相对距离，若未明确指定或验证 root_state，其方向不应被直接解释为真实时间或严格分化顺序；在差异基因排序模式下，更适合解释为分组或疾病状态相关的连续转录状态变化。")
     return(x)
   })
 
@@ -265,7 +277,7 @@ setMethod("step4", signature = c(x = "job_monocle2"),
       glue::glue("基因在细胞轨迹图中的表达量变化|||横坐标为细胞的伪时间排序，纵轴表示基因的表达量，每一个点代表一个细胞，颜色代表图例所示的类型 ({use}) 。")
     )
     x <- plotsAdd(x, p.geneInPseudo)
-    x <- methodAdd(x, "使用 `monocle::plot_genes_in_pseudotime` 绘制 {snap(ref)} 在关键细胞中的伪时序表达水平变化。")
+    x <- methodAdd(x, "使用 `monocle::plot_genes_in_pseudotime` 绘制 {snap(ref)} 在所选细胞拟时序轨迹中的表达水平变化，用于观察基因是否沿连续转录状态呈现动态变化。")
     return(x)
   })
 
@@ -298,8 +310,8 @@ setMethod("step5", signature = c(x = "job_monocle2"),
       diff_test_pseudotime <- expect_local_data(
         "tmp", "monocle_diff", fun_cache, list(args), rerun = rerun
       )
-      x <- methodAdd(x, "以 `monocle::differentialGeneTest` 根据 Pseudotime 鉴定高变基因中 (n = {length(x$VariableFeatures)}) 随拟时间动态变化且相关的基因。")
-      x <- snapAdd(x, "根据 Pseudotime 一共鉴定到 {nrow(data)} (⟦mark$blue('qval &lt; 0.05')⟧) 个随时间轴变化的基因，并以热图展示{aref(p.hp)} (Top {length(genes)})。")
+      x <- methodAdd(x, "以 `monocle::differentialGeneTest` 根据 Pseudotime 鉴定高变基因中 (n = {length(x$VariableFeatures)}) 与拟时序连续状态相关的动态变化基因。")
+      x <- snapAdd(x, "根据 Pseudotime 一共鉴定到 {nrow(data)} (⟦mark$blue('qval &lt; 0.05')⟧) 个与拟时序连续状态相关的动态变化基因，并以热图展示{aref(p.hp)} (Top {length(genes)})。")
       diff_test_pseudotime <- tibble::as_tibble(diff_test_pseudotime)
       x$diff_test_pseudotime <- diff_test_pseudotime <- dplyr::arrange(diff_test_pseudotime, qval)
       data <- dplyr::filter(diff_test_pseudotime, qval < .05)
@@ -369,13 +381,13 @@ setMethod("step5", signature = c(x = "job_monocle2"),
       p.hp <- set_lab_legend(
         p.hp,
         glue::glue("{x@sig} pseudotime genes in heatmap with branch"),
-        glue::glue("Monocle 拟时分析热图|||拟时间分支节点上的基因表达变化。图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。")
+        glue::glue("Monocle 拟时分析热图|||拟时间分支节点上的基因表达变化。图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。该热图用于展示基因沿连续细胞状态或分支区域的表达动态，而不应单独解释为严格发育时间。")
       )
     } else {
       p.hp <- set_lab_legend(
         wrap(p.hp$gtable, 5, 8),
         glue::glue("{x@sig} pseudotime genes in heatmap"),
-        glue::glue("Monocle 拟时分析热图|||图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。")
+        glue::glue("Monocle 拟时分析热图|||图中每一行代表一个基因，每一列代表一个拟时序点，颜色表示基因表达水平（例如从蓝色低表达到红色高表达），通过聚类将具有相似表达变化模式的基因归入同一个 Cluster。该热图用于展示基因沿连续细胞状态的表达动态，而不应单独解释为严格发育时间。")
       )
     }
     x <- plotsAdd(x, p.hp)

@@ -152,17 +152,24 @@ setMethod("step2", signature = c(x = "job_seurat5n"),
       )
     } else {
       object(x) <- e(Seurat::NormalizeData(object(x)))
-      object(x) <- e(Seurat::FindVariableFeatures(object(x)))
+      object(x) <- e(
+        Seurat::FindVariableFeatures(object(x))
+      )
       object(x) <- e(Seurat::ScaleData(object(x)))
       x <- methodAdd(
         x, "执行标准 Seurat 分析工作流 (`NormalizeData`, `FindVariableFeatures`, `ScaleData`)。"
       )
-      p.varfeature <- e(Seurat::VariableFeaturePlot(object(x)))
-      p.varfeature <- set_lab_legend(
-        wrap(p.varfeature),
+      # p.varfeature <- e(Seurat::VariableFeaturePlot(object(x)))
+      p.varfeature <- seuFuns$plot_variable_features_clean(
+        object(x),
+        n_label = 20L
+      )
+      Terror <<- p.varfeature <- set_lab_legend(
+        wrap(p.varfeature, 5.5, 4),
         glue::glue("{x@sig} Variable Feature Plot"), #__REVISE__ set_lab_legend 2026-03-23_22:13:35
         glue::glue("高变基因图|||红色代表高变基因，横坐标为基因在所有细胞中的表达水平（log10对数值），纵坐标为基因在所有细胞中的表达水平的标准差，数值越大，表示该基因在细胞中的表达水平越不稳定。生物学差异（如细胞类型、状态等差异）通常会导致某些基因在不同细胞之间表现出较大变异，因此更有可能提供关于生物学现象的信息。") #__REVISE__ set_lab_legend 2026-03-23_22:15:27
       )
+      stop("...")
       x <- plotsAdd(x, p.varfeature)
     }
     object(x) <- e(Seurat::RunPCA(object(x)))
@@ -764,7 +771,192 @@ scFuns$make_10x_matrix_table <- function(dir_root)
 
 # ==========================================================================
 
-seuFuns <- new.env(parent = parent.frame())
+seuFuns <- new.env(parent = emptyenv())
+
+seuFuns$plot_variable_features_clean <- function(obj,
+  assay = NULL,
+  n_label = 10L,
+  label_by = c("top_y_variable", "variable_rank", "top_y_all"),
+  label_genes = NULL,
+  point_size = 0.75,
+  point_alpha = 0.85,
+  label_size = 3.2,
+  repel = TRUE,
+  non_variable_color = "black",
+  variable_color = "red",
+  label_color = "black")
+{
+  label_by <- match.arg(label_by)
+
+  if (is.null(assay)) {
+    assay <- Seurat::DefaultAssay(obj)
+  }
+
+  p0 <- Seurat::VariableFeaturePlot(obj, assay = assay)
+  data_plot <- p0$data
+
+  vec_feature <- rownames(data_plot)
+
+  if (is.null(vec_feature) ||
+      all(vec_feature %in% as.character(seq_len(nrow(data_plot))))) {
+    stop("Feature names were not found in rownames(p$data).")
+  }
+
+  data_plot$feature <- vec_feature
+
+  x_col <- "mean"
+  y_col <- "variance.standardized"
+  status_col <- "colors"
+
+  if (!x_col %in% colnames(data_plot)) {
+    stop("'mean' was not found in VariableFeaturePlot data.")
+  }
+  if (!y_col %in% colnames(data_plot)) {
+    stop("'variance.standardized' was not found in VariableFeaturePlot data.")
+  }
+  if (!status_col %in% colnames(data_plot)) {
+    stop("'colors' was not found in VariableFeaturePlot data.")
+  }
+
+  data_plot[[status_col]] <- as.character(data_plot[[status_col]])
+  data_plot[[status_col]][is.na(data_plot[[status_col]])] <- "no"
+  data_plot[[status_col]][!data_plot[[status_col]] %in% c("yes", "no")] <- "no"
+
+  idx_keep <- is.finite(data_plot[[x_col]]) &
+    is.finite(data_plot[[y_col]]) &
+    data_plot[[x_col]] > 0
+
+  data_plot <- data_plot[idx_keep, , drop = FALSE]
+
+  data_non <- data_plot[data_plot[[status_col]] == "no", , drop = FALSE]
+  data_var <- data_plot[data_plot[[status_col]] == "yes", , drop = FALSE]
+
+  n_non <- nrow(data_non)
+  n_var <- nrow(data_var)
+
+  if (!is.null(label_genes)) {
+    vec_label <- intersect(label_genes, data_plot$feature)
+  } else if (label_by == "variable_rank") {
+    vec_variable <- Seurat::VariableFeatures(obj, assay = assay)
+    vec_label <- intersect(vec_variable, data_plot$feature)
+    vec_label <- utils::head(vec_label, n_label)
+  } else if (label_by == "top_y_all") {
+    data_label <- data_plot[
+      order(data_plot[[y_col]], decreasing = TRUE),
+      ,
+      drop = FALSE
+    ]
+    vec_label <- utils::head(data_label$feature, n_label)
+  } else {
+    data_label <- data_var[
+      order(data_var[[y_col]], decreasing = TRUE),
+      ,
+      drop = FALSE
+    ]
+    vec_label <- utils::head(data_label$feature, n_label)
+  }
+
+  data_label <- data_plot[data_plot$feature %in% vec_label, , drop = FALSE]
+
+  p <- ggplot2::ggplot() +
+    ggplot2::geom_point(
+      data = data_non,
+      ggplot2::aes(
+        x = .data[[x_col]],
+        y = .data[[y_col]]
+      ),
+      colour = non_variable_color,
+      size = point_size,
+      alpha = point_alpha
+    ) +
+    ggplot2::geom_point(
+      data = data_var,
+      ggplot2::aes(
+        x = .data[[x_col]],
+        y = .data[[y_col]]
+      ),
+      colour = variable_color,
+      size = point_size,
+      alpha = point_alpha
+    ) +
+    ggplot2::scale_x_log10() +
+    ggplot2::labs(
+      x = "Average Expression",
+      y = "Standardized Variance"
+    ) +
+    ggplot2::theme_classic() +
+    ggplot2::theme(
+      legend.position = "right"
+    )
+
+  data_legend <- data.frame(
+    x = c(NA_real_, NA_real_),
+    y = c(NA_real_, NA_real_),
+    status = factor(
+      c("Non-variable", "Variable"),
+      levels = c("Non-variable", "Variable")
+    )
+  )
+
+  p <- p +
+    ggplot2::geom_point(
+      data = data_legend,
+      ggplot2::aes(x = x, y = y, colour = status),
+      size = point_size,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::scale_colour_manual(
+      values = c(
+        "Non-variable" = non_variable_color,
+        "Variable" = variable_color
+      ),
+      labels = c(
+        paste0("Non-variable count: ", n_non),
+        paste0("Variable count: ", n_var)
+      ),
+      name = NULL,
+      drop = FALSE
+    )
+
+  if (nrow(data_label) > 0L) {
+    if (repel && requireNamespace("ggrepel", quietly = TRUE)) {
+      p <- p +
+        ggrepel::geom_text_repel(
+          data = data_label,
+          ggplot2::aes(
+            x = .data[[x_col]],
+            y = .data[[y_col]],
+            label = feature
+          ),
+          size = label_size,
+          colour = label_color,
+          segment.colour = "grey40",
+          min.segment.length = 0,
+          max.overlaps = Inf,
+          show.legend = FALSE,
+          inherit.aes = FALSE
+        )
+    } else {
+      p <- p +
+        ggplot2::geom_text(
+          data = data_label,
+          ggplot2::aes(
+            x = .data[[x_col]],
+            y = .data[[y_col]],
+            label = feature
+          ),
+          size = label_size,
+          colour = label_color,
+          vjust = -0.4,
+          check_overlap = TRUE,
+          show.legend = FALSE,
+          inherit.aes = FALSE
+        )
+    }
+  }
+
+  p
+}
 
 seuFuns$.resolve_integrated_reduction_seurat <- function(object, use = NULL)
 {

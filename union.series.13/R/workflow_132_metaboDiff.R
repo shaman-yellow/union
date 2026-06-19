@@ -111,9 +111,9 @@ setMethod("step1", signature = c(x = "job_metaboDiff"),
       none = "本步骤未进行缺失值填补。"
     )
 
-    x <- methodAdd(x, glue::glue(
+    x <- methodAdd(x,
       "首先对代谢组峰强度矩阵进行预处理 (主要使用 R 包 `stats` ⟦pkgInfo('stats')⟧)。以样本为行、代谢物为列构建定量矩阵后，计算每个代谢物在全部样本中的缺失比例，并剔除缺失比例高于 {missing_rate_cutoff} 的代谢物。{text_impute} 同时，剔除方差为 0 的代谢物，以避免其影响后续统计建模。{text_log} {text_scale} 预处理前共纳入 {n_sample} 个样本和 {n_feature_raw} 个代谢物特征，预处理后保留 {n_feature_processed} 个代谢物特征，共移除 {n_removed} 个特征；原始矩阵中缺失值数量为 {n_missing_raw}，预处理后缺失值数量为 {n_missing_processed}。"
-    ))
+    )
 
     return(x)
   })
@@ -191,9 +191,9 @@ setMethod("step2", signature = c(x = "job_metaboDiff"),
     pc1_var <- round(data_pca_var$variance_percent[1L], 2L)
     pc2_var <- round(data_pca_var$variance_percent[2L], 2L)
 
-    x <- methodAdd(x, glue::glue(
+    x <- methodAdd(x,
       "基于预处理后的代谢物定量矩阵，以 R 包 `stats` ⟦pkgInfo('stats')⟧ 采用主成分分析（Principal Component Analysis，PCA）对样本整体代谢谱分布进行无监督降维分析。PCA 不引入分组信息，主要用于观察样本间整体变异趋势、潜在离群样本及不同分组样本在主要变异轴上的分布情况。本分析使用 `{expr_name}` 矩阵进行 PCA，由于数据已在预处理步骤中完成 log2 转换和尺度校正，本步骤未额外进行中心化或标准化处理。前两个主成分 PC1 和 PC2 分别解释 {pc1_var}% 和 {pc2_var}% 的总体变异。"
-    ))
+    )
 
     p.pca <- obj$plot_pca
     p.pca <- set_lab_legend(
@@ -231,9 +231,9 @@ setMethod("step2", signature = c(x = "job_metaboDiff"),
     plsda_pr2y <- round(data_plsda_sum$pR2Y[1L], 4L)
     plsda_pq2 <- round(data_plsda_sum$pQ2[1L], 4L)
 
-    x <- methodAdd(x, glue::glue(
+    x <- methodAdd(x,
       "以 R 包 `ropls` ⟦pkgInfo('ropls')⟧ 进一步采用偏最小二乘判别分析（Partial Least Squares Discriminant Analysis，PLS-DA）评估不同 {group_col} 分组样本的代谢谱判别趋势。PLS-DA 为监督降维方法，可在引入分组信息的基础上提取与组间差异相关的潜变量。本分析使用 `{expr_name}` 矩阵构建 PLS-DA 模型，预测成分数设为 {plsda_predI}，交叉验证折数设为 {plsda_crossvalI}，并进行 {plsda_permI} 次随机置换检验以评估模型稳定性及过拟合风险。模型累计 R2X、R2Y 和 Q2 分别为 {plsda_r2x}、{plsda_r2y} 和 {plsda_q2}，置换检验 pR2Y 和 pQ2 分别为 {plsda_pr2y} 和 {plsda_pq2}。"
-    ))
+    )
 
     p.plsda <- obj$plot_plsda
     p.plsda <- set_lab_legend(
@@ -286,9 +286,9 @@ setMethod("step2", signature = c(x = "job_metaboDiff"),
         oplsda_pr2y <- round(data_oplsda_sum$pR2Y[1L], 4L)
         oplsda_pq2 <- round(data_oplsda_sum$pQ2[1L], 4L)
 
-        x <- methodAdd(x, glue::glue(
+        x <- methodAdd(x, 
           "同时采用正交偏最小二乘判别分析（Orthogonal Partial Least Squares Discriminant Analysis，OPLS-DA）进一步评估 {group_col} 分组相关的代谢谱差异 (使用 R 包 `ropls` ⟦pkgInfo('ropls')⟧)。OPLS-DA 在 PLS-DA 的基础上分离与分组相关的预测成分和与分组无关的正交成分，有助于突出组间判别信息。本分析设置预测成分数为 {oplsda_predI}，正交成分数为 {oplsda_orthoI}，交叉验证折数为 {oplsda_crossvalI}，并进行 {oplsda_permI} 次随机置换检验。模型累计 R2X、R2Y 和 Q2 分别为 {oplsda_r2x}、{oplsda_r2y} 和 {oplsda_q2}，置换检验 pR2Y 和 pQ2 分别为 {oplsda_pr2y} 和 {oplsda_pq2}。"
-        ))
+        )
 
         p.oplsda <- obj$plot_oplsda
         p.oplsda <- set_lab_legend(
@@ -299,20 +299,28 @@ setMethod("step2", signature = c(x = "job_metaboDiff"),
       } else if (!isTRUE(skip_failed_oplsda)) {
         stop("OPLS-DA failed and `skip_failed_oplsda = FALSE`.")
       } else {
-        x <- methodAdd(x, glue::glue(
+        x <- methodAdd(x, 
           "本步骤尝试构建 OPLS-DA 模型，但模型未能稳定建立或未获得有效得分矩阵，因此未将 OPLS-DA 结果纳入后续报告。后续差异代谢物筛选主要基于 PLS-DA 的 VIP 值及单变量统计结果。"
-        ))
+        )
       }
     }
 
     x$mtObject <- obj
 
-    x <- plotsAdd(
-      x,
-      p.pca = p.pca,
-      p.plsda = p.plsda,
-      p.oplsda = p.oplsda
-    )
+    if (is.null(p.oplsda)) {
+      x <- plotsAdd(
+        x,
+        p.pca = p.pca,
+        p.plsda = p.plsda
+      )
+    } else {
+      x <- plotsAdd(
+        x,
+        p.pca = p.pca,
+        p.plsda = p.plsda,
+        p.oplsda = p.oplsda
+      )
+    }
 
     return(x)
   })
@@ -424,9 +432,9 @@ setMethod("step3", signature = c(x = "job_metaboDiff"),
       none = "本步骤未纳入 VIP 值作为筛选条件。"
     )
 
-    x <- methodAdd(x, glue::glue(
+    x <- methodAdd(x,
       "在完成代谢物矩阵预处理后，进一步对 {case_group} 与 {control_group} 两组样本进行单变量差异分析 (使用 R 包 `stats` ⟦pkgInfo('stats')⟧)。为避免尺度校正影响 fold change 的计算，本步骤基于原始峰强度矩阵经 log2 转换后的矩阵进行统计分析，并以 {case_group} 相对于 {control_group} 计算 log2FC。组间差异检验采用 {text_test}，并计算每个代谢物的 P value、adjusted P value、FC 和 log2FC。{text_padj} {text_vip} 本研究以 VIP > {vip_cutoff} 且 P < {p_cutoff} 作为差异代谢物的主要探索性筛选标准，{text_fc}"
-    ))
+    )
 
     vec_front <- c(
       "mt_feature_id", "feature_name", "duplicate_index", "is_duplicate_name",
@@ -467,6 +475,32 @@ setMethod("step3", signature = c(x = "job_metaboDiff"),
 
     text_up_top <- .collapse_metabolites(data_up, n_top = 10L)
     text_down_top <- .collapse_metabolites(data_down, n_top = 10L)
+
+    .get_feature_names <- function(data_x)
+    {
+      if (nrow(data_x) == 0L) {
+        return(character())
+      }
+      vec_name <- as.character(data_x$feature_name)
+      idx_bad <- is.na(vec_name) | vec_name == ""
+      vec_name[idx_bad] <- as.character(data_x$mt_feature_id[idx_bad])
+      unique(vec_name[!is.na(vec_name) & vec_name != ""])
+    }
+
+    lst_feature <- list(
+      Up = .get_feature_names(data_up),
+      Down = .get_feature_names(data_down)
+    )
+    lst_feature <- lst_feature[vapply(lst_feature, length, integer(1L)) > 0L]
+
+    if (length(lst_feature) > 0L) {
+      x$.feature <- as_feature(
+        lst_feature,
+        glue::glue("{case_group} vs {control_group} 差异代谢物"),
+        nature = "compounds",
+        type = "差异代谢物"
+      )
+    }
 
     x <- snapAdd(x, glue::glue(
       "本步骤共纳入 {n_feature} 个代谢物特征进行差异分析。按照 ⟦mark$blue('VIP > {vip_cutoff} 且 P < {p_cutoff}')⟧ 的筛选标准，⟦mark$red('共识别到 {n_sig} 个差异代谢物，其中 {n_up} 个在 {case_group} 组中上调，{n_down} 个在 {case_group} 组中下调')⟧，另有 {n_stable} 个代谢物未达到差异筛选标准。按 P value 排序，{case_group} 组上调代谢物中排名靠前的代谢物包括：{text_up_top}；下调代谢物中排名靠前的代谢物包括：{text_down_top}。"

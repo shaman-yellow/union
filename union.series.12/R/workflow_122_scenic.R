@@ -46,10 +46,10 @@ setMethod("asjob_scenic", signature = c(x = "job_seurat"),
         ncells_pre <- ncol(object(x))
         message(glue::glue("Use `Seurat::SketchData` to sampling cells."))
         Seurat::DefaultAssay(object(x)) <- "RNA"
-        if (!length(Seurat::VariableFeatures(object(x)))) {
+        # if (!length(Seurat::VariableFeatures(object(x)))) {
           object(x) <- e(Seurat::NormalizeData(object(x)))
           object(x) <- e(Seurat::FindVariableFeatures(object(x)))
-        }
+        # }
         object(x) <- e(Seurat::SketchData(
             object(x), ncells = ncells, seed = x$seed
             ))

@@ -28,6 +28,7 @@ setMethod("asjob_cellchat", signature = c(x = "job_seurat"),
       and red{{`...`}} would passed to `CellChat::createCellChat`.",
       show_end = NULL
     )
+    message(glue::glue("Use group.by: {group.by}"))
     if (x@step < 2) {
       stop("x@step < 2. At least, preprocessed assay data should be ready.")
     }
@@ -157,6 +158,7 @@ setMethod("step1", signature = c(x = "job_cellchat"),
       object(x) <- object
     }
     p.commHpAll <- CellChat::netVisual_heatmap(object(x), color.heatmap = "Reds", signaling = NULL)
+    p.commHpAll <- grid::grid.grabExpr(ComplexHeatmap::draw(p.commHpAll))
     p.commHpAll <- .set_lab(wrap(p.commHpAll), sig(x), "All Cell communication heatmap")
     p.commHpAll <- setLegend(p.commHpAll, "为所有细胞的通讯热图。")
     #  Interaction net count plot and interaction weight

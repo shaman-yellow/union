@@ -19,7 +19,8 @@
     ))
 
 job_seurat <- function(target = NULL, project = basename(sub("/$", "", target)),
-  is10x = TRUE, min.cells = 3, min.features = 200, file_h5 = NULL, ...)
+  is10x = TRUE, min.cells = 3, min.features = 200, 
+  file_h5 = NULL, fun_read = NULL, ...)
 {
   if (!is.null(file_h5)) {
     data <- e(Seurat::Read10X_h5(file_h5))
@@ -27,9 +28,13 @@ job_seurat <- function(target = NULL, project = basename(sub("/$", "", target)),
     if (is10x) {
       data <- e(Seurat::Read10X(target))
     } else {
-      data <- Matrix::Matrix(
-        as.matrix(read.table(target, header = TRUE, row.names = 1)), sparse = TRUE
-      )
+      if (is.null(fun_read)) {
+        fun_read <- function(data) {
+          data <- read.table(data, header = TRUE, row.names = 1)
+          Matrix::Matrix(as.matrix(data), sparse = TRUE)
+        }
+      }
+      data <- fun_read(target)
     }
   }
   object <- e(Seurat::CreateSeuratObject(counts = data, project = project,

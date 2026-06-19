@@ -21,7 +21,7 @@ setGeneric("asjob_hdwgcna",
 
 setMethod("asjob_hdwgcna", signature = c(x = "job_seurat"),
   function(x, workers = 10L, assay = SeuratObject::DefaultAssay(object(x)),
-    name = "wgcna")
+    name = "wgcna", fraction = 0.05, ...)
   {
     object <- object(x)
     if (FALSE) {
@@ -32,7 +32,7 @@ setMethod("asjob_hdwgcna", signature = c(x = "job_seurat"),
     e(WGCNA::enableWGCNAThreads(workers))
     object <- e(hdWGCNA::SetupForWGCNA(
       object, gene_select = "fraction",
-      fraction = 0.05, wgcna_name = name
+      fraction = fraction, wgcna_name = name, ...
     ))
     SeuratObject::DefaultAssay(object) <- assay
     pr <- params(x)
@@ -84,11 +84,14 @@ setMethod("step1", signature = c(x = "job_hdwgcna"),
   })
 
 setMethod("step2", signature = c(x = "job_hdwgcna"),
-  function(x, celltypes = NULL, cut.r = .8, group.by = x$group.by, debug = FALSE){
+  function(x, celltypes = NULL, cut.r = .8, group.by = x$group.by, 
+    debug = FALSE, networkType = "signed", ...)
+  {
     step_message("Soft power.")
     if (is.null(celltypes)) {
       celltypes <- unique(object(x)@meta.data[[x$group.by]])
     }
+    hdwFuns$set_blas_threads(1L)
     x$celltypes <- celltypes
     ncells <- nrow(dplyr::filter(object(x)@meta.data, !!rlang::sym(x$group.by) %in% celltypes))
     if (!debug) {
@@ -98,7 +101,7 @@ setMethod("step2", signature = c(x = "job_hdwgcna"),
           assay = SeuratObject::DefaultAssay(object(x))
         ))
       object(x) <- e(hdWGCNA::TestSoftPowers(
-        object(x), networkType = "signed"
+        object(x), networkType = networkType
       ))
     }
     x <- methodAdd(x, "以 `SetDatExpr` 选择 {bind(celltypes)} 的表达矩阵为输入数据 (共包含 {ncells} 个细胞)。")
@@ -119,7 +122,9 @@ setMethod("step2", signature = c(x = "job_hdwgcna"),
   })
 
 setMethod("step3", signature = c(x = "job_hdwgcna"),
-  function(x, min.gene = 50, cut.height = .2, debug = FALSE){
+  function(x, min.gene = 50, cut.height = .2, debug = FALSE, 
+    networkType = x$.args$step2$networkType, ...)
+  {
     step_message("Network")
     message(glue::glue("Use power: {x$use.power}"))
     x$dir_cache <- create_job_cache_dir(x)
@@ -128,8 +133,8 @@ setMethod("step3", signature = c(x = "job_hdwgcna"),
           object(x), x$use.power, overwrite_tom = TRUE,
           tom_outdir = x$dir_cache,
           minModuleSize = min.gene,
-          mergeCutHeight = cut.height,
-          tom_name = bind(x$celltypes, co = "_")
+          mergeCutHeight = cut.height, networkType = networkType,
+          tom_name = bind(x$celltypes, co = "_"), ...
           ))
     }
     wgcna_name <- object(x)@misc$active_wgcna
@@ -221,7 +226,7 @@ setMethod("step5", signature = c(x = "job_hdwgcna"),
     snap_ex <- ""
     if (global) {
       p.umap_hMEs <- e(hdWGCNA::ModuleFeaturePlot(
-        object, features = "hMEs", order = TRUE
+        object, features = "hMEs", order = TRUE, raster = TRUE
       ))
     } else {
       celltypes <- x$celltypes
@@ -702,6 +707,135 @@ safe_as_cor_tbl <- function(lst, name_cor, name_pvalue) {
   glue::glue(
     "模块-性状相关分析中，相关系数用于衡量模块与分组性状的关联方向和效应强度，p 值用于评估相关性的统计显著性。本研究优先筛选 ∣r∣ > {r} 且 p < {p} 的模块；若无模块同时满足该阈值，则进一步在 p < {p} 的显著相关模块中选择 ∣r∣ 最高的模块作为 trait 相关核心模块 (PMID: 38737676, PMID: 41957356, PMID: 41742201)。"
   )
+}
+
+hdwFuns <- new.env(parent = emptyenv())
+
+hdwFuns$.blas_thread_env_names <- c(
+  "OPENBLAS_NUM_THREADS",
+  "OPENBLAS_DEFAULT_NUM_THREADS",
+  "OMP_NUM_THREADS",
+  "GOTO_NUM_THREADS",
+  "MKL_NUM_THREADS",
+  "BLIS_NUM_THREADS",
+  "VECLIB_MAXIMUM_THREADS",
+  "NUMEXPR_NUM_THREADS"
+)
+
+hdwFuns$.set_env_threads <- function(threads = 1L)
+{
+  threads <- as.integer(threads)[1L]
+
+  if (is.na(threads) || threads < 1L) {
+    stop("`threads` must be a positive integer.")
+  }
+
+  value <- as.character(threads)
+
+  base::do.call(
+    base::Sys.setenv,
+    stats::setNames(
+      base::as.list(base::rep(value, length(hdwFuns$.blas_thread_env_names))),
+      hdwFuns$.blas_thread_env_names
+    )
+  )
+
+  invisible(threads)
+}
+
+hdwFuns$.restore_env <- function(old_env)
+{
+  old_env <- old_env[base::names(old_env) %in% hdwFuns$.blas_thread_env_names]
+
+  idx_unset <- base::is.na(old_env)
+  if (base::any(idx_unset)) {
+    base::Sys.unsetenv(base::names(old_env)[idx_unset])
+  }
+
+  if (base::any(!idx_unset)) {
+    base::do.call(
+      base::Sys.setenv,
+      base::as.list(old_env[!idx_unset])
+    )
+  }
+
+  invisible(NULL)
+}
+
+hdwFuns$set_blas_threads <- function(threads = 1L, use_RhpcBLASctl = TRUE,
+  verbose = TRUE)
+{
+  threads <- as.integer(threads)[1L]
+
+  if (is.na(threads) || threads < 1L) {
+    stop("`threads` must be a positive integer.")
+  }
+
+  hdwFuns$.set_env_threads(threads)
+
+  has_RhpcBLASctl <- base::requireNamespace("RhpcBLASctl", quietly = TRUE)
+
+  if (use_RhpcBLASctl && has_RhpcBLASctl) {
+    RhpcBLASctl::blas_set_num_threads(threads)
+
+    try(
+      RhpcBLASctl::omp_set_num_threads(threads),
+      silent = TRUE
+    )
+  }
+
+  if (verbose) {
+    message(
+      "Set BLAS/OpenMP thread-related variables to ",
+      threads,
+      ". RhpcBLASctl active: ",
+      use_RhpcBLASctl && has_RhpcBLASctl,
+      "."
+    )
+  }
+
+  invisible(threads)
+}
+
+hdwFuns$with_blas_threads <- function(expr, threads = 1L,
+  use_RhpcBLASctl = TRUE, restore_env = TRUE, gc_after = TRUE,
+  verbose = TRUE)
+{
+  threads <- as.integer(threads)[1L]
+
+  if (is.na(threads) || threads < 1L) {
+    stop("`threads` must be a positive integer.")
+  }
+
+  old_env <- base::Sys.getenv(
+    hdwFuns$.blas_thread_env_names,
+    unset = NA_character_
+  )
+
+  parent <- base::parent.frame()
+  expr_sub <- base::substitute(expr)
+
+  if (restore_env) {
+    base::on.exit(
+      hdwFuns$.restore_env(old_env),
+      add = TRUE
+    )
+  }
+
+  if (gc_after) {
+    base::on.exit(
+      base::gc(verbose = FALSE),
+      add = TRUE
+    )
+  }
+
+  hdwFuns$set_blas_threads(
+    threads = threads,
+    use_RhpcBLASctl = use_RhpcBLASctl,
+    verbose = verbose
+  )
+
+  base::eval(expr_sub, envir = parent)
 }
 
 

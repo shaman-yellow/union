@@ -29,6 +29,7 @@
     au = "job_aucell",
     rms = "job_rms",
     en = "job_enrich",
+    inf = "job_infercnv",
     sct = "job_scteni",
     geo = "job_geo",
     mdb = "job_msigdb",
