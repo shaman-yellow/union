@@ -130,7 +130,10 @@ setMethod("step1", signature = c(x = "job_venn"),
     x <- snapAdd(x, "对{bind(names(object(x)))} 取交集，得到{length(p.venn$ins)}个交集{iter}{aref(p.venn)}。")
     x <- plotsAdd(x, p.venn)
     x$.feature_sets <- as_feature(
-      lapply(object(x), unique), "All sets for Venn"
+      lapply(object(x), unique), 
+      glue::glue(
+        "All sets for Venn {bind(names(object(x)), co = ' WITH ')}"
+      )
     )
     if (!is.null(x$analysis)) {
       feature(x) <- as_feature(p.venn$ins, x$analysis, nature = x$nature, ...)

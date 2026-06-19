@@ -49,6 +49,7 @@ setMethod("asjob_mebocost", signature = c(x = "job_seurat"),
     }
     metadata <- as_tibble(object(x)@meta.data, idcol = "cell")
     levels <- .guess_levels_from_job_seurat(x)
+    group.by <- eval(group.by)
     x <- .job_mebocost()
     x$dir_cache <- dir_cache
     x$file_anndata <- file_anndata
