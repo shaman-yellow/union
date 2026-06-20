@@ -67,19 +67,6 @@ setMethod("asjob_metaboAnalyst", signature = c(x = "feature"),
     return(x)
   })
 
-setMethod("asjob_metaboAnalyst", signature = c(x = "job_metaboDiff"),
-  function(x, ...)
-  {
-    if (is.null(x$.feature)) {
-      stop("`x$.feature` was not found. Please run `step3()` first.")
-    }
-
-    asjob_metaboAnalyst(
-      x$.feature,
-      ...
-    )
-  })
-
 setMethod("step0", signature = c(x = "job_metaboAnalyst"),
   function(x)
   {

@@ -390,11 +390,68 @@ setMethod("step4", signature = c(x = "job_mebocost"),
   })
 
 
+
+meboFuns$collapse_axis_sensors <- function(data_axis, n = 3L)
+{
+  if (!"main_sensor" %in% colnames(data_axis)) {
+    return(rep(NA_character_, nrow(data_axis)))
+  }
+
+  vec_sensor <- as.character(data_axis$main_sensor)
+  vec_sensor[is.na(vec_sensor)] <- ""
+
+  vec_sensor
+}
+
+meboFuns$get_top_axis_sensor_text <- function(data_axis, n_sensor_show = 3L)
+{
+  if (nrow(data_axis) == 0L || !"main_sensor" %in% colnames(data_axis)) {
+    return("")
+  }
+
+  main_sensor <- as.character(data_axis$main_sensor[1L])
+  if (is.na(main_sensor) || !nzchar(main_sensor)) {
+    return("")
+  }
+
+  n_sensor <- NA_integer_
+  if ("n_sensor" %in% colnames(data_axis)) {
+    n_sensor <- suppressWarnings(as.integer(data_axis$n_sensor[1L]))
+  }
+
+  evidence_pattern <- NA_character_
+  if ("evidence_pattern" %in% colnames(data_axis)) {
+    evidence_pattern <- as.character(data_axis$evidence_pattern[1L])
+  }
+
+  if (is.na(n_sensor) || n_sensor <= 1L) {
+    text <- glue::glue("主要接收端 sensor 为 {main_sensor}。")
+  } else {
+    text <- glue::glue("主要接收端 sensor 为 {main_sensor}，该轴共由 {n_sensor} 个 distinct Sensor 支持。")
+  }
+
+  if (!is.na(evidence_pattern) && nzchar(evidence_pattern)) {
+    if (identical(evidence_pattern, "single_sensor_specific_axis")) {
+      text <- glue::glue("{text} 该轴由单一 sensor 支持，适合作为特异性候选通讯线索。")
+    } else if (identical(evidence_pattern, "multi_sensor_specific_axis")) {
+      text <- glue::glue("{text} 该轴具有多 sensor 支持和较高细胞通讯对特异性。")
+    } else if (identical(evidence_pattern, "multi_sensor_broad_axis")) {
+      text <- glue::glue("{text} 该轴具有多 sensor 支持，但相关代谢物覆盖范围较广，解释时应结合具体生物学背景。")
+    }
+  }
+
+  as.character(text)
+}
+
+
 setMethod("step5", signature = c(x = "job_mebocost"),
   function(x, use.score = c("scale", "raw"),
     axis_level = c("sender_metabolite_receiver", "metabolite_receiver"),
     group_by = NULL,
     axis = c("Sender", "Metabolite_Name", "Sensor", "Receiver"),
+    keep_receiver = NULL,
+    keep_sender = NULL,
+    drop_sender = NULL,
     cut.p = NULL,
     significance_cap = 10,
     plot_top_n = 30L,
@@ -412,6 +469,12 @@ setMethod("step5", signature = c(x = "job_mebocost"),
 
     score_info <- meboFuns$resolve_score_column(x, use.score)
     cut.p <- meboFuns$resolve_p_cutoff(x, cut.p)
+
+    cell_filter_input <- list(
+      keep_receiver = keep_receiver,
+      keep_sender = keep_sender,
+      drop_sender = drop_sender
+    )
 
     raw <- x@tables$step4$ts.diff_commu[[1L]]
 
@@ -432,8 +495,16 @@ setMethod("step5", signature = c(x = "job_mebocost"),
       significance_cap = significance_cap
     )
 
+    data <- meboFuns$filter_axis_event_data(
+      data,
+      keep_receiver = keep_receiver,
+      keep_sender = keep_sender,
+      drop_sender = drop_sender
+    )
+
     if (nrow(data) == 0L) {
-      warning("No significant positive communication event remained for axis prioritization.")
+      warning("No significant positive communication event remained for axis prioritization after cell-type filtering.")
+      x$data_overall_score <- tibble::tibble()
       return(x)
     }
 
@@ -461,18 +532,46 @@ setMethod("step5", signature = c(x = "job_mebocost"),
     }
 
     name_axis <- bind(fshow(group_by), co = "——")
+    cell_filter <- meboFuns$normalize_axis_cell_filters(
+      keep_receiver = keep_receiver,
+      keep_sender = keep_sender,
+      drop_sender = drop_sender
+    )
+    keep_receiver <- cell_filter$keep_receiver
+    keep_sender <- cell_filter$keep_sender
+    drop_sender <- cell_filter$drop_sender
+    cell_scope_text <- meboFuns$get_axis_filter_scope_text(
+      keep_receiver = cell_filter_input$keep_receiver,
+      keep_sender = cell_filter_input$keep_sender,
+      drop_sender = cell_filter_input$drop_sender
+    )
+    cell_caption_text <- meboFuns$get_axis_filter_caption_text(
+      keep_receiver = cell_filter_input$keep_receiver,
+      keep_sender = cell_filter_input$keep_sender,
+      drop_sender = cell_filter_input$drop_sender
+    )
+    if (is.null(cell_caption_text)) {
+      cell_caption_text <- ""
+    }
 
     x <- methodAdd(
       x,
       "基于 MEBOCOST 显著差异代谢通讯事件，进一步对 {name_axis} 候选通讯轴进行统一优先级排序。MEBOCOST 是用于推断 metabolite-mediated cell-cell communication (mCCC) 的单细胞分析方法，可整合单细胞转录组、代谢酶、代谢物感受器及代谢通量信息，识别发送细胞产生或释放代谢物并被接收细胞感知的潜在通讯关系 (PMID: 40568942)。\n\n⟦mark$blue('考虑到谷氨酰胺等基础营养代谢物在免疫细胞增殖、细胞因子产生、吞噬及杀菌功能中具有广泛作用，相关代谢物在免疫单细胞通讯推断中可能呈现较高背景活跃度 (PMID: 11533304; PMID: 30360490)。因此，本研究不直接采用通讯事件数量、累积通讯权重或单一通讯强度作为最终排序依据，而采用多证据秩整合策略对候选轴进行优先级评估')⟧。该策略同时整合通讯强度、差异幅度、统计显著性、方向一致性、感受器支持度和细胞通讯对特异性；其中细胞通讯对特异性用于降低广泛覆盖多个 Sender–Receiver 组合的基础代谢物对排序的过度影响。该设计借鉴细胞通讯分析中 magnitude 与 specificity 相区分的思想，以及 TF-IDF/IDF 对广泛出现特征进行降权的原则；多证据秩整合则参考 Rank Product 与 Robust Rank Aggregation 等生物信息学排序整合方法 (PMID: 33024107; PMID: 15327980; PMID: 22247279)。"
     )
 
+    if (!is.null(cell_scope_text)) {
+      x <- methodAdd(x, cell_scope_text)
+    }
+
     snap_score <- meboFuns$get_overall_score_note(
       model = x$levels[1L],
       group_by = group_by,
       axis_level = axis_level,
       score_label = score_info$label,
-      significance_cap = significance_cap
+      significance_cap = significance_cap,
+      keep_receiver = cell_filter_input$keep_receiver,
+      keep_sender = cell_filter_input$keep_sender,
+      drop_sender = cell_filter_input$drop_sender
     )
 
     x <- methodAdd(
@@ -512,8 +611,10 @@ setMethod("step5", signature = c(x = "job_mebocost"),
         glue::glue("{x@sig} Dotplot for prioritized metabolic communication axes"),
         glue::glue(
           "候选代谢通讯轴综合优先级气泡图|||该图展示基于 MEBOCOST 差异通讯事件获得的候选代谢通讯轴 overall score。",
+          "{cell_caption_text}",
           "横纵坐标对应于 {bind(fshow(group_by))}；",
           "气泡大小表示 overall score，填充颜色表示细胞通讯对特异性百分位秩。",
+          "每条候选轴的主要发送细胞和主要接收端 sensor 可在结果表的 main_sender 与 main_sensor 字段中查看。",
           "overall score 基于通讯强度、组间差异幅度、统计显著性、方向一致性、感受器支持度及细胞通讯对特异性进行多证据秩整合，",
           "用于在保留 MEBOCOST 原始差异通讯证据的同时，降低广泛基础代谢背景对候选轴排序的影响。",
           "为保证图形可读性，图中展示 overall score 排名靠前的候选轴。"
@@ -572,8 +673,10 @@ setMethod("step5", signature = c(x = "job_mebocost"),
         glue::glue("{x@sig} Ranked plot for prioritized sender-metabolite-receiver axes"),
         glue::glue(
           "候选三元代谢通讯轴综合优先级排序图|||该图展示基于 MEBOCOST 差异通讯事件获得的 Sender–Metabolite–Receiver 候选通讯轴 overall score。",
+          "{cell_caption_text}",
           "纵轴直接展示发送细胞、代谢物和接收细胞构成的三元通讯轴，横轴表示 overall score；",
-          "气泡大小表示支持该通讯轴的感受器数量，填充颜色表示细胞通讯对特异性百分位秩。",
+          "气泡大小表示支持该通讯轴的 distinct Sensor 数量，填充颜色表示细胞通讯对特异性百分位秩。",
+          "每条候选轴的主要接收端 sensor 可在结果表的 main_sensor 字段中查看。",
           "overall score 基于通讯强度、组间差异幅度、统计显著性、方向一致性、感受器支持度及细胞通讯对特异性进行多证据秩整合，",
           "因此可在同一坐标尺度下比较不同三元通讯轴的综合优先级，同时避免将基础代谢物的广泛连接度直接等同于关键候选轴优先级。",
           "为保证图形可读性，图中展示 overall score 排名靠前的候选轴。"
@@ -590,15 +693,22 @@ setMethod("step5", signature = c(x = "job_mebocost"),
       glue::glue("{x@sig} Prioritized metabolic communication axis table"),
       glue::glue(
         "MEBOCOST 候选代谢通讯轴综合优先级表|||该表展示基于显著差异通讯事件计算得到的候选代谢通讯轴 overall score。",
+        "{cell_caption_text}",
         "overall_score 为本步骤统一采用的候选轴综合优先级评分，由通讯强度、差异幅度、统计显著性、方向一致性、感受器支持度及细胞通讯对特异性六个百分位秩取平均得到；",
         "axis_specificity 表示代谢物在 Sender–Receiver 细胞通讯对中的分布特异性，数值越高说明该代谢物越集中于较少细胞通讯对；",
-        "main_sender 和 main_sensor 分别展示该候选轴中贡献最高的发送细胞和代谢物感受器，用于辅助解释通讯来源和接收端机制。"
+        "main_sender 和 main_sensor 分别展示该候选轴中贡献最高的发送细胞和接收端代谢物感受器；三元轴结果解释时应结合 main_sensor，以避免仅根据 Sender–Metabolite–Receiver 标签忽略接收端机制。"
       )
     )
 
     x <- tablesAdd(x, t.overallScore)
 
     x$data_overall_score <- data_axis
+    x$keep_receiver <- keep_receiver
+    x$keep_sender <- keep_sender
+    x$drop_sender <- drop_sender
+    x$keep_receiver_feature <- cell_filter_input$keep_receiver
+    x$keep_sender_feature <- cell_filter_input$keep_sender
+    x$drop_sender_feature <- cell_filter_input$drop_sender
 
     x$.feature_all_metabolites <- as_feature(
       unique(data_axis$Metabolite_Name), 
@@ -609,6 +719,11 @@ setMethod("step5", signature = c(x = "job_mebocost"),
       as.character(unlist(data_axis[1L, group_by, drop = FALSE], use.names = FALSE)),
       collapse = " -> "
     )
+    top_sensor_text <- meboFuns$get_top_axis_sensor_text(data_axis)
+    if (nzchar(top_sensor_text)) {
+      top_sensor_text <- paste0(top_sensor_text, " ")
+    }
+    snap_scope_text <- if (is.null(cell_caption_text)) "" else cell_caption_text
 
     for (i in group_by) {
       x[[ glue::glue(".feature_{tolower(fshow(i))}") ]] <- as_feature(
@@ -618,15 +733,23 @@ setMethod("step5", signature = c(x = "job_mebocost"),
       )
     }
 
+    if ("main_sensor" %in% colnames(data_axis)) {
+      x$.feature_sensor <- as_feature(
+        data_axis$main_sensor[1L],
+        "关键通讯轴",
+        nature = "Sensor"
+      )
+    }
+
     if (!is.null(p.score)) {
       x <- snapAdd(
         x,
-        "基于候选代谢通讯轴 overall score，如图{aref(p.score)}，优先级最高的 {name_axis} 通讯轴为 {snap}。"
+        "基于候选代谢通讯轴 overall score，如图{aref(p.score)}，{snap_scope_text}优先级最高的 {name_axis} 通讯轴为 {snap}。{top_sensor_text}"
       )
     } else {
       x <- snapAdd(
         x,
-        "基于候选代谢通讯轴 overall score，优先级最高的 {name_axis} 通讯轴为 {snap}。"
+        "基于候选代谢通讯轴 overall score，{snap_scope_text}优先级最高的 {name_axis} 通讯轴为 {snap}。{top_sensor_text}"
       )
     }
 
@@ -753,6 +876,167 @@ meboFuns$prepare_axis_event_data <- function(raw, axis, score_col, p_col,
     is.finite(abs_log2fc)
   )
 }
+
+meboFuns$normalize_cell_filter <- function(value = NULL)
+{
+  if (is.null(value)) {
+    return(NULL)
+  }
+
+  value <- unique(as.character(value))
+  value <- value[!is.na(value) & nzchar(value)]
+
+  if (length(value) == 0L) {
+    return(NULL)
+  }
+
+  value
+}
+
+meboFuns$normalize_axis_cell_filters <- function(keep_receiver = NULL,
+  keep_sender = NULL, drop_sender = NULL)
+{
+  list(
+    keep_receiver = meboFuns$normalize_cell_filter(keep_receiver),
+    keep_sender = meboFuns$normalize_cell_filter(keep_sender),
+    drop_sender = meboFuns$normalize_cell_filter(drop_sender)
+  )
+}
+
+meboFuns$normalize_receiver_keep <- function(keep_receiver = NULL)
+{
+  meboFuns$normalize_cell_filter(keep_receiver)
+}
+
+meboFuns$filter_axis_event_data <- function(data, keep_receiver = NULL,
+  keep_sender = NULL, drop_sender = NULL)
+{
+  cell_filter <- meboFuns$normalize_axis_cell_filters(
+    keep_receiver = keep_receiver,
+    keep_sender = keep_sender,
+    drop_sender = drop_sender
+  )
+
+  if (!is.null(cell_filter$keep_receiver)) {
+    if (!"Receiver" %in% colnames(data)) {
+      stop("`Receiver` column is required when `keep_receiver` is used.")
+    }
+    data <- dplyr::filter(data, Receiver %in% cell_filter$keep_receiver)
+  }
+
+  if (!is.null(cell_filter$keep_sender)) {
+    if (!"Sender" %in% colnames(data)) {
+      stop("`Sender` column is required when `keep_sender` is used.")
+    }
+    data <- dplyr::filter(data, Sender %in% cell_filter$keep_sender)
+  }
+
+  if (!is.null(cell_filter$drop_sender)) {
+    if (!"Sender" %in% colnames(data)) {
+      stop("`Sender` column is required when `drop_sender` is used.")
+    }
+    data <- dplyr::filter(data, !Sender %in% cell_filter$drop_sender)
+  }
+
+  data
+}
+
+meboFuns$get_cell_filter_label <- function(value = NULL)
+{
+  if (is.null(value)) {
+    return(NULL)
+  }
+
+  value_norm <- meboFuns$normalize_cell_filter(value)
+
+  if (is.null(value_norm)) {
+    return(NULL)
+  }
+
+  if (is(value, "feature_char")) {
+    value_label <- tryCatch(
+      as.character(snap(value)),
+      error = function(e) character(0L)
+    )
+    value_label <- value_label[!is.na(value_label) & nzchar(value_label)]
+
+    if (length(value_label) > 0L) {
+      return(paste(value_label, collapse = ", "))
+    }
+  }
+
+  paste(value_norm, collapse = ", ")
+}
+
+meboFuns$get_receiver_label <- function(keep_receiver = NULL)
+{
+  meboFuns$get_cell_filter_label(keep_receiver)
+}
+
+meboFuns$get_axis_filter_scope_text <- function(keep_receiver = NULL,
+  keep_sender = NULL, drop_sender = NULL)
+{
+  receiver_label <- meboFuns$get_cell_filter_label(keep_receiver)
+  keep_sender_label <- meboFuns$get_cell_filter_label(keep_sender)
+  drop_sender_label <- meboFuns$get_cell_filter_label(drop_sender)
+
+  vec_scope <- character(0L)
+
+  if (!is.null(receiver_label)) {
+    vec_scope <- c(vec_scope, glue::glue("⟦mark$blue('Receiver 仅限于 {receiver_label}')⟧"))
+  }
+  if (!is.null(keep_sender_label)) {
+    vec_scope <- c(vec_scope, glue::glue("⟦mark$blue('Sender 仅限于 {keep_sender_label}')⟧"))
+  }
+  if (!is.null(drop_sender_label)) {
+    vec_scope <- c(vec_scope, glue::glue("⟦mark$blue('排除 Sender 属于 {drop_sender_label} 的通讯事件')⟧"))
+  }
+
+  if (length(vec_scope) == 0L) {
+    return(NULL)
+  }
+
+  glue::glue(
+    "本分析在候选事件层面对细胞通讯范围进行预先限定：{paste(vec_scope, collapse = '；')}。随后在该限定候选空间内重新计算各证据维度及 overall_score。因此，本结果解释为指定细胞通讯范围下的候选代谢通讯轴优先级排序。"
+  )
+}
+
+meboFuns$get_receiver_scope_text <- function(keep_receiver = NULL)
+{
+  meboFuns$get_axis_filter_scope_text(keep_receiver = keep_receiver)
+}
+
+meboFuns$get_axis_filter_caption_text <- function(keep_receiver = NULL,
+  keep_sender = NULL, drop_sender = NULL)
+{
+  receiver_label <- meboFuns$get_cell_filter_label(keep_receiver)
+  keep_sender_label <- meboFuns$get_cell_filter_label(keep_sender)
+  drop_sender_label <- meboFuns$get_cell_filter_label(drop_sender)
+
+  vec_scope <- character(0L)
+
+  if (!is.null(receiver_label)) {
+    vec_scope <- c(vec_scope, glue::glue("Receiver = {receiver_label}"))
+  }
+  if (!is.null(keep_sender_label)) {
+    vec_scope <- c(vec_scope, glue::glue("Sender = {keep_sender_label}"))
+  }
+  if (!is.null(drop_sender_label)) {
+    vec_scope <- c(vec_scope, glue::glue("Excluded Sender = {drop_sender_label}"))
+  }
+
+  if (length(vec_scope) == 0L) {
+    return(NULL)
+  }
+
+  glue::glue("本结果限定候选事件范围：{paste(vec_scope, collapse = '；')}。")
+}
+
+meboFuns$get_receiver_caption_text <- function(keep_receiver = NULL)
+{
+  meboFuns$get_axis_filter_caption_text(keep_receiver = keep_receiver)
+}
+
 
 meboFuns$summarize_axis_consensus <- function(data, group_by, score_col)
 {
@@ -964,6 +1248,9 @@ meboFuns$diagnose_axis_score_bias <- function(x, use.score = c("scale", "raw"),
   axis_level = c("sender_metabolite_receiver", "metabolite_receiver"),
   group_by = NULL,
   axis = c("Sender", "Metabolite_Name", "Sensor", "Receiver"),
+  keep_receiver = NULL,
+  keep_sender = NULL,
+  drop_sender = NULL,
   cut.p = NULL,
   significance_cap = 10)
 {
@@ -996,6 +1283,17 @@ meboFuns$diagnose_axis_score_bias <- function(x, use.score = c("scale", "raw"),
     significance_cap = significance_cap
   )
 
+  data <- meboFuns$filter_axis_event_data(
+    data,
+    keep_receiver = keep_receiver,
+    keep_sender = keep_sender,
+    drop_sender = drop_sender
+  )
+
+  if (nrow(data) == 0L) {
+    return(tibble::tibble())
+  }
+
   data_axis <- meboFuns$summarize_axis_consensus(
     data,
     group_by = group_by,
@@ -1017,7 +1315,8 @@ meboFuns$diagnose_axis_score_bias <- function(x, use.score = c("scale", "raw"),
 }
 
 meboFuns$get_overall_score_note <- function(model, group_by, axis_level,
-  score_label, significance_cap)
+  score_label, significance_cap, keep_receiver = NULL,
+  keep_sender = NULL, drop_sender = NULL)
 {
   axis_text <- if (identical(axis_level, "sender_metabolite_receiver") ||
       all(c("Sender", "Metabolite_Name", "Receiver") %in% group_by)) {
@@ -1044,6 +1343,15 @@ meboFuns$get_overall_score_note <- function(model, group_by, axis_level,
     meboFuns$glue_ex(
       "在二元轴模式下，同一 Metabolite–Sensor–Receiver 组合内先对不同 Sender 的 Score、|Log2FC| 和 -log10(FDR) 求平均；其中 -log10(FDR) 的上限设为 ⟦significance_cap⟧，以避免极小 FDR 对综合排序产生过度影响。"
     )
+  }
+
+  cell_filter_text <- meboFuns$get_axis_filter_scope_text(
+    keep_receiver = keep_receiver,
+    keep_sender = keep_sender,
+    drop_sender = drop_sender
+  )
+  if (is.null(cell_filter_text)) {
+    cell_filter_text <- ""
   }
 
   formula_text <- meboFuns$glue_ex(
@@ -1080,6 +1388,7 @@ meboFuns$get_overall_score_note <- function(model, group_by, axis_level,
     "具体计算中，每条显著通讯事件首先被定义为 Sender–Metabolite–Sensor–Receiver 四元组。",
     "其中，$Score_i$ 表示第 $i$ 条通讯事件的 MEBOCOST 通讯强度指标（⟦score_label⟧）；$Log2FC_i$ 表示 ⟦model⟧ 组相对于对照组的通讯强度对数倍数变化；$FDR_i$ 表示该差异通讯事件的校正显著性。",
     "⟦axis_text⟧",
+    "⟦cell_filter_text⟧",
     "⟦sensor_text⟧",
     "记候选轴为 $A$，其支持的 sensor 集合为 $K_A$，同一候选轴和同一 sensor 下的通讯事件集合为 $A_k$。overall_score 的计算公式如下：",
     "⟦formula_text⟧",
@@ -1248,3 +1557,13 @@ setMethod("set_remote", signature = c(x = "job_mebocost"),
     x$wd <- wd
     return(x)
   })
+
+# setMethod("asjob_fella", signature = c(x = "job_metabo"),
+#   function(x){
+#     mapped <- x@tables$step1$mapped
+#     x <- .job_fella()
+#     x$mapped <- mapped
+#     x$ids.lst <- list(ids = x$mapped$KEGG)
+#     x
+#   })
+

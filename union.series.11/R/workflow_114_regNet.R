@@ -253,7 +253,7 @@ setMethod("step5", signature = c(x = "job_regNet"),
         end_cap = ggraph::circle(7, 'mm'),
         arrow = arrow(length = unit(1, 'mm'))) + 
       geom_node_point(aes(color = type, size = type, shape = type)) + 
-      ggrepel::geom_label_repel(aes(x = x, y = y, label = name), size = 3) +
+      ggrepel::geom_label_repel(aes(x = x, y = y, label = name), size = 2) +
       guides(
         size = "none", shape = "none",
         color = guide_legend(override.aes = list(size = 4))

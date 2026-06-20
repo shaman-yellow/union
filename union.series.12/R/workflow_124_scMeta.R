@@ -25,14 +25,30 @@ setMethod("asjob_scMeta", signature = c(x = "job_seurat"),
     }
     snapAdd_onExit("x", "将{snap(fea)}进行通路富集分析。")
     fun_compute <- function(...) {
-      object <- e(scCustomize::Convert_Assay(
-          object(x), "RNA", convert_to = "V3"
-          ))
-      object <- e(scMetabolism::sc.metabolism.Seurat(
+      requireNamespace("Seurat")
+      assay <- SeuratObject::DefaultAssay(object(x))
+      if (is(object(x)[[ assay ]], "Assay5")) {
+        object(x)[[ assay ]] <- as(object(x)[[ assay ]], "Assay")
+      }
+      object <- object(x)
+      fun_run_scMeta <- function(object, method, workers, type) {
+        scMetabolism::sc.metabolism.Seurat(
           obj = object, method = method, imputation = FALSE,
           ncores = workers, metabolism.type = type
-          ))
-      object@assays$METABOLISM$score
+        )
+      }
+      object <- callr::r(
+        fun_run_scMeta, list(object = object, method = method, workers = workers, type = type),
+        libpath = .libPaths(), show = TRUE
+      )
+      data <- object@assays$METABOLISM$score
+      check1 <- stringr::str_extract(colnames(data), "[A-Z]+")
+      check2 <- stringr::str_extract(colnames(object), "[A-Z]+")
+      if (!identical(check1, check2)) {
+        stop('!identical(check1, check2).')
+      }
+      colnames(data) <- colnames(object)
+      data
     }
     data <- expect_local_data(
       "tmp", "scMeta", fun_compute, list(method, type, colnames(object(x)))
@@ -140,6 +156,7 @@ setMethod("step2", signature = c(x = "job_scMeta"),
   data <- dplyr::select(data, -type)
   data <- tidyr::pivot_wider(data, names_from = !!rlang::sym(compare.by), values_from = value)
   groups <- unique(meta[[compare.by]])
+  message(glue::glue("Compare groups: {bind(groups)}"))
   cli::cli_alert_info("wilcox.test")
   fun_test <- function(x, y) {
     pbapply::pbvapply(seq_along(x),

@@ -164,12 +164,11 @@ setMethod("step2", signature = c(x = "job_seurat5n"),
         object(x),
         n_label = 20L
       )
-      Terror <<- p.varfeature <- set_lab_legend(
+      p.varfeature <- set_lab_legend(
         wrap(p.varfeature, 5.5, 4),
         glue::glue("{x@sig} Variable Feature Plot"), #__REVISE__ set_lab_legend 2026-03-23_22:13:35
         glue::glue("高变基因图|||红色代表高变基因，横坐标为基因在所有细胞中的表达水平（log10对数值），纵坐标为基因在所有细胞中的表达水平的标准差，数值越大，表示该基因在细胞中的表达水平越不稳定。生物学差异（如细胞类型、状态等差异）通常会导致某些基因在不同细胞之间表现出较大变异，因此更有可能提供关于生物学现象的信息。") #__REVISE__ set_lab_legend 2026-03-23_22:15:27
       )
-      stop("...")
       x <- plotsAdd(x, p.varfeature)
     }
     object(x) <- e(Seurat::RunPCA(object(x)))

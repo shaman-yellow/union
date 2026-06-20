@@ -2,10 +2,6 @@
 # workflow of vina
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-if (!exists("vinaFuns")) {
-  vinaFuns <- new.env(parent = emptyenv())
-}
-
 .job_vina <- setClass("job_vina", 
   contains = c("job"),
   representation = representation(
@@ -696,7 +692,7 @@ setMethod("step4", signature = c(x = "job_vina"),
 
 setMethod("step5", signature = c(x = "job_vina"),
   function(x, compounds, by.y, axis = "Ingredient_name", excludes = NULL, top = NULL,
-    cutoff.af = NULL, sig.af = -5, maxShow = 20)
+    cutoff.af = NULL, sig.af = -5, maxShow = 50)
   {
     step_message("Summary and visualization for results.")
     x$summary_vina <- summary_vina(x$savedir)
@@ -911,6 +907,10 @@ setMethod("step8", signature = c(x = "job_vina"),
     x$res_dock_merge <- .merge_ligand_recepter_as_pdb(x@tables$step5$res_dock, x$savedir)
     return(x)
   })
+
+if (!exists("vinaFuns")) {
+  vinaFuns <- new.env(parent = emptyenv())
+}
 
 .merge_ligand_recepter_as_pdb <- function(res_dock, dir, overwrite = FALSE) {
   if (!nchar(Sys.which("obabel"))) {

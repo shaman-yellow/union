@@ -318,7 +318,8 @@ setMethod("diff", signature = c(x = "job_scenic"),
     }
     use.p <- match.arg(use.p)
     x <- copy_job(x)
-    object <- .get_seurat_with_regulon(x, ref)
+    message("Get from file")
+    object <- object(ref)
     # find markers
     if (!is.null(split.by)) {
       stop("The code for this module has not been written yet.")
@@ -357,6 +358,7 @@ setMethod("diff", signature = c(x = "job_scenic"),
     )
     # x <- tablesAdd(x, diff_regulon)
     lst_results$diff_regulon <- diff_regulon
+    message(glue::glue("Got diff regulon: {nrow(diff_regulon)}"))
     if (nrow(diff_regulon) < 50) {
       object@meta.data <- dplyr::mutate(
         object@meta.data, .group_id = paste0(
@@ -427,9 +429,10 @@ setMethod("diff", signature = c(x = "job_scenic"),
 
 .get_seurat_with_regulon <- function(x, ref) {
   # get data
-  loom <- SCopeLoomR::open_loom(x$file_aucell)
-  meta_regulons <- SCopeLoomR::get_regulons(loom, "Regulons")
-  regulons_AUC <- SCopeLoomR::get_regulons_AUC(loom, "RegulonsAUC")
+  message(glue::glue("Open file: {x$file_aucell}"))
+  loom <- e(SCopeLoomR::open_loom(x$file_aucell))
+  meta_regulons <- e(SCopeLoomR::get_regulons(loom, "Regulons"))
+  regulons_AUC <- e(SCopeLoomR::get_regulons_AUC(loom, "RegulonsAUC"))
   SCopeLoomR::close_loom(loom)
   # format
   meta_regulons <- apply(

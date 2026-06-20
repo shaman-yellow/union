@@ -27,15 +27,6 @@ job_fella <- function(kegg) {
 setGeneric("asjob_fella",
   function(x, ...) standardGeneric("asjob_fella"))
 
-setMethod("asjob_fella", signature = c(x = "job_metabo"),
-  function(x){
-    mapped <- x@tables$step1$mapped
-    x <- .job_fella()
-    x$mapped <- mapped
-    x$ids.lst <- list(ids = x$mapped$KEGG)
-    x
-  })
-
 setMethod("step0", signature = c(x = "job_fella"),
   function(x){
     step_message("Prepare your data with function `job_fella`.

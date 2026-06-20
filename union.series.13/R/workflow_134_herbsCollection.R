@@ -271,6 +271,145 @@ setMethod("step2", signature = c(x = "job_herbsCollection"),
     return(x)
   })
 
+
+setMethod("step3", signature = c(x = "job_herbsCollection"),
+  function(x, data_tcmsp_targets = NULL, data_batman_targets = NULL,
+    read_local = TRUE, verbose = TRUE)
+  {
+    step_message("Collect compound targets.")
+
+    if (is.null(x$collection)) {
+      stop("`x$collection` was not found. Please run `job_herbsCollection()` first.")
+    }
+
+    if (is.null(x$lst_refine) ||
+        is.null(x$lst_refine$pubchem_completion) ||
+        is.null(x$lst_refine$final_compound_catalog)) {
+      stop("Please run `step2()` before `step3()` so compound structures and PubChem CIDs are finalized.")
+    }
+
+    collection <- x$collection
+    herbFuns$validate_collection(collection, stop_if_invalid = TRUE)
+
+    data_index <- herbFuns$prepare_current_compound_target_index(collection)
+    if (nrow(data_index) == 0L) {
+      warning("No candidate compound was available for target annotation.")
+      return(x)
+    }
+
+    if (is.null(data_tcmsp_targets)) {
+      if (!isTRUE(read_local)) {
+        data_tcmsp_targets <- NULL
+      } else {
+        data_tcmsp_targets <- herbFuns$read_tcmsp_targets(verbose = verbose)
+      }
+    }
+
+    if (is.null(data_batman_targets)) {
+      if (!isTRUE(read_local)) {
+        data_batman_targets <- NULL
+      } else {
+        data_batman_targets <- herbFuns$read_batman_targets(verbose = verbose)
+      }
+    }
+
+    data_tcmsp <- herbFuns$collect_tcmsp_targets(
+      data_index = data_index,
+      data_tcmsp_targets = data_tcmsp_targets,
+      verbose = verbose
+    )
+
+    data_batman <- herbFuns$collect_batman_targets(
+      data_index = data_index,
+      data_batman_targets = data_batman_targets,
+      verbose = verbose
+    )
+
+    data_full <- dplyr::bind_rows(data_tcmsp, data_batman)
+    data_full <- dplyr::distinct(data_full)
+
+    if (nrow(data_full) == 0L) {
+      warning("No compound-target annotation was obtained from TCMSP or BATMAN-TCM for the current candidate compounds.")
+      return(x)
+    }
+
+    data_full <- dplyr::arrange(
+      data_full,
+      query_herb,
+      compound_name,
+      target_source,
+      target_evidence_type,
+      target_gene
+    )
+
+    data_catalog <- herbFuns$make_compound_target_catalog(data_full)
+    data_report <- herbFuns$stat_report_compound_target_summary(data_full)
+    data_source <- herbFuns$stat_target_source_summary(data_full)
+
+    x$lst_refine$compound_target_catalog_full <- data_full
+    x$lst_refine$compound_target_catalog <- data_catalog
+    x$lst_refine$report_compound_target_summary <- data_report
+    x$lst_refine$target_source_summary <- data_source
+
+    t.report <- set_lab_legend(
+      data_report,
+      glue::glue("{x@sig} compound-target summary"),
+      glue::glue(
+        "候选成分–靶点汇总表|||该表按药物汇总候选成分对应的靶点注释结果，",
+        "包括具有靶点注释的化合物数量、成分–靶点关系数量、唯一靶点基因数量及不同靶点证据来源的贡献。"
+      )
+    )
+    x <- tablesAdd(x, t.report)
+
+    t.catalog <- set_lab_legend(
+      data_catalog,
+      glue::glue("{x@sig} compound-target catalog"),
+      glue::glue(
+        "候选成分–靶点总表|||该表列出各药物候选化合物对应的靶点基因、靶点名称、PubChem CID、",
+        "化合物证据来源、靶点来源及证据类型，用于展示本分析纳入的成分–靶点数据基础。"
+      )
+    )
+    x <- tablesAdd(x, t.catalog)
+
+    t.source <- set_lab_legend(
+      data_source,
+      glue::glue("{x@sig} target evidence source summary"),
+      glue::glue(
+        "靶点证据来源统计表|||该表按 TCMSP、BATMAN-TCM 已知靶点和 BATMAN-TCM 预测靶点汇总候选成分–靶点关系数量、",
+        "具有靶点注释的化合物数量及唯一靶点基因数量。"
+      )
+    )
+    x <- tablesAdd(x, t.source)
+
+    n_target_links <- nrow(data_full)
+    n_compounds_with_targets <- dplyr::n_distinct(data_full$compound_key)
+    vec_target_gene <- herbFuns$clean_text(data_full$target_gene)
+    n_target_genes <- length(unique(vec_target_gene[!is.na(vec_target_gene) & nzchar(vec_target_gene)]))
+    n_tcmsp_links <- sum(data_full$target_source == "TCMSP", na.rm = TRUE)
+    n_batman_known_links <- sum(
+      data_full$target_source == "BATMAN-TCM" &
+        data_full$target_evidence_type == "known target",
+      na.rm = TRUE
+    )
+    n_batman_predicted_links <- sum(
+      data_full$target_source == "BATMAN-TCM" &
+        data_full$target_evidence_type == "predicted target",
+      na.rm = TRUE
+    )
+
+    x <- methodAdd(
+      x,
+      "为补充候选化合物的潜在靶点信息，本分析进一步整合 TCMSP 与 BATMAN-TCM 的成分–靶点注释。TCMSP 靶点基于候选化合物对应的 MOL_ID 进行匹配；BATMAN-TCM 靶点基于 PubChem CID 匹配已知靶点与预测靶点。对于 BATMAN-TCM 预测靶点，原始 Entrez Gene ID 通过 R 包 `AnnotationDbi` ⟦pkgInfo('AnnotationDbi')⟧与 `org.Hs.eg.db` ⟦pkgInfo('org.Hs.eg.db')⟧转换为 HGNC gene symbol。最终保留药物、候选化合物、靶点基因、靶点来源及证据类型，用于形成候选成分–靶点信息表。"
+    )
+
+    x <- snapAdd(
+      x,
+      "基于 TCMSP 与 BATMAN-TCM 成分–靶点注释，共获得 {n_target_links} 条候选成分–靶点关系，涉及 {n_compounds_with_targets} 个候选化合物和 {n_target_genes} 个靶点基因；其中 TCMSP 支持 {n_tcmsp_links} 条关系，BATMAN-TCM 已知靶点支持 {n_batman_known_links} 条关系，BATMAN-TCM 预测靶点支持 {n_batman_predicted_links} 条关系。"
+    )
+
+    return(x)
+  })
+
 # --------------------------------------------------------------------------
 # General utilities
 # --------------------------------------------------------------------------
@@ -1594,6 +1733,10 @@ herbFuns$files_tcmsp <- function(files)
     "Herb_Ingredients_relationship.xlsx" = c(
       "herb_cn_name", "herb_en_name", "MOL_ID"
     ),
+    "Ingredients_Targets_relationship.xlsx" = c(
+      "herb_cn_name", "herb_en_name", "MOL_ID",
+      "target_name", "gene_name", "target_ID"
+    ),
     "cid_info.csv" = c("Mol ID", "Smiles")
   )
 
@@ -1604,7 +1747,13 @@ herbFuns$files_batman <- function(files)
 {
   keyCols <- list(
     "herb_browse.txt" = c("Chinese.Name", "English.Name", "Ingredients"),
-    "cid_info.csv" = c("Compound_CID", "SMILES")
+    "cid_info.csv" = c("Compound_CID", "SMILES"),
+    "known_browse_by_ingredients.txt.gz" = c(
+      "PubChem_CID", "IUPAC_name", "known_target_proteins"
+    ),
+    "predicted_browse_by_ingredients.txt.gz" = c(
+      "PubChem_CID", "IUPAC_name", "predicted_target_proteins"
+    )
   )
 
   herbFuns$resolve_db_files(files, "db_local_batman")
@@ -1693,6 +1842,114 @@ herbFuns$read_batman <- function(files = NULL, verbose = TRUE)
     cid_info = data_cid
   )
 }
+
+
+herbFuns$read_tcmsp_targets <- function(files = NULL, verbose = TRUE)
+{
+  if (is.null(files)) {
+    files <- c("Ingredients_Targets_relationship.xlsx")
+    names(files) <- files
+    files <- herbFuns$files_tcmsp(files)
+  }
+
+  herbFuns$log_progress(verbose, "Reading TCMSP compound-target records.")
+  data_target <- herbFuns$read_table(files[["Ingredients_Targets_relationship.xlsx"]])
+
+  herbFuns$log_progress(
+    verbose,
+    "TCMSP target records loaded: ", herbFuns$format_n(nrow(data_target)),
+    " compound-target rows."
+  )
+
+  data_target
+}
+
+herbFuns$read_batman_tsv <- function(file)
+{
+  if (!file.exists(file)) {
+    stop("File was not found: ", file)
+  }
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("Package `data.table` is required to read BATMAN-TCM target files.")
+  }
+
+  data.table::fread(
+    file,
+    sep = "\t",
+    data.table = FALSE,
+    quote = "",
+    fill = TRUE,
+    showProgress = FALSE
+  )
+}
+
+herbFuns$parse_batman_predicted_table <- function(data)
+{
+  data <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
+
+  if (ncol(data) == 1L) {
+    vec_line <- herbFuns$clean_text(data[[1L]])
+    vec_line <- vec_line[!is.na(vec_line) & nzchar(vec_line)]
+    pubchem_cid <- sub("^([0-9]+)\\s+.*$", "\\1", vec_line)
+    pubchem_cid[!grepl("^[0-9]+$", pubchem_cid)] <- NA_character_
+    predicted_target_proteins <- sub("^.*\\s([^\\s]+)$", "\\1", vec_line)
+    predicted_target_proteins[predicted_target_proteins == vec_line] <- NA_character_
+    iupac_name <- sub("^[^\\s]+\\s+(.*)\\s+[^\\s]+$", "\\1", vec_line)
+    iupac_name[iupac_name == vec_line] <- NA_character_
+
+    return(tibble::tibble(
+      PubChem_CID = pubchem_cid,
+      IUPAC_name = iupac_name,
+      predicted_target_proteins = predicted_target_proteins
+    ))
+  }
+
+  col_cid <- herbFuns$resolve_col(data, c("PubChem_CID", "PubChem CID", "cid"), required = TRUE)
+  col_iupac <- herbFuns$resolve_col(data, c("IUPAC_name", "IUPAC name", "IUPAC"), required = FALSE)
+  col_target <- herbFuns$resolve_col(
+    data,
+    c("predicted_target_proteins", "predicted target proteins", "Targets"),
+    required = TRUE
+  )
+
+  tibble::tibble(
+    PubChem_CID = herbFuns$clean_text(data[[col_cid]]),
+    IUPAC_name = herbFuns$clean_text(herbFuns$get_col(data, col_iupac)),
+    predicted_target_proteins = herbFuns$clean_text(data[[col_target]])
+  )
+}
+
+herbFuns$read_batman_targets <- function(files = NULL, verbose = TRUE)
+{
+  if (is.null(files)) {
+    files <- c(
+      "known_browse_by_ingredients.txt.gz",
+      "predicted_browse_by_ingredients.txt.gz"
+    )
+    names(files) <- files
+    files <- herbFuns$files_batman(files)
+  }
+
+  herbFuns$log_progress(verbose, "Reading BATMAN-TCM known compound-target records.")
+  data_known <- herbFuns$read_batman_tsv(files[["known_browse_by_ingredients.txt.gz"]])
+
+  herbFuns$log_progress(verbose, "Reading BATMAN-TCM predicted compound-target records.")
+  data_predicted <- herbFuns$read_batman_tsv(files[["predicted_browse_by_ingredients.txt.gz"]])
+  data_predicted <- herbFuns$parse_batman_predicted_table(data_predicted)
+
+  herbFuns$log_progress(
+    verbose,
+    "BATMAN-TCM target records loaded: ", herbFuns$format_n(nrow(data_known)),
+    " known compound rows; ", herbFuns$format_n(nrow(data_predicted)),
+    " predicted compound rows."
+  )
+
+  list(
+    known = data_known,
+    predicted = data_predicted
+  )
+}
+
 
 # --------------------------------------------------------------------------
 # Matching helpers
@@ -3267,6 +3524,657 @@ herbFuns$stat_report_pubchem_final_summary <- function(x)
   )
 
   dplyr::arrange(data_out, Herb)
+}
+
+
+# --------------------------------------------------------------------------
+# Step3 target annotation helpers
+# --------------------------------------------------------------------------
+
+herbFuns$prepare_current_compound_target_index <- function(x)
+{
+  herbFuns$validate_collection(x, stop_if_invalid = TRUE)
+
+  data_hc <- herbFuns$ensure_relationship_columns(x$herb_compound)
+  data_comp <- herbFuns$add_structure_status(x$compound)
+
+  if (nrow(data_hc) == 0L || nrow(data_comp) == 0L) {
+    return(tibble::tibble())
+  }
+
+  data_status <- herbFuns$ensure_compound_columns(data_comp)
+  data_status <- dplyr::select(
+    data_status,
+    source,
+    compound_source_id,
+    compound_key,
+    compound_name_structure = compound_name,
+    pubchem_cid,
+    smiles,
+    inchikey,
+    inchi,
+    molecular_formula,
+    molecular_weight
+  )
+  data_status <- dplyr::distinct(data_status)
+
+  data <- dplyr::left_join(
+    data_hc,
+    data_status,
+    by = c("source", "compound_source_id", "compound_key")
+  )
+
+  data$compound_name_final <- herbFuns$fill_missing_text(
+    data$compound_name,
+    data$compound_name_structure
+  )
+  data$source_label <- herbFuns$format_source_label(data$source)
+
+  data <- dplyr::select(
+    data,
+    query_id,
+    query_herb,
+    herb_cn_name,
+    herb_latin_name,
+    source,
+    source_label,
+    source_herb_id,
+    compound_source_id,
+    compound_key,
+    compound_name = compound_name_final,
+    pubchem_cid,
+    smiles,
+    inchikey,
+    inchi,
+    molecular_formula,
+    molecular_weight
+  )
+
+  dplyr::distinct(data)
+}
+
+herbFuns$summarise_compound_target_index <- function(data_index)
+{
+  if (nrow(data_index) == 0L) {
+    return(tibble::tibble())
+  }
+
+  data_group <- dplyr::group_by(data_index, query_herb, compound_key)
+  data_out <- dplyr::summarise(
+    data_group,
+    herb_latin_name = herbFuns$collapse_unique(herb_latin_name, sep = "; "),
+    compound_name = herbFuns$first_non_missing(compound_name),
+    compound_evidence_sources = herbFuns$collapse_unique(source_label, sep = "; "),
+    compound_source_ids = herbFuns$collapse_unique(
+      paste0(source, ":", compound_source_id),
+      sep = "; "
+    ),
+    pubchem_cid = herbFuns$collapse_unique(pubchem_cid, sep = "; "),
+    smiles = herbFuns$first_non_missing(smiles),
+    inchikey = herbFuns$first_non_missing(inchikey),
+    .groups = "drop"
+  )
+
+  data_out
+}
+
+herbFuns$empty_compound_target_table <- function()
+{
+  tibble::tibble(
+    query_herb = character(0L),
+    herb_latin_name = character(0L),
+    compound_key = character(0L),
+    compound_name = character(0L),
+    compound_evidence_sources = character(0L),
+    compound_source_ids = character(0L),
+    pubchem_cid = character(0L),
+    smiles = character(0L),
+    inchikey = character(0L),
+    target_gene = character(0L),
+    target_name = character(0L),
+    target_id = character(0L),
+    drugbank_id = character(0L),
+    target_source = character(0L),
+    target_evidence_type = character(0L),
+    prediction_score = numeric(0L),
+    svm_score = numeric(0L),
+    rf_score = numeric(0L),
+    validated = character(0L)
+  )
+}
+
+herbFuns$collect_tcmsp_targets <- function(data_index, data_tcmsp_targets = NULL,
+  verbose = TRUE)
+{
+  if (is.null(data_tcmsp_targets) || nrow(data_index) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_idx <- data_index[data_index$source == "tcmsp", , drop = FALSE]
+  data_idx <- data_idx[!is.na(data_idx$compound_source_id) & nzchar(data_idx$compound_source_id), , drop = FALSE]
+
+  if (nrow(data_idx) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_target <- as.data.frame(data_tcmsp_targets, stringsAsFactors = FALSE, check.names = FALSE)
+  col_cn <- herbFuns$resolve_col(data_target, c("herb_cn_name", "Chinese.Name"), required = FALSE)
+  col_mol <- herbFuns$resolve_col(data_target, c("MOL_ID", "Mol ID", "molecule_ID"), required = TRUE)
+  col_name <- herbFuns$resolve_col(data_target, c("molecule_name", "compound_name", "Name"), required = FALSE)
+  col_target <- herbFuns$resolve_col(data_target, c("target_name", "Target name"), required = FALSE)
+  col_gene <- herbFuns$resolve_col(data_target, c("gene_name", "Gene", "gene"), required = TRUE)
+  col_target_id <- herbFuns$resolve_col(data_target, c("target_ID", "target_id", "Target ID"), required = FALSE)
+  col_drugbank <- herbFuns$resolve_col(data_target, c("drugbank_ID", "drugbank_id", "DrugBank ID"), required = FALSE)
+  col_validated <- herbFuns$resolve_col(data_target, c("validated", "Validated"), required = FALSE)
+  col_svm <- herbFuns$resolve_col(data_target, c("SVM_score", "svm_score"), required = FALSE)
+  col_rf <- herbFuns$resolve_col(data_target, c("RF_score", "rf_score"), required = FALSE)
+
+  data_target_std <- tibble::tibble(
+    herb_match_key = herbFuns$match_key(herbFuns$get_col(data_target, col_cn)),
+    compound_source_id = herbFuns$clean_text(data_target[[col_mol]]),
+    compound_name_target = herbFuns$clean_text(herbFuns$get_col(data_target, col_name)),
+    target_name = herbFuns$clean_text(herbFuns$get_col(data_target, col_target)),
+    target_gene = herbFuns$clean_text(data_target[[col_gene]]),
+    target_id = herbFuns$clean_text(herbFuns$get_col(data_target, col_target_id)),
+    drugbank_id = herbFuns$clean_text(herbFuns$get_col(data_target, col_drugbank)),
+    validated = herbFuns$clean_text(herbFuns$get_col(data_target, col_validated)),
+    svm_score = suppressWarnings(as.numeric(herbFuns$get_col(data_target, col_svm))),
+    rf_score = suppressWarnings(as.numeric(herbFuns$get_col(data_target, col_rf)))
+  )
+
+  data_target_std <- dplyr::filter(
+    data_target_std,
+    !is.na(compound_source_id),
+    nzchar(compound_source_id),
+    compound_source_id %in% data_idx$compound_source_id
+  )
+
+  if (nrow(data_target_std) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_idx$herb_match_key <- herbFuns$match_key(data_idx$herb_cn_name)
+  data_idx_strict <- dplyr::select(
+    data_idx,
+    query_herb,
+    compound_key,
+    compound_source_id,
+    herb_match_key
+  )
+  data_link_key <- dplyr::inner_join(
+    data_idx_strict,
+    data_target_std,
+    by = c("compound_source_id", "herb_match_key")
+  )
+
+  if (nrow(data_link_key) == 0L) {
+    data_idx_loose <- dplyr::select(
+      data_idx,
+      query_herb,
+      compound_key,
+      compound_source_id
+    )
+    data_link_key <- dplyr::inner_join(
+      data_idx_loose,
+      data_target_std,
+      by = "compound_source_id"
+    )
+  }
+
+  if (nrow(data_link_key) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_compound <- herbFuns$summarise_compound_target_index(data_index)
+  data_out <- dplyr::left_join(
+    data_link_key,
+    data_compound,
+    by = c("query_herb", "compound_key")
+  )
+
+  data_out$compound_name <- herbFuns$fill_missing_text(
+    data_out$compound_name,
+    data_out$compound_name_target
+  )
+  data_out$target_source <- "TCMSP"
+  data_out$target_evidence_type <- "TCMSP annotation"
+  data_out$prediction_score <- NA_real_
+
+  data_out <- dplyr::select(
+    data_out,
+    query_herb,
+    herb_latin_name,
+    compound_key,
+    compound_name,
+    compound_evidence_sources,
+    compound_source_ids,
+    pubchem_cid,
+    smiles,
+    inchikey,
+    target_gene,
+    target_name,
+    target_id,
+    drugbank_id,
+    target_source,
+    target_evidence_type,
+    prediction_score,
+    svm_score,
+    rf_score,
+    validated
+  )
+
+  herbFuns$log_progress(
+    verbose,
+    "TCMSP target links collected: ", herbFuns$format_n(nrow(data_out)), "."
+  )
+
+  dplyr::distinct(data_out)
+}
+
+herbFuns$split_batman_known_targets <- function(data_known)
+{
+  if (is.null(data_known) || nrow(data_known) == 0L) {
+    return(tibble::tibble(
+      pubchem_cid = character(0L),
+      target_gene = character(0L)
+    ))
+  }
+
+  data_known <- as.data.frame(data_known, stringsAsFactors = FALSE, check.names = FALSE)
+  col_cid <- herbFuns$resolve_col(data_known, c("PubChem_CID", "PubChem CID", "cid"), required = TRUE)
+  col_target <- herbFuns$resolve_col(
+    data_known,
+    c("known_target_proteins", "known target proteins", "Targets"),
+    required = TRUE
+  )
+
+  lst <- lapply(seq_len(nrow(data_known)), function(i) {
+    cid_i <- herbFuns$clean_text(data_known[[col_cid]][[i]])
+    target_i <- herbFuns$clean_text(data_known[[col_target]][[i]])
+
+    if (is.na(cid_i) || !nzchar(cid_i) || is.na(target_i) || !nzchar(target_i)) {
+      return(tibble::tibble())
+    }
+
+    vec_target <- unlist(strsplit(target_i, "\\|"), use.names = FALSE)
+    vec_target <- herbFuns$clean_text(vec_target)
+    vec_target <- vec_target[!is.na(vec_target) & nzchar(vec_target)]
+
+    tibble::tibble(
+      pubchem_cid = rep(cid_i, length(vec_target)),
+      target_gene = vec_target
+    )
+  })
+
+  dplyr::distinct(dplyr::bind_rows(lst))
+}
+
+herbFuns$split_batman_predicted_targets <- function(data_predicted)
+{
+  if (is.null(data_predicted) || nrow(data_predicted) == 0L) {
+    return(tibble::tibble(
+      pubchem_cid = character(0L),
+      target_id = character(0L),
+      prediction_score = numeric(0L)
+    ))
+  }
+
+  data_predicted <- herbFuns$parse_batman_predicted_table(data_predicted)
+
+  lst <- lapply(seq_len(nrow(data_predicted)), function(i) {
+    cid_i <- herbFuns$clean_text(data_predicted$PubChem_CID[[i]])
+    target_i <- herbFuns$clean_text(data_predicted$predicted_target_proteins[[i]])
+
+    if (is.na(cid_i) || !nzchar(cid_i) || is.na(target_i) || !nzchar(target_i)) {
+      return(tibble::tibble())
+    }
+
+    vec_item <- unlist(strsplit(target_i, "\\|"), use.names = FALSE)
+    vec_item <- herbFuns$clean_text(vec_item)
+    vec_item <- vec_item[!is.na(vec_item) & nzchar(vec_item)]
+
+    target_id <- sub("\\(.*$", "", vec_item)
+    score_text <- ifelse(
+      grepl("\\(([^()]*)\\)", vec_item),
+      sub("^.*\\(([^()]*)\\).*$", "\\1", vec_item),
+      NA_character_
+    )
+
+    tibble::tibble(
+      pubchem_cid = rep(cid_i, length(target_id)),
+      target_id = herbFuns$clean_text(target_id),
+      prediction_score = suppressWarnings(as.numeric(score_text))
+    )
+  })
+
+  data_out <- dplyr::bind_rows(lst)
+  data_out <- dplyr::filter(data_out, !is.na(target_id), nzchar(target_id))
+  dplyr::distinct(data_out)
+}
+
+herbFuns$map_entrez_to_symbol <- function(entrez_id)
+{
+  entrez_id <- unique(herbFuns$clean_text(entrez_id))
+  entrez_id <- entrez_id[!is.na(entrez_id) & nzchar(entrez_id)]
+
+  if (length(entrez_id) == 0L) {
+    return(tibble::tibble(
+      target_id = character(0L),
+      target_gene = character(0L)
+    ))
+  }
+
+  if (!requireNamespace("AnnotationDbi", quietly = TRUE)) {
+    stop("Package `AnnotationDbi` is required for Entrez ID conversion.")
+  }
+  if (!requireNamespace("org.Hs.eg.db", quietly = TRUE)) {
+    stop("Package `org.Hs.eg.db` is required for Entrez ID conversion.")
+  }
+
+  data_map <- AnnotationDbi::select(
+    org.Hs.eg.db::org.Hs.eg.db,
+    keys = entrez_id,
+    columns = c("SYMBOL"),
+    keytype = "ENTREZID"
+  )
+
+  data_out <- tibble::tibble(
+    target_id = herbFuns$clean_text(data_map$ENTREZID),
+    target_gene = herbFuns$clean_text(data_map$SYMBOL)
+  )
+  data_out <- dplyr::filter(data_out, !is.na(target_id), nzchar(target_id))
+  dplyr::distinct(data_out)
+}
+
+herbFuns$collect_batman_targets <- function(data_index, data_batman_targets = NULL,
+  verbose = TRUE)
+{
+  if (is.null(data_batman_targets) || nrow(data_index) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_idx <- data_index[!is.na(data_index$pubchem_cid) & nzchar(data_index$pubchem_cid), , drop = FALSE]
+  if (nrow(data_idx) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  vec_cid <- unique(data_idx$pubchem_cid)
+  vec_cid <- vec_cid[!is.na(vec_cid) & nzchar(vec_cid)]
+
+  data_known <- data_batman_targets$known
+  data_predicted <- data_batman_targets$predicted
+
+  data_known <- herbFuns$split_batman_known_targets(data_known)
+  data_known <- data_known[data_known$pubchem_cid %in% vec_cid, , drop = FALSE]
+
+  data_predicted <- herbFuns$parse_batman_predicted_table(data_predicted)
+  data_predicted <- data_predicted[data_predicted$PubChem_CID %in% vec_cid, , drop = FALSE]
+  data_predicted <- herbFuns$split_batman_predicted_targets(data_predicted)
+
+  data_symbol <- herbFuns$map_entrez_to_symbol(data_predicted$target_id)
+  if (nrow(data_predicted) > 0L) {
+    data_predicted <- dplyr::left_join(data_predicted, data_symbol, by = "target_id")
+    data_predicted$target_gene <- ifelse(
+      is.na(data_predicted$target_gene) | !nzchar(data_predicted$target_gene),
+      paste0("ENTREZ:", data_predicted$target_id),
+      data_predicted$target_gene
+    )
+  } else {
+    data_predicted$target_gene <- character(0L)
+  }
+
+  data_idx_cid <- dplyr::select(
+    data_idx,
+    query_herb,
+    compound_key,
+    pubchem_cid
+  )
+  data_idx_cid <- dplyr::distinct(data_idx_cid)
+
+  data_compound <- herbFuns$summarise_compound_target_index(data_index)
+  data_compound <- dplyr::select(data_compound, -dplyr::any_of("pubchem_cid"))
+
+  if (nrow(data_known) > 0L) {
+    data_known_link <- dplyr::inner_join(data_idx_cid, data_known, by = "pubchem_cid")
+    data_known_link <- dplyr::left_join(
+      data_known_link,
+      data_compound,
+      by = c("query_herb", "compound_key")
+    )
+    data_known_link$target_name <- NA_character_
+    data_known_link$target_id <- NA_character_
+    data_known_link$drugbank_id <- NA_character_
+    data_known_link$target_source <- "BATMAN-TCM"
+    data_known_link$target_evidence_type <- "known target"
+    data_known_link$prediction_score <- NA_real_
+    data_known_link$svm_score <- NA_real_
+    data_known_link$rf_score <- NA_real_
+    data_known_link$validated <- NA_character_
+  } else {
+    data_known_link <- herbFuns$empty_compound_target_table()
+  }
+
+  if (nrow(data_predicted) > 0L) {
+    data_pred_link <- dplyr::inner_join(data_idx_cid, data_predicted, by = "pubchem_cid")
+    data_pred_link <- dplyr::left_join(
+      data_pred_link,
+      data_compound,
+      by = c("query_herb", "compound_key")
+    )
+    data_pred_link$target_name <- NA_character_
+    data_pred_link$drugbank_id <- NA_character_
+    data_pred_link$target_source <- "BATMAN-TCM"
+    data_pred_link$target_evidence_type <- "predicted target"
+    data_pred_link$svm_score <- NA_real_
+    data_pred_link$rf_score <- NA_real_
+    data_pred_link$validated <- NA_character_
+  } else {
+    data_pred_link <- herbFuns$empty_compound_target_table()
+  }
+
+  data_out <- dplyr::bind_rows(data_known_link, data_pred_link)
+  if (nrow(data_out) == 0L) {
+    return(herbFuns$empty_compound_target_table())
+  }
+
+  data_out <- dplyr::select(
+    data_out,
+    query_herb,
+    herb_latin_name,
+    compound_key,
+    compound_name,
+    compound_evidence_sources,
+    compound_source_ids,
+    pubchem_cid,
+    smiles,
+    inchikey,
+    target_gene,
+    target_name,
+    target_id,
+    drugbank_id,
+    target_source,
+    target_evidence_type,
+    prediction_score,
+    svm_score,
+    rf_score,
+    validated
+  )
+
+  herbFuns$log_progress(
+    verbose,
+    "BATMAN-TCM target links collected: ", herbFuns$format_n(nrow(data_out)), "."
+  )
+
+  dplyr::distinct(data_out)
+}
+
+herbFuns$make_compound_target_catalog <- function(data_target)
+{
+  if (is.null(data_target) || nrow(data_target) == 0L) {
+    return(tibble::tibble(
+      Herb = character(0L),
+      `Latin name` = character(0L),
+      `Compound name` = character(0L),
+      `Compound evidence` = character(0L),
+      `PubChem CID` = character(0L),
+      `Target gene` = character(0L),
+      `Target name` = character(0L),
+      `Target source` = character(0L),
+      `Target evidence` = character(0L),
+      `Prediction score` = numeric(0L)
+    ))
+  }
+
+  data_out <- tibble::tibble(
+    Herb = data_target$query_herb,
+    `Latin name` = data_target$herb_latin_name,
+    `Compound name` = data_target$compound_name,
+    `Compound evidence` = data_target$compound_evidence_sources,
+    `PubChem CID` = data_target$pubchem_cid,
+    `Target gene` = data_target$target_gene,
+    `Target name` = data_target$target_name,
+    `Target source` = data_target$target_source,
+    `Target evidence` = data_target$target_evidence_type,
+    `Prediction score` = data_target$prediction_score
+  )
+
+  data_out$`Latin name` <- ifelse(
+    is.na(data_out$`Latin name`) | !nzchar(data_out$`Latin name`),
+    "Not available",
+    data_out$`Latin name`
+  )
+  data_out$`Target name` <- ifelse(
+    is.na(data_out$`Target name`) | !nzchar(data_out$`Target name`),
+    "Not available",
+    data_out$`Target name`
+  )
+  data_out$`Prediction score` <- ifelse(
+    is.na(data_out$`Prediction score`),
+    NA_real_,
+    round(data_out$`Prediction score`, 3L)
+  )
+
+  dplyr::arrange(
+    dplyr::distinct(data_out),
+    Herb,
+    `Compound name`,
+    `Target source`,
+    `Target evidence`,
+    `Target gene`
+  )
+}
+
+herbFuns$stat_report_compound_target_summary <- function(data_target)
+{
+  if (is.null(data_target) || nrow(data_target) == 0L) {
+    return(tibble::tibble(
+      Herb = character(0L),
+      `Latin name` = character(0L),
+      `Compounds with targets` = integer(0L),
+      `Compound-target links` = integer(0L),
+      `Unique target genes` = integer(0L),
+      `Target evidence sources` = character(0L),
+      `TCMSP links` = integer(0L),
+      `BATMAN known links` = integer(0L),
+      `BATMAN predicted links` = integer(0L)
+    ))
+  }
+
+  data_work <- data_target
+  data_work$target_gene_count_key <- ifelse(
+    is.na(data_work$target_gene) | !nzchar(data_work$target_gene),
+    data_work$target_id,
+    data_work$target_gene
+  )
+  data_work$target_evidence_label <- paste(
+    data_work$target_source,
+    data_work$target_evidence_type,
+    sep = " "
+  )
+
+  data_group <- dplyr::group_by(data_work, query_herb)
+  data_out <- dplyr::summarise(
+    data_group,
+    `Latin name` = herbFuns$collapse_unique(herb_latin_name, sep = "; "),
+    `Compounds with targets` = dplyr::n_distinct(compound_key),
+    `Compound-target links` = dplyr::n(),
+    `Unique target genes` = dplyr::n_distinct(target_gene_count_key),
+    `Target evidence sources` = herbFuns$collapse_unique(target_evidence_label, sep = "; "),
+    `TCMSP links` = sum(target_source == "TCMSP", na.rm = TRUE),
+    `BATMAN known links` = sum(
+      target_source == "BATMAN-TCM" & target_evidence_type == "known target",
+      na.rm = TRUE
+    ),
+    `BATMAN predicted links` = sum(
+      target_source == "BATMAN-TCM" & target_evidence_type == "predicted target",
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+  data_out$Herb <- data_out$query_herb
+  data_out$`Latin name` <- ifelse(
+    is.na(data_out$`Latin name`) | !nzchar(data_out$`Latin name`),
+    "Not available",
+    data_out$`Latin name`
+  )
+
+  data_out <- dplyr::select(
+    data_out,
+    Herb,
+    `Latin name`,
+    `Compounds with targets`,
+    `Compound-target links`,
+    `Unique target genes`,
+    `Target evidence sources`,
+    `TCMSP links`,
+    `BATMAN known links`,
+    `BATMAN predicted links`
+  )
+
+  dplyr::arrange(data_out, Herb)
+}
+
+herbFuns$stat_target_source_summary <- function(data_target)
+{
+  if (is.null(data_target) || nrow(data_target) == 0L) {
+    return(tibble::tibble(
+      `Target source` = character(0L),
+      `Target evidence` = character(0L),
+      `Compounds with targets` = integer(0L),
+      `Compound-target links` = integer(0L),
+      `Unique target genes` = integer(0L)
+    ))
+  }
+
+  data_work <- data_target
+  data_work$target_gene_count_key <- ifelse(
+    is.na(data_work$target_gene) | !nzchar(data_work$target_gene),
+    data_work$target_id,
+    data_work$target_gene
+  )
+
+  data_group <- dplyr::group_by(data_work, target_source, target_evidence_type)
+  data_out <- dplyr::summarise(
+    data_group,
+    `Compounds with targets` = dplyr::n_distinct(compound_key),
+    `Compound-target links` = dplyr::n(),
+    `Unique target genes` = dplyr::n_distinct(target_gene_count_key),
+    .groups = "drop"
+  )
+  data_out$`Target source` <- data_out$target_source
+  data_out$`Target evidence` <- data_out$target_evidence_type
+
+  data_out <- dplyr::select(
+    data_out,
+    `Target source`,
+    `Target evidence`,
+    `Compounds with targets`,
+    `Compound-target links`,
+    `Unique target genes`
+  )
+
+  dplyr::arrange(data_out, `Target source`, `Target evidence`)
 }
 
 # --------------------------------------------------------------------------

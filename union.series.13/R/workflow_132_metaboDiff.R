@@ -2806,3 +2806,18 @@ mtFuns$plot_diff_volcano <- function(data_diff,
 
   p
 }
+
+setMethod("asjob_metaboAnalyst", signature = c(x = "job_metaboDiff"),
+  function(x, ...)
+  {
+    if (is.null(x$.feature)) {
+      stop("`x$.feature` was not found. Please run `step3()` first.")
+    }
+
+    asjob_metaboAnalyst(
+      x$.feature,
+      ...
+    )
+  })
+
+

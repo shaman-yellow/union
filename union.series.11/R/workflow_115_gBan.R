@@ -36,10 +36,11 @@ setMethod("step0", signature = c(x = "job_gBan"),
 
 setMethod("step1", signature = c(x = "job_gBan"),
   function(x, dir_save = paste0("GraphBAN_", x@sig),
-    db = c("batman", "zinc", "cmnpd", "dgidb", "drugbank"),
-    batman = FALSE, zinc = FALSE, cmnpd = FALSE, dgidb = FALSE, 
-    drugbank = FALSE, file_dgidb = NULL,
-    file_batman_compounds_info = getOption("file_batman_compounds_info"), recode = NULL)
+    db = c("batman", "zinc", "cmnpd", "dgidb", "drugbank", "custom"),
+    batman = FALSE, zinc = FALSE, cmnpd = FALSE, dgidb = FALSE,
+    drugbank = FALSE, custom = FALSE, file_dgidb = NULL,
+    file_batman_compounds_info = getOption("file_batman_compounds_info"),
+    db_custom = NULL, db_custom_name = "Custom compound set", recode = NULL)
   {
     step_message("Got amino acid sequence and drug smiles.")
     x$dir_save <- dir_save
@@ -154,6 +155,26 @@ setMethod("step1", signature = c(x = "job_gBan"),
         x, "以 DGIdb 数据库 (<https://www.cmnpd.org>) 初步预测与输入基因存在相互作用的候选药物化合物。共计得到 {nrow(ndrugs)} 条记录。剔除无法从 PubChemR 搜索到对应化合物信息记录的条目。余下 {nrow(data_dgidb)} 条记录，按各基因统计为: {try_snap(data_dgidb, 'gene', 'drug')}。"
       )
     }
+    if (custom) {
+      data_custom <- gBanFuns$resolve_custom_compound_db(
+        db_custom = db_custom,
+        db_custom_name = db_custom_name,
+        require_smiles = TRUE
+      )
+      x$custom_compound_db <- data_custom
+      x$smiles_compounds$data_custom <- dplyr::distinct(
+        data_custom,
+        smiles
+      )
+      x <- methodAdd(
+        x,
+        glue::glue(
+          "采用自定义候选化合物库“{db_custom_name}”作为 GraphBAN 输入化合物来源。",
+          "该化合物库仅保留具有 SMILES 结构式的化合物，用于后续 GraphBAN 药物–靶点相互作用预测；",
+          "原始化合物名称、PubChem CID、InChIKey 及来源证据等信息保留为候选化合物注释字段。"
+        )
+      )
+    }
     return(x)
   })
 
@@ -205,6 +226,17 @@ setMethod("step2", signature = c(x = "job_gBan"),
     )
     write.csv(combn, x$file_combn, row.names = FALSE)
     x$combn <- combn
+
+    if (!is.null(x$custom_compound_db)) {
+      data_custom_keep <- merge(
+        x$input_compounds,
+        as.data.frame(x$custom_compound_db, stringsAsFactors = FALSE),
+        by = "smiles",
+        all.x = TRUE
+      )
+      x$custom_input_compound_db <- tibble::as_tibble(data_custom_keep)
+    }
+
     x <- snapAdd(x, "从数据库获取到的化合物共 {length(compounds)} 个。经过滤后得到 {nrow(input_compounds)} 个唯一化合物。")
     return(x)
   })
@@ -338,6 +370,14 @@ setMethod("step4", signature = c(x = "job_gBan"),
 
     x$smiles_keep <- unique(data_selected$SMILES)
     x$smiles_from_gban <- x$smiles_keep
+    x$admet_skipped <- TRUE
+    x$swiss_skipped <- TRUE
+    x$smiles_from_admet <- NULL
+    x$smiles_from_admet_toxicity <- NULL
+    x$smiles_for_swiss <- NULL
+    x$smiles_from_swiss <- NULL
+    x$t_candidate_admet <- NULL
+    x$t_candidate_swissAdme <- NULL
     x$split_by_genes <- split(data_selected, data_selected$hgnc_symbol)
 
     x$file_smiles_for_admet <- file.path(x$dir_save, "smiles_for_admet.txt")
@@ -550,11 +590,15 @@ setMethod("step4", signature = c(x = "job_gBan"),
 setMethod("step5", signature = c(x = "job_gBan"),
   function(x,
     file_admet = NULL,
+    admet_tool = c("admetlab", "admetsar"),
+    route = c("systemic", "topical_nasal"),
     cutoff = .7,
+    warning_cutoff = .5,
     toxicity_cols = NULL,
     optional_toxicity_cols = NULL,
     include_optional_toxicity = FALSE,
     max_toxicity_flags = 0L,
+    max_warning_flags = Inf,
     prepare_swiss_input = TRUE,
     filter_long_smiles_for_swiss = TRUE,
     swiss_max_smiles_chars = 200L,
@@ -563,17 +607,50 @@ setMethod("step5", signature = c(x = "job_gBan"),
     skip = FALSE
   )
   {
-    step_message("ADMET toxicity evaluation.")
-
-    if (skip) {
-      return(x)
-    }
+    step_message("ADMET safety evaluation.")
+    admet_tool <- match.arg(admet_tool)
+    route <- match.arg(route)
 
     smiles <- x$smiles_from_gban
 
     if (is.null(smiles) || !length(smiles)) {
       stop("No GraphBAN candidate SMILES was found in x$smiles_from_gban.")
     }
+
+    if (isTRUE(skip)) {
+      x$admet_skipped <- TRUE
+      x$swiss_skipped <- TRUE
+      x$admet <- NULL
+      x$admet_eval <- NULL
+      x$admet_filter_toxicity <- NULL
+      x$admet_filter <- NULL
+      x$admet_toxicity_cols <- NULL
+      x$admet_filter_stat <- NULL
+      x$admet_selection_flow <- NULL
+      x$swissAdme <- NULL
+      x$swissAdme_eval <- NULL
+      x$swiss_selection_flow <- NULL
+      x$swiss_selection_decision <- NULL
+      x$t_candidate_admet <- NULL
+      x$t_candidate_swissAdme <- NULL
+      x$smiles_from_swiss <- NULL
+      x$smiles_keep <- x$smiles_from_admet <- smiles
+      x$smiles_from_admet_toxicity <- smiles
+
+      if (isTRUE(prepare_swiss_input)) {
+        x$smiles_for_swiss <- smiles
+        x$file_smiles_for_swiss <- file.path(x$dir_save, "smiles_for_swiss.txt")
+        writeLines(x$smiles_for_swiss, x$file_smiles_for_swiss)
+      } else {
+        x$smiles_for_swiss <- NULL
+        x$file_smiles_for_swiss <- NULL
+      }
+
+      message("ADMET safety evaluation was skipped; GraphBAN-retained SMILES were passed to the next layer.")
+      return(x)
+    }
+
+    x$admet_skipped <- FALSE
 
     if (is.null(file_admet)) {
       stop("is.null(file_admet).")
@@ -582,38 +659,40 @@ setMethod("step5", signature = c(x = "job_gBan"),
     data_admet <- ftibble(file_admet)
     data_admet <- as.data.frame(data_admet, stringsAsFactors = FALSE)
 
-    if (!"raw_smiles" %in% colnames(data_admet)) {
-      if ("smiles" %in% colnames(data_admet)) {
-        data_admet$raw_smiles <- data_admet$smiles
-      } else {
-        stop('Column "raw_smiles" or "smiles" was not found in ADMET table.')
-      }
-    }
-
-    if (nrow(data_admet) != length(smiles)) {
-      data_admet <- data_admet[data_admet$raw_smiles %in% smiles, , drop = FALSE]
-    }
+    data_admet <- gBanFuns$resolve_admet_smiles_identity(
+      data_admet = data_admet,
+      smiles = smiles,
+      admet_tool = admet_tool
+    )
+    x$admet_smiles_diagnostics <- attr(data_admet, "smiles_diagnostics")
 
     if (nrow(data_admet) == 0L) {
       stop("No ADMET record matched x$smiles_from_gban.")
     }
 
-    toxicity_cols <- gBanFuns$resolve_admet_toxicity_cols(
+    admet_config <- gBanFuns$get_admet_filter_config(
       data = data_admet,
+      admet_tool = admet_tool,
+      route = route,
       toxicity_cols = toxicity_cols,
       optional_toxicity_cols = optional_toxicity_cols,
       include_optional_toxicity = include_optional_toxicity
     )
+    toxicity_cols <- admet_config$hard_cols
+    warning_cols <- admet_config$warning_cols
 
     if (!length(toxicity_cols)) {
-      stop("No valid toxicity endpoint column was found in ADMET table.")
+      stop("No valid core toxicity endpoint column was found in ADMET table.")
     }
 
     data_eval <- gBanFuns$evaluate_admet_toxicity(
       data = data_admet,
       toxicity_cols = toxicity_cols,
+      warning_cols = warning_cols,
       cutoff = cutoff,
-      max_toxicity_flags = max_toxicity_flags
+      warning_cutoff = warning_cutoff,
+      max_toxicity_flags = max_toxicity_flags,
+      max_warning_flags = max_warning_flags
     )
 
     data_pass_toxicity <- data_eval[
@@ -642,17 +721,33 @@ setMethod("step5", signature = c(x = "job_gBan"),
     x$admet_eval <- tibble::as_tibble(data_eval)
     x$admet_filter_toxicity <- tibble::as_tibble(data_pass_toxicity)
     x$admet_filter <- tibble::as_tibble(data_pass)
+    x$admet_tool <- admet_tool
+    x$admet_route <- route
     x$admet_toxicity_cols <- toxicity_cols
-    x$admet_filter_stat <- gBanFuns$summarize_admet_toxicity_filter(
+    x$admet_warning_cols <- warning_cols
+    x$admet_filter_config <- admet_config
+    stat_hard <- gBanFuns$summarize_admet_toxicity_filter(
       data_eval = data_eval,
       toxicity_cols = toxicity_cols,
       cutoff = cutoff
     )
+    stat_hard$endpoint_role <- "core filter"
+    stat_warning <- if (length(warning_cols)) {
+      gBanFuns$summarize_admet_toxicity_filter(
+        data_eval = data_eval,
+        toxicity_cols = warning_cols,
+        cutoff = warning_cutoff
+      )
+    } else {
+      stat_hard[0L, , drop = FALSE]
+    }
+    stat_warning$endpoint_role <- "risk annotation"
+    x$admet_filter_stat <- dplyr::bind_rows(stat_hard, stat_warning)
 
     x$admet_selection_flow <- data.frame(
       stage = c(
         "GraphBAN candidates",
-        "ADMETlab toxicity filter",
+        admet_config$stage_label_en,
         "Structure-scope control"
       ),
       n_compound = c(
@@ -675,15 +770,22 @@ setMethod("step5", signature = c(x = "job_gBan"),
 
     cols_report <- gBanFuns$resolve_admet_report_cols(
       data = data_pass,
-      toxicity_cols = toxicity_cols
+      toxicity_cols = toxicity_cols,
+      warning_cols = warning_cols,
+      admet_tool = admet_tool,
+      route = route
     )
 
     t.candidate_admet <- data_pass[, cols_report, drop = FALSE]
     t.candidate_admet <- dplyr::rename(
       t.candidate_admet,
       SMILES = raw_smiles,
-      Risk_count = n_toxicity_risk,
-      Max_risk = max_toxicity_risk
+      Safety_decision = admet_decision,
+      Hard_risk_n = n_toxicity_risk,
+      Max_hard_risk = max_toxicity_risk,
+      Warning_risk_n = n_warning_risk,
+      Max_warning_risk = max_warning_risk,
+      Major_risk_endpoints = major_risk_endpoints
     )
 
     t.candidate_admet <- dplyr::mutate(
@@ -699,12 +801,12 @@ setMethod("step5", signature = c(x = "job_gBan"),
     if (isTRUE(add_candidate_table)) {
       t.candidate_admet <- set_lab_legend(
         t.candidate_admet,
-        glue::glue("{x@sig} candidate compounds retained by ADMETlab toxicity evaluation"),
+        glue::glue("{x@sig} candidate compounds retained by {admet_config$tool_label} safety evaluation"),
         glue::glue(
-          "ADMETlab 毒性风险评估后保留的候选化合物|||",
-          "该表展示经 ADMETlab 3.0 毒性风险评估后保留的候选化合物。",
-          "筛选时重点考察方案指定的肝毒性、致癌性、免疫毒性和遗传毒性相关指标，",
-          "并保留核心毒性风险指标均未达到显著风险阈值的化合物。"
+          "候选化合物安全性初筛保留表|||",
+          "该表展示经 {admet_config$tool_label} 安全性初筛后保留的候选化合物。",
+          "筛选时重点考察 {admet_config$route_label} 相关核心风险终点，",
+          "并保留核心风险指标未达到显著风险阈值的化合物。"
         )
       )
 
@@ -718,11 +820,11 @@ setMethod("step5", signature = c(x = "job_gBan"),
       t.admet_stat <- x$admet_filter_stat
       t.admet_stat <- set_lab_legend(
         t.admet_stat,
-        glue::glue("{x@sig} ADMETlab toxicity endpoint summary"),
+        glue::glue("{x@sig} {admet_config$tool_label} safety endpoint summary"),
         glue::glue(
-          "ADMETlab 毒性风险指标统计表|||",
-          "该表统计各毒性终点在候选化合物中的风险分布情况，",
-          "包括达到显著风险阈值的化合物数量及比例。"
+          "候选化合物安全性指标统计表|||",
+          "该表统计 {admet_config$tool_label} 各安全性终点在候选化合物中的风险分布情况，",
+          "包括达到相应风险阈值的化合物数量及比例。"
         )
       )
 
@@ -734,18 +836,28 @@ setMethod("step5", signature = c(x = "job_gBan"),
 
     x$smiles_keep <- x$smiles_from_admet <- data_pass$raw_smiles
     x$smiles_from_admet_toxicity <- data_pass_toxicity$raw_smiles
+    x$swiss_skipped <- TRUE
+    x$swissAdme <- NULL
+    x$swissAdme_eval <- NULL
+    x$swiss_selection_flow <- NULL
+    x$swiss_selection_decision <- NULL
+    x$t_candidate_swissAdme <- NULL
+    x$smiles_from_swiss <- NULL
 
     if (isTRUE(prepare_swiss_input)) {
       x$smiles_for_swiss <- data_pass$raw_smiles
       x$file_smiles_for_swiss <- file.path(x$dir_save, "smiles_for_swiss.txt")
       writeLines(x$smiles_for_swiss, x$file_smiles_for_swiss)
+    } else {
+      x$smiles_for_swiss <- NULL
+      x$file_smiles_for_swiss <- NULL
     }
 
     n_input <- length(unique(smiles))
     n_pass_toxicity <- length(unique(data_pass_toxicity$raw_smiles))
     n_pass <- length(unique(data_pass$raw_smiles))
     text_endpoint <- gBanFuns$format_admet_endpoint_text(
-      stat = x$admet_filter_stat,
+      stat = stat_hard,
       cutoff = cutoff
     )
     text_cutoff <- gBanFuns$format_cutoff(cutoff)
@@ -766,26 +878,26 @@ setMethod("step5", signature = c(x = "job_gBan"),
       )
 
       text_structure_snap <- glue::glue(
-        "经结构式长度控制后，保留 {n_pass} 个候选化合物用于后续药物性质评价。"
+        "经结构式长度控制后，保留 {n_pass} 个候选化合物用于后续评价。"
       )
     }
 
     x <- methodAdd(
       x,
       glue::glue(
-        "将 GraphBAN 筛选得到的候选化合物 SMILES 输入 ADMETlab 3.0 平台进行毒理学风险评估。",
-        "ADMETlab 3.0 可基于分子结构预测多类 ADMET 相关性质及毒性终点；对于分类毒性模型，输出值表示化合物属于相应毒性类别的概率。",
-        "依据方案中风险系数大于 {text_cutoff} 视为显著风险的判定标准，",
-        "本分析重点纳入肝毒性、致癌性、免疫毒性和遗传毒性相关终点进行筛选，",
-        "并保留{text_risk_rule}的候选化合物。{text_structure_method}"
+        "将 GraphBAN 筛选得到的候选化合物 SMILES 输入 {admet_config$tool_label} 平台（{admet_config$tool_url}）进行安全性风险评估。",
+        "{admet_config$method_scope}",
+        "对于分类风险模型，输出值可作为化合物属于相应风险类别的概率或风险分数进行解释。",
+        "本分析依据较高置信风险优先排除的原则，以核心风险终点分数大于等于 {text_cutoff} 作为显著风险判定阈值，",
+        "并保留{text_risk_rule}的候选化合物；其他局部接触或系统暴露相关风险终点作为风险注释保留。{text_structure_method}"
       )
     )
 
     x <- snapAdd(
       x,
       glue::glue(
-        "ADMETlab 毒性风险评估前共有 {n_input} 个候选化合物；",
-        "经核心毒性终点筛选后保留 {n_pass_toxicity} 个候选化合物。",
+        "{admet_config$tool_label} 安全性评估前共有 {n_input} 个候选化合物；",
+        "经核心风险终点筛选后保留 {n_pass_toxicity} 个候选化合物。",
         "{text_structure_snap}",
         "{text_endpoint}"
       )
@@ -815,8 +927,35 @@ setMethod("step6", signature = c(x = "job_gBan"),
     method <- match.arg(method)
 
     if (isTRUE(skip)) {
+      smiles <- if (!is.null(x$smiles_from_admet)) {
+        x$smiles_from_admet
+      } else {
+        x$smiles_from_gban
+      }
+
+      if (is.null(smiles) || !length(smiles)) {
+        stop("No candidate SMILES was found from GraphBAN or ADMETlab results.")
+      }
+
+      x$swiss_skipped <- TRUE
+      x$swissAdme <- NULL
+      x$swissAdme_eval <- NULL
+      x$swiss_selection_flow <- NULL
+      x$swiss_selection_decision <- NULL
+      x$t_candidate_swissAdme <- NULL
+      x$smiles_keep <- x$smiles_from_swiss <- smiles
+      message("SwissADME drug-likeness evaluation was skipped; inherited candidate SMILES were passed to PubChem annotation.")
       return(x)
     }
+
+    x$swiss_skipped <- TRUE
+    x$swissAdme <- NULL
+    x$swissAdme_eval <- NULL
+    x$swiss_selection_flow <- NULL
+    x$swiss_selection_decision <- NULL
+    x$t_candidate_swissAdme <- NULL
+    x$smiles_from_swiss <- NULL
+    context_input <- gBanFuns$resolve_candidate_filter_context(x)
 
     if (is.null(file_swiss)) {
       stop("is.null(file_swiss).")
@@ -825,10 +964,13 @@ setMethod("step6", signature = c(x = "job_gBan"),
     data_swiss <- ftibble(file_swiss)
     data_swiss <- as.data.frame(data_swiss, stringsAsFactors = FALSE)
 
-    smiles_for_swiss <- if (!is.null(x$smiles_for_swiss)) {
+    smiles_for_swiss <- if (isTRUE(context_input$has_admet) &&
+        !is.null(x$smiles_for_swiss)) {
       x$smiles_for_swiss
-    } else {
+    } else if (isTRUE(context_input$has_admet)) {
       x$smiles_from_admet
+    } else {
+      x$smiles_from_gban
     }
 
     if (is.null(smiles_for_swiss)) {
@@ -869,6 +1011,7 @@ setMethod("step6", signature = c(x = "job_gBan"),
     rule_col <- data_decision$rule_col[1L]
     data_keep <- data_eval[data_eval[[rule_col]], , drop = FALSE]
 
+    x$swiss_skipped <- FALSE
     x$swissAdme <- tibble::as_tibble(data_swiss)
     x$swissAdme_eval <- tibble::as_tibble(data_eval)
     x$swiss_selection_flow <- tibble::as_tibble(data_flow)
@@ -924,11 +1067,10 @@ setMethod("step6", signature = c(x = "job_gBan"),
     text_flow <- gBanFuns$format_swiss_flow_text(data_flow)
     n_input <- nrow(data_eval)
     n_keep <- nrow(data_keep)
-
     x <- methodAdd(
       x,
       glue::glue(
-        "将 ADMETlab 毒性风险评估后保留的候选化合物输入 SwissADME 平台进行成药性评价。",
+        "将 {context_input$stage_label}保留的候选化合物输入 SwissADME 平台（<https://www.swissadme.ch/>）进行成药性评价。",
         "根据 SwissADME 输出的分子量、氢键受体数、氢键供体数、脂水分配系数、拓扑极性表面积（TPSA）",
         "及生物利用度评分等参数，评估候选化合物的理化性质和类药性。",
         "Lipinski 规则按 MW≤{mw_max}、HBA≤10、HBD≤5 和 LogP≤{logp_max} 统计通过项，",
@@ -952,6 +1094,7 @@ setMethod("step6", signature = c(x = "job_gBan"),
 setMethod("step7", signature = c(x = "job_gBan"),
   function(x,
     require_pubchem = TRUE,
+    annotation_source = c("auto", "custom", "pubchem"),
     identity_types = c(
       "same_stereo_isotope",
       "same_stereo",
@@ -968,6 +1111,7 @@ setMethod("step7", signature = c(x = "job_gBan"),
   {
     step_message("PubChem compound annotation.")
     expect_package("jsonlite")
+    annotation_source <- match.arg(annotation_source)
 
     if (is.null(x$smiles_keep)) {
       stop("No SMILES vector was found from previous steps.")
@@ -979,6 +1123,8 @@ setMethod("step7", signature = c(x = "job_gBan"),
     if (!length(smiles)) {
       stop("No valid SMILES was found from previous steps.")
     }
+
+    context <- gBanFuns$resolve_candidate_filter_context(x)
 
     data_input <- data.frame(
       SMILES = smiles,
@@ -999,21 +1145,41 @@ setMethod("step7", signature = c(x = "job_gBan"),
       data_input$Compound <- paste0("Candidate_", seq_len(nrow(data_input)))
     }
 
-    dir.create(dir_save, recursive = TRUE, showWarnings = FALSE)
-    file_cache <- file.path(dir_save, "pubchem_smiles_annotation.rds")
+    data_custom_lookup <- gBanFuns$make_custom_compound_annotation(
+      x = x,
+      smiles = data_input$SMILES,
+      compound = data_input$Compound
+    )
+    has_custom_annotation <- any(data_custom_lookup$Custom_annotation, na.rm = TRUE)
 
-    if (isTRUE(use_cache) && !isTRUE(overwrite) && file.exists(file_cache)) {
-      data_lookup <- readRDS(file_cache)
+    annotation_source_used <- annotation_source
+    if (identical(annotation_source_used, "auto")) {
+      annotation_source_used <- if (isTRUE(has_custom_annotation)) "custom" else "pubchem"
+    }
+
+    if (identical(annotation_source_used, "custom") && !isTRUE(has_custom_annotation)) {
+      stop("No custom compound annotation was found. Use `annotation_source = 'pubchem'` or provide custom compound metadata.")
+    }
+
+    if (identical(annotation_source_used, "custom")) {
+      data_lookup <- data_custom_lookup
     } else {
-      data_lookup <- gBanFuns$annotate_pubchem_smiles(
-        smiles = data_input$SMILES,
-        compound = data_input$Compound,
-        identity_types = identity_types,
-        use_similarity = use_similarity,
-        similarity_threshold = similarity_threshold,
-        sleep = sleep
-      )
-      saveRDS(data_lookup, file_cache)
+      dir.create(dir_save, recursive = TRUE, showWarnings = FALSE)
+      file_cache <- file.path(dir_save, "pubchem_smiles_annotation.rds")
+
+      if (isTRUE(use_cache) && !isTRUE(overwrite) && file.exists(file_cache)) {
+        data_lookup <- readRDS(file_cache)
+      } else {
+        data_lookup <- gBanFuns$annotate_pubchem_smiles(
+          smiles = data_input$SMILES,
+          compound = data_input$Compound,
+          identity_types = identity_types,
+          use_similarity = use_similarity,
+          similarity_threshold = similarity_threshold,
+          sleep = sleep
+        )
+        saveRDS(data_lookup, file_cache)
+      }
     }
 
     data_lookup <- as.data.frame(data_lookup, stringsAsFactors = FALSE)
@@ -1024,35 +1190,39 @@ setMethod("step7", signature = c(x = "job_gBan"),
 
     data_lookup$PubChem_match <- !is.na(data_lookup$CID) & data_lookup$CID != ""
 
-    file_syn_cache <- file.path(dir_save, "pubchem_selected_synonyms.rds")
+    if (!identical(annotation_source_used, "custom")) {
+      file_syn_cache <- file.path(dir_save, "pubchem_selected_synonyms.rds")
 
-    data_synonym <- gBanFuns$get_pubchem_selected_synonyms(
-      data_lookup = data_lookup,
-      use_cache = use_cache,
-      overwrite = overwrite,
-      file_cache = file_syn_cache,
-      sleep = sleep
-    )
-
-    if (nrow(data_synonym) > 0L) {
-      data_lookup <- merge(
-        data_lookup,
-        data_synonym,
-        by = "CID",
-        all.x = TRUE,
-        suffixes = c("", "_selected")
+      data_synonym <- gBanFuns$get_pubchem_selected_synonyms(
+        data_lookup = data_lookup,
+        use_cache = use_cache,
+        overwrite = overwrite,
+        file_cache = file_syn_cache,
+        sleep = sleep
       )
 
-      data_lookup$Synonym <- ifelse(
-        !is.na(data_lookup$Synonym_selected) & data_lookup$Synonym_selected != "",
-        data_lookup$Synonym_selected,
-        data_lookup$Synonym
-      )
+      if (nrow(data_synonym) > 0L) {
+        data_lookup <- merge(
+          data_lookup,
+          data_synonym,
+          by = "CID",
+          all.x = TRUE,
+          suffixes = c("", "_selected")
+        )
 
-      data_lookup$Synonym_selected <- NULL
+        data_lookup$Synonym <- ifelse(
+          !is.na(data_lookup$Synonym_selected) & data_lookup$Synonym_selected != "",
+          data_lookup$Synonym_selected,
+          data_lookup$Synonym
+        )
+
+        data_lookup$Synonym_selected <- NULL
+      }
     }
 
-    if (isTRUE(require_pubchem)) {
+    if (identical(annotation_source_used, "custom")) {
+      data_lookup_final <- data_lookup
+    } else if (isTRUE(require_pubchem)) {
       data_lookup_final <- data_lookup[data_lookup$PubChem_match, , drop = FALSE]
     } else {
       data_lookup_final <- data_lookup
@@ -1078,46 +1248,88 @@ setMethod("step7", signature = c(x = "job_gBan"),
       ), drop = FALSE]
     )
 
-    data_stat <- data.frame(
-      Category = c(
-        "SwissADME-retained candidates",
-        "Matched with PubChem CID",
-        "No PubChem CID matched",
-        "Final retained candidates"
-      ),
-      Count = c(
-        length(smiles),
-        sum(data_lookup$PubChem_match, na.rm = TRUE),
-        sum(!data_lookup$PubChem_match, na.rm = TRUE),
-        nrow(data_lookup_final)
-      ),
-      stringsAsFactors = FALSE
-    )
+    if (identical(annotation_source_used, "custom")) {
+      data_stat <- data.frame(
+        Category = c(
+          context$stage_label_en,
+          "Annotated from custom compound database",
+          "With PubChem CID in custom annotation",
+          "Final retained candidates"
+        ),
+        Count = c(
+          length(smiles),
+          sum(data_lookup$Custom_annotation, na.rm = TRUE),
+          sum(data_lookup$PubChem_match, na.rm = TRUE),
+          nrow(data_lookup_final)
+        ),
+        stringsAsFactors = FALSE
+      )
+    } else {
+      data_stat <- data.frame(
+        Category = c(
+          context$stage_label_en,
+          "Matched with PubChem CID",
+          "No PubChem CID matched",
+          "Final retained candidates"
+        ),
+        Count = c(
+          length(smiles),
+          sum(data_lookup$PubChem_match, na.rm = TRUE),
+          sum(!data_lookup$PubChem_match, na.rm = TRUE),
+          nrow(data_lookup_final)
+        ),
+        stringsAsFactors = FALSE
+      )
+    }
 
     x$pubchem_annotation_stat <- tibble::as_tibble(data_stat)
 
+    text_annotation_title <- if (identical(annotation_source_used, "custom")) {
+      "自定义化合物库注释统计表"
+    } else {
+      "PubChem 化合物注释统计表"
+    }
+    text_annotation_caption <- if (identical(annotation_source_used, "custom")) {
+      glue::glue(
+        "该表汇总 {context$stage_label}候选化合物从自定义化合物库继承名称、PubChem CID 和来源注释的情况，",
+        "并统计最终保留的候选化合物数量。"
+      )
+    } else {
+      glue::glue(
+        "该表汇总 {context$stage_label}候选化合物在 PubChem 数据库中的结构身份检索情况，",
+        "包括成功匹配 PubChem CID 的化合物数量及最终保留的候选化合物数量。"
+      )
+    }
+
     t.pubchem_stat <- set_lab_legend(
       data_stat,
-      glue::glue("{x@sig} PubChem annotation statistics"),
+      glue::glue("{x@sig} compound annotation statistics"),
       glue::glue(
-        "PubChem 化合物注释统计表|||",
-        "该表汇总 SwissADME 成药性筛选后候选化合物在 PubChem 数据库中的结构身份检索情况，",
-        "包括成功匹配 PubChem CID 的化合物数量及最终保留的候选化合物数量。"
+        "{text_annotation_title}|||",
+        "{text_annotation_caption}"
       )
     )
 
-    t.swiss_for_final <- if (!is.null(x$t_candidate_swissAdme)) {
-      x$t_candidate_swissAdme
-    } else if (!is.null(x@tables$step6$t.candidate_swissAdme)) {
-      x@tables$step6$t.candidate_swissAdme
+    t.swiss_for_final <- if (isTRUE(context$has_swiss)) {
+      if (!is.null(x$t_candidate_swissAdme)) {
+        x$t_candidate_swissAdme
+      } else if (!is.null(x@tables$step6$t.candidate_swissAdme)) {
+        x@tables$step6$t.candidate_swissAdme
+      } else {
+        NULL
+      }
     } else {
       NULL
     }
 
-    t.admet_for_final <- if (!is.null(x$t_candidate_admet)) {
-      x$t_candidate_admet
-    } else if (!is.null(x@tables$step5$t.candidate_admet)) {
-      x@tables$step5$t.candidate_admet
+    t.admet_for_final <- if (isTRUE(context$has_admet)) {
+      if (!is.null(x$t_candidate_admet)) {
+        x$t_candidate_admet
+      } else if (!is.null(x@tables$step5$t.candidate_admet)) {
+        x@tables$step5$t.candidate_admet
+      } else {
+        NULL
+      }
     } else {
       NULL
     }
@@ -1133,43 +1345,63 @@ setMethod("step7", signature = c(x = "job_gBan"),
       include_smiles = FALSE
     )
 
+    text_final_caption <- if (identical(annotation_source_used, "custom")) {
+      glue::glue(
+        "该表展示经 {context$pipeline_label}后保留的候选化合物，",
+        "并继承自定义化合物库中的化合物名称、PubChem CID、InChIKey 及来源证据等注释。"
+      )
+    } else {
+      glue::glue(
+        "该表展示经 {context$pipeline_label}后，",
+        "进一步通过 PubChem 结构身份检索确认并保留的候选化合物，",
+        "表中补充 PubChem CID 及对应化合物名称注释。"
+      )
+    }
+
     t.final_report <- set_lab_legend(
       t.final_report,
-      glue::glue("{x@sig} Candidate compounds retained after drug-likeness evaluation"),
+      glue::glue("{x@sig} candidate compounds retained after {context$pipeline_label_en}"),
       glue::glue(
         "最终候选化合物汇总表|||",
-        "该表展示经 GraphBAN 预测、ADMETlab 毒性风险评估及 SwissADME 成药性评价后，",
-        "进一步通过 PubChem 结构身份检索确认并保留的候选药物，",
-        "表中补充 PubChem CID 及对应化合物名称注释。"
+        "{text_final_caption}"
       )
     )
 
+    max_transpose_candidates <- 6L
     t.final_candidates_mutate <- gBanFuns$make_final_candidate_transposed_table(
       data = t.final_report,
       name_col = "Synonym",
-      id_col = "CID"
+      id_col = "CID",
+      max_candidates_per_block = max_transpose_candidates
     )
 
-    footer_candidate <- gBanFuns$make_candidate_column_notes(
-      data = t.final_report,
-      name_col = "Synonym",
-      id_col = "CID"
-    )
+    text_mutate_caption <- if (nrow(t.final_report) > max_transpose_candidates) {
+      glue::glue(
+        "该表以分组转置形式展示最终候选化合物的核心注释及评价指标；",
+        "每组最多展示 {max_transpose_candidates} 个候选化合物，",
+        "通过 Candidate_ID 行对应完整候选化合物编号，以避免 Word 表格横向列数过多。"
+      )
+    } else {
+      "该表以转置形式展示最终候选化合物的核心注释及评价指标，便于在报告正文中展示。"
+    }
 
     t.final_candidates_mutate <- set_lab_legend(
       t.final_candidates_mutate,
-      glue::glue("{x@sig} Candidate compounds retained after drug-likeness evaluation transposition"),
+      glue::glue("{x@sig} candidate compounds retained after {context$pipeline_label_en} grouped transposition"),
       glue::glue(
-        "最终候选化合物转置汇总表|||",
-        "该表以转置形式展示最终候选药物的主要注释及评价指标，便于在报告正文中展示。",
-        "各列对应的化合物如下：
-{footer_candidate}"
+        "最终候选化合物分组转置汇总表|||",
+        "{text_mutate_caption}"
       )
     )
 
     x$t_final_candidates <- tibble::as_tibble(t.final_candidates)
     x$t_final_candidates_report <- tibble::as_tibble(t.final_report)
     x$t_final_candidates_mutate <- tibble::as_tibble(t.final_candidates_mutate)
+
+    x$.feature_genes <- gBanFuns$make_final_gene_feature(
+      x = x,
+      smiles = data_lookup_final$SMILES
+    )
 
     x <- tablesAdd(
       x,
@@ -1182,33 +1414,62 @@ setMethod("step7", signature = c(x = "job_gBan"),
     n_match <- sum(data_lookup$PubChem_match, na.rm = TRUE)
     n_unmatch <- n_input - n_match
     n_final <- nrow(data_lookup_final)
-    text_pubchem_rule <- if (isTRUE(require_pubchem)) {
-      "仅保留成功匹配 PubChem CID 的条目作为最终候选药物。"
+
+    if (identical(annotation_source_used, "custom")) {
+      n_custom_annotated <- sum(data_lookup$Custom_annotation, na.rm = TRUE)
+      x <- methodAdd(
+        x,
+        glue::glue(
+          "对 {context$stage_label}保留的候选化合物进行注释整理。",
+          "由于本流程使用自定义候选化合物库作为输入，优先继承自定义库中已整理的化合物名称、PubChem CID、InChIKey 及来源证据，",
+          "不再将 PubChem 重新检索作为最终候选化合物的保留条件。",
+          "该策略可避免同一结构因 SMILES 表达形式、立体化学标注或数据库检索差异导致的候选化合物误删。"
+        )
+      )
+
+      x <- snapAdd(
+        x,
+        glue::glue(
+          "{context$stage_label}共获得 {n_input} 个候选化合物；",
+          "其中 {n_custom_annotated} 个化合物继承自定义化合物库注释，",
+          "{n_match} 个化合物具有 PubChem CID。",
+          "最终候选表保留 {n_final} 个化合物。"
+        )
+      )
     } else {
-      "PubChem 检索用于化合物注释，未匹配 CID 的结构条目在本步骤中仍予保留。"
+      text_pubchem_rule <- if (isTRUE(require_pubchem)) {
+        "仅保留成功匹配 PubChem CID 的条目作为最终候选化合物。"
+      } else {
+        "PubChem 检索用于化合物注释，未匹配 CID 的结构条目在该注释层中仍予保留。"
+      }
+      text_pubchem_snap <- if (isTRUE(require_pubchem)) {
+        glue::glue("PubChem 可注释条目作为最终候选化合物，共保留 {n_final} 个化合物。")
+      } else {
+        glue::glue("PubChem 注释后保留全部结构条目，共保留 {n_final} 个化合物。")
+      }
+
+      x <- methodAdd(
+        x,
+        glue::glue(
+          "对 {context$stage_label}保留的候选化合物进行 PubChem 数据库注释。",
+          "检索以 SMILES 结构式为输入，首先进行严格结构身份匹配；对于未直接匹配的条目，",
+          "进一步采用同立体化学、同同位素及相同连接关系等不同身份层级进行检索，",
+          "以降低 SMILES 表达形式、立体化学标注或同位素标注差异造成的漏检。",
+          "成功匹配的条目获取 PubChem CID，并结合 PubChem 记录标题、同义名及 IUPAC 名称筛选代表性化合物名称；当缺少简短通用名称时，以 IUPAC 名称作为候选化合物名称兜底。",
+          "{text_pubchem_rule}"
+        )
+      )
+
+      x <- snapAdd(
+        x,
+        glue::glue(
+          "{context$stage_label}共获得 {n_input} 个候选化合物；",
+          "经 PubChem 结构身份检索，{n_match} 个化合物成功匹配 PubChem CID，",
+          "{n_unmatch} 个化合物未匹配到 PubChem CID。",
+          "{text_pubchem_snap}"
+        )
+      )
     }
-
-    x <- methodAdd(
-      x,
-      glue::glue(
-        "对 SwissADME 成药性评价后保留的候选化合物进行 PubChem 数据库注释。",
-        "检索以 SMILES 结构式为输入，首先进行严格结构身份匹配；对于未直接匹配的条目，",
-        "进一步采用同立体化学、同同位素及相同连接关系等不同身份层级进行检索，",
-        "以降低 SMILES 表达形式、立体化学标注或同位素标注差异造成的漏检。",
-        "成功匹配的条目获取 PubChem CID，并结合 PubChem 记录标题、同义名及 IUPAC 名称筛选代表性化合物名称；当缺少简短通用名称时，以 IUPAC 名称作为候选化合物名称兜底。",
-        "{text_pubchem_rule}"
-      )
-    )
-
-    x <- snapAdd(
-      x,
-      glue::glue(
-        "SwissADME 成药性评价后共获得 {n_input} 个候选化合物；",
-        "经 PubChem 结构身份检索，{n_match} 个化合物成功匹配 PubChem CID，",
-        "{n_unmatch} 个化合物未匹配到 PubChem CID。",
-        "本步骤以 PubChem 可注释条目作为最终候选药物，共保留 {n_final} 个化合物。"
-      )
-    )
 
     vec_feature <- x$synos$Synonym
     vec_feature <- ifelse(
@@ -1278,6 +1539,187 @@ setMethod("asjob_vina", signature = c(x = "job_gBan"),
 
 if (!exists("gBanFuns")) {
   gBanFuns <- new.env(parent = emptyenv())
+}
+
+
+gBanFuns$resolve_custom_compound_db <- function(db_custom,
+  db_custom_name = "Custom compound set", require_smiles = TRUE)
+{
+  if (is.null(db_custom)) {
+    stop("`db_custom` must be provided when `db = 'custom'`.")
+  }
+
+  as_chr <- function(x) {
+    if (is.null(x)) {
+      return(rep(NA_character_, 0L))
+    }
+    if (is.numeric(x)) {
+      return(trimws(format(x, scientific = FALSE, trim = TRUE)))
+    }
+    trimws(as.character(x))
+  }
+
+  collapse_unique <- function(x) {
+    x <- as_chr(x)
+    x <- unique(x[!is.na(x) & nzchar(x)])
+    if (!length(x)) {
+      return(NA_character_)
+    }
+    paste(x, collapse = "; ")
+  }
+
+  find_col <- function(data, candidates) {
+    cols <- colnames(data)
+    cols_lower <- tolower(gsub("[ ._-]+", "", cols))
+    candidates_lower <- tolower(gsub("[ ._-]+", "", candidates))
+    idx <- match(candidates_lower, cols_lower)
+    idx <- idx[!is.na(idx)]
+    if (!length(idx)) {
+      return(NA_character_)
+    }
+    cols[idx[1L]]
+  }
+
+  collection <- NULL
+  data_custom <- NULL
+
+  if (is.character(db_custom) && length(db_custom) == 1L && file.exists(db_custom)) {
+    data_custom <- ftibble(db_custom)
+    data_custom <- as.data.frame(data_custom, stringsAsFactors = FALSE)
+  } else if (inherits(db_custom, "job_herbsCollection")) {
+    collection <- tryCatch(db_custom$collection, error = function(e) NULL)
+    if (is.null(collection)) {
+      stop("`db_custom` is a job_herbsCollection object, but `db_custom$collection` was not found.")
+    }
+  } else if (inherits(db_custom, "herbs_collection") ||
+      (is.list(db_custom) && !is.null(db_custom$compound_unique))) {
+    collection <- db_custom
+  } else if (is.data.frame(db_custom)) {
+    data_custom <- as.data.frame(db_custom, stringsAsFactors = FALSE)
+  } else {
+    stop("`db_custom` must be a job_herbsCollection object, a herbs_collection list, a data.frame, or a readable table path.")
+  }
+
+  if (!is.null(collection)) {
+    if (is.null(collection$compound_unique)) {
+      stop("`db_custom` collection does not contain `compound_unique`.")
+    }
+
+    data_custom <- as.data.frame(collection$compound_unique, stringsAsFactors = FALSE)
+
+    if (!is.null(collection$herb_compound) &&
+        "compound_key" %in% colnames(data_custom)) {
+      data_rel <- as.data.frame(collection$herb_compound, stringsAsFactors = FALSE)
+
+      if ("compound_key" %in% colnames(data_rel)) {
+        if (!"query_herb" %in% colnames(data_rel)) {
+          data_rel$query_herb <- NA_character_
+        }
+        if (!"herb_latin_name" %in% colnames(data_rel)) {
+          data_rel$herb_latin_name <- NA_character_
+        }
+        if (!"source" %in% colnames(data_rel)) {
+          data_rel$source <- NA_character_
+        }
+
+        data_rel_split <- split(data_rel, data_rel$compound_key)
+        data_rel_sum <- do.call(rbind, lapply(names(data_rel_split), function(key) {
+          data_one <- data_rel_split[[key]]
+          data.frame(
+            compound_key = key,
+            herb = collapse_unique(data_one$query_herb),
+            latin_name = collapse_unique(data_one$herb_latin_name),
+            evidence_sources = collapse_unique(data_one$source),
+            stringsAsFactors = FALSE
+          )
+        }))
+
+        data_custom <- merge(
+          data_custom,
+          data_rel_sum,
+          by = "compound_key",
+          all.x = TRUE
+        )
+      }
+    }
+  }
+
+  if (is.null(data_custom) || !nrow(data_custom)) {
+    stop("No custom compound record was available.")
+  }
+
+  col_smiles <- find_col(data_custom, c(
+    "smiles", "SMILES", "canonical_smiles", "isomeric_smiles",
+    "Canonical SMILES", "Isomeric SMILES"
+  ))
+
+  if (is.na(col_smiles)) {
+    stop("The custom compound database must contain a SMILES column.")
+  }
+
+  col_name <- find_col(data_custom, c(
+    "compound_name", "Compound name", "Compound", "name", "Name",
+    "Synonym", "compound"
+  ))
+  col_cid <- find_col(data_custom, c(
+    "pubchem_cid", "PubChem CID", "PubChem_CID", "CID", "cid"
+  ))
+  col_inchikey <- find_col(data_custom, c(
+    "inchikey", "InChIKey", "InChI Key"
+  ))
+  col_key <- find_col(data_custom, c(
+    "compound_key", "Compound key", "compound_id", "Compound ID"
+  ))
+  col_herb <- find_col(data_custom, c(
+    "herb", "Herb", "query_herb", "herb_cn_name", "Chinese herb"
+  ))
+  col_latin <- find_col(data_custom, c(
+    "latin_name", "Latin name", "herb_latin_name", "Latin.Name"
+  ))
+  col_evidence <- find_col(data_custom, c(
+    "evidence_sources", "Evidence sources", "source_list", "source",
+    "Source"
+  ))
+
+  n <- nrow(data_custom)
+  data_out <- data.frame(
+    smiles = as_chr(data_custom[[col_smiles]]),
+    compound_name = if (!is.na(col_name)) as_chr(data_custom[[col_name]]) else rep(NA_character_, n),
+    pubchem_cid = if (!is.na(col_cid)) as_chr(data_custom[[col_cid]]) else rep(NA_character_, n),
+    inchikey = if (!is.na(col_inchikey)) as_chr(data_custom[[col_inchikey]]) else rep(NA_character_, n),
+    compound_key = if (!is.na(col_key)) as_chr(data_custom[[col_key]]) else rep(NA_character_, n),
+    herb = if (!is.na(col_herb)) as_chr(data_custom[[col_herb]]) else rep(NA_character_, n),
+    latin_name = if (!is.na(col_latin)) as_chr(data_custom[[col_latin]]) else rep(NA_character_, n),
+    evidence_sources = if (!is.na(col_evidence)) as_chr(data_custom[[col_evidence]]) else rep(NA_character_, n),
+    stringsAsFactors = FALSE
+  )
+
+  data_out$smiles <- trimws(data_out$smiles)
+  data_out <- data_out[!is.na(data_out$smiles) & nzchar(data_out$smiles), , drop = FALSE]
+
+  if (isTRUE(require_smiles) && nrow(data_out) == 0L) {
+    stop("No compound with a valid SMILES string was found in `db_custom`.")
+  }
+
+  data_split <- split(data_out, data_out$smiles)
+  data_out <- do.call(rbind, lapply(names(data_split), function(smiles_i) {
+    data_one <- data_split[[smiles_i]]
+    data.frame(
+      smiles = smiles_i,
+      compound_name = collapse_unique(data_one$compound_name),
+      pubchem_cid = collapse_unique(data_one$pubchem_cid),
+      inchikey = collapse_unique(data_one$inchikey),
+      compound_key = collapse_unique(data_one$compound_key),
+      herb = collapse_unique(data_one$herb),
+      latin_name = collapse_unique(data_one$latin_name),
+      evidence_sources = collapse_unique(data_one$evidence_sources),
+      db_custom_name = db_custom_name,
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  rownames(data_out) <- NULL
+  tibble::as_tibble(data_out)
 }
 
 gBanFuns$extract_swiss_numeric <- function(x)
@@ -1521,6 +1963,171 @@ gBanFuns$format_swiss_flow_text <- function(data_flow)
   )
 }
 
+gBanFuns$resolve_candidate_filter_context <- function(x)
+{
+  has_admet <- !isTRUE(x$admet_skipped) && !is.null(x$smiles_from_admet)
+  has_swiss <- !isTRUE(x$swiss_skipped) && !is.null(x$smiles_from_swiss)
+
+  admet_stage_label <- if (!is.null(x$admet_filter_config$stage_label)) {
+    x$admet_filter_config$stage_label
+  } else if (identical(x$admet_tool, "admetsar")) {
+    "admetSAR 安全性初筛后"
+  } else {
+    "ADMETlab 毒性风险评估后"
+  }
+
+  admet_stage_label_en <- if (!is.null(x$admet_filter_config$stage_label_en)) {
+    x$admet_filter_config$stage_label_en
+  } else if (identical(x$admet_tool, "admetsar")) {
+    "admetSAR-retained candidates"
+  } else {
+    "ADMETlab-retained candidates"
+  }
+
+  stage_label <- if (isTRUE(has_swiss)) {
+    "SwissADME 成药性评价后"
+  } else if (isTRUE(has_admet)) {
+    admet_stage_label
+  } else {
+    "GraphBAN 预测后"
+  }
+
+  stage_label_en <- if (isTRUE(has_swiss)) {
+    "SwissADME-retained candidates"
+  } else if (isTRUE(has_admet)) {
+    admet_stage_label_en
+  } else {
+    "GraphBAN-retained candidates"
+  }
+
+  vec_pipeline <- c(
+    "GraphBAN 预测",
+    if (isTRUE(has_admet)) admet_stage_label else NULL,
+    if (isTRUE(has_swiss)) "SwissADME 成药性评价" else NULL
+  )
+
+  vec_pipeline_en <- c(
+    "GraphBAN prediction",
+    if (isTRUE(has_admet)) admet_stage_label_en else NULL,
+    if (isTRUE(has_swiss)) "SwissADME drug-likeness evaluation" else NULL
+  )
+
+  list(
+    has_admet = has_admet,
+    has_swiss = has_swiss,
+    stage_label = stage_label,
+    stage_label_en = stage_label_en,
+    pipeline_label = paste(vec_pipeline, collapse = "、"),
+    pipeline_label_en = paste(vec_pipeline_en, collapse = " and ")
+  )
+}
+
+
+gBanFuns$resolve_admet_smiles_identity <- function(data_admet, smiles,
+  admet_tool = c("admetlab", "admetsar"))
+{
+  admet_tool <- match.arg(admet_tool)
+  data_admet <- as.data.frame(data_admet, stringsAsFactors = FALSE)
+
+  clean_smiles <- function(x) {
+    x <- trimws(as.character(x))
+    x[is.na(x)] <- NA_character_
+    x
+  }
+
+  vec_upstream <- clean_smiles(smiles)
+  vec_upstream <- vec_upstream[!is.na(vec_upstream) & nzchar(vec_upstream)]
+
+  if (!length(vec_upstream)) {
+    stop("No upstream SMILES was provided for ADMET identity mapping.")
+  }
+
+  col_admet_smiles <- NA_character_
+  if ("SMILES" %in% colnames(data_admet)) {
+    col_admet_smiles <- "SMILES"
+  } else if ("smiles" %in% colnames(data_admet)) {
+    col_admet_smiles <- "smiles"
+  } else if ("raw_smiles" %in% colnames(data_admet)) {
+    col_admet_smiles <- "raw_smiles"
+  }
+
+  if (is.na(col_admet_smiles)) {
+    stop('Column "raw_smiles", "smiles" or "SMILES" was not found in ADMET table.')
+  }
+
+  data_admet$admet_smiles <- clean_smiles(data_admet[[col_admet_smiles]])
+
+  n_upstream <- length(vec_upstream)
+  n_admet <- nrow(data_admet)
+
+  if (admet_tool == "admetsar" && n_admet != n_upstream) {
+    stop(glue::glue(
+      "admetSAR output row number changed: upstream SMILES = {n_upstream}, ",
+      "admetSAR rows = {n_admet}. Please provide an ADMET table containing ",
+      "the original raw_smiles column for reliable identity mapping."
+    ))
+  }
+
+  if ("raw_smiles" %in% colnames(data_admet)) {
+    data_admet$raw_smiles <- clean_smiles(data_admet$raw_smiles)
+
+    id_match <- match(vec_upstream, data_admet$raw_smiles)
+
+    if (length(id_match) == n_upstream && all(!is.na(id_match))) {
+      data_admet <- data_admet[id_match, , drop = FALSE]
+      data_admet$raw_smiles <- vec_upstream
+      mapping_mode <- "raw_smiles_match"
+    } else if (admet_tool == "admetsar") {
+      stop(glue::glue(
+        "admetSAR raw_smiles could not be fully matched to upstream SMILES: ",
+        "matched {sum(!is.na(id_match))}/{n_upstream}."
+      ))
+    } else {
+      data_admet <- data_admet[data_admet$raw_smiles %in% vec_upstream, , drop = FALSE]
+      mapping_mode <- "raw_smiles_subset"
+    }
+  } else {
+    if (n_admet == n_upstream) {
+      data_admet$raw_smiles <- vec_upstream
+      mapping_mode <- "row_order"
+    } else {
+      id_keep <- data_admet$admet_smiles %in% vec_upstream
+      data_admet <- data_admet[id_keep, , drop = FALSE]
+      data_admet$raw_smiles <- data_admet$admet_smiles
+      mapping_mode <- "admet_smiles_subset"
+    }
+  }
+
+  vec_admet <- clean_smiles(data_admet$admet_smiles)
+  vec_raw <- clean_smiles(data_admet$raw_smiles)
+
+  n_position_same <- sum(vec_admet == vec_raw, na.rm = TRUE)
+  n_admet_in_upstream <- sum(unique(vec_admet) %in% unique(vec_upstream))
+  n_raw_in_upstream <- sum(unique(vec_raw) %in% unique(vec_upstream))
+
+  data_diag <- data.frame(
+    admet_tool = admet_tool,
+    mapping_mode = mapping_mode,
+    n_upstream_smiles = n_upstream,
+    n_admet_rows = n_admet,
+    n_output_rows = nrow(data_admet),
+    n_admet_smiles_same_position = n_position_same,
+    n_admet_smiles_overlap_upstream = n_admet_in_upstream,
+    n_raw_smiles_overlap_upstream = n_raw_in_upstream,
+    stringsAsFactors = FALSE
+  )
+
+  message(glue::glue(
+    "ADMET SMILES identity check: upstream = {n_upstream}, ADMET rows = {n_admet}, ",
+    "mapping = {mapping_mode}; ADMET SMILES identical to workflow key by row = ",
+    "{n_position_same}/{nrow(data_admet)}, ADMET SMILES overlapping upstream key = ",
+    "{n_admet_in_upstream}/{length(unique(vec_admet))}. Workflow raw_smiles keeps upstream SMILES."
+  ))
+
+  attr(data_admet, "smiles_diagnostics") <- data_diag
+  data_admet
+}
+
 gBanFuns$extract_admet_numeric <- function(x)
 {
   if (is.numeric(x)) {
@@ -1559,6 +2166,105 @@ gBanFuns$extract_admet_numeric <- function(x)
   suppressWarnings(as.numeric(value))
 }
 
+gBanFuns$get_admet_filter_config <- function(data,
+  admet_tool = c("admetlab", "admetsar"),
+  route = c("systemic", "topical_nasal"),
+  toxicity_cols = NULL,
+  optional_toxicity_cols = NULL,
+  include_optional_toxicity = FALSE
+)
+{
+  admet_tool <- match.arg(admet_tool)
+  route <- match.arg(route)
+
+  if (admet_tool == "admetsar" && route == "topical_nasal") {
+    hard_default <- c(
+      "Respiratory_toxicity",
+      "Eye_corrosion",
+      "Skin_corrosion",
+      "Ames",
+      "Micronucleus",
+      "Mouse_carcinogenicity_c",
+      "Rat_carcinogenicity_c"
+    )
+    warning_default <- c(
+      "Eye_irritation",
+      "Skin_irritation",
+      "Skin_sensitisation",
+      "ADT",
+      "Photoinduced_toxicity",
+      "Phototoxicity_Photoirritation",
+      "Photoallergy",
+      "Repeated_dose_toxicity",
+      "Reproductive_toxicity",
+      "Mitochondrial_toxicity",
+      "Hemolytic_toxicity",
+      "DILI",
+      "Nephrotoxicity",
+      "hERG_1uM",
+      "hERG_10uM",
+      "hERG_30uM"
+    )
+    method_scope <- paste0(
+      "admetSAR 3.0 提供多类 ADMET 与毒性端点预测；针对鼻腔外用给药场景，",
+      "本分析将呼吸道毒性、眼/皮肤腐蚀、Ames、微核及啮齿动物致癌性等强安全性终点作为核心筛选指标，",
+      "并将眼/皮肤刺激、皮肤致敏、急性经皮毒性、光毒性及系统暴露相关毒性作为风险注释指标。"
+    )
+    tool_label <- "admetSAR 3.0"
+    tool_url <- "<https://lmmd.ecust.edu.cn/admetsar3/index.php>"
+    route_label <- "鼻腔外用给药"
+    stage_label <- "admetSAR 外用安全性初筛后"
+    stage_label_en <- "admetSAR topical safety filter"
+  } else {
+    hard_default <- c(
+      "DILI",
+      "H-HT",
+      "Carcinogenicity",
+      "Ames",
+      "Genotoxicity",
+      "RPMI-8226"
+    )
+    warning_default <- c(
+      "hERG",
+      "hERG-10um",
+      "ROA"
+    )
+    method_scope <- paste0(
+      "ADMETlab 3.0 可基于分子结构预测多类 ADMET 相关性质及毒性终点；",
+      "本分析重点纳入系统暴露相关毒性和结构毒性风险终点进行筛选。"
+    )
+    tool_label <- "ADMETlab 3.0"
+    tool_url <- "<https://admetlab3.scbdd.com/>"
+    route_label <- "系统给药"
+    stage_label <- "ADMETlab 毒性风险评估后"
+    stage_label_en <- "ADMETlab toxicity filter"
+  }
+
+  if (is.null(toxicity_cols)) {
+    toxicity_cols <- hard_default
+  }
+  if (is.null(optional_toxicity_cols)) {
+    optional_toxicity_cols <- warning_default
+  }
+  if (isTRUE(include_optional_toxicity)) {
+    toxicity_cols <- unique(c(toxicity_cols, optional_toxicity_cols))
+    optional_toxicity_cols <- setdiff(optional_toxicity_cols, toxicity_cols)
+  }
+
+  list(
+    hard_cols = toxicity_cols[toxicity_cols %in% colnames(data)],
+    warning_cols = optional_toxicity_cols[optional_toxicity_cols %in% colnames(data)],
+    admet_tool = admet_tool,
+    route = route,
+    tool_label = tool_label,
+    tool_url = tool_url,
+    route_label = route_label,
+    stage_label = stage_label,
+    stage_label_en = stage_label_en,
+    method_scope = method_scope
+  )
+}
+
 gBanFuns$resolve_admet_toxicity_cols <- function(data,
   toxicity_cols = NULL,
   optional_toxicity_cols = NULL,
@@ -1593,13 +2299,17 @@ gBanFuns$resolve_admet_toxicity_cols <- function(data,
 
 gBanFuns$evaluate_admet_toxicity <- function(data,
   toxicity_cols,
+  warning_cols = character(0L),
   cutoff = .7,
-  max_toxicity_flags = 0L
+  warning_cutoff = .5,
+  max_toxicity_flags = 0L,
+  max_warning_flags = Inf
 )
 {
   data_eval <- as.data.frame(data, stringsAsFactors = FALSE)
+  warning_cols <- warning_cols[warning_cols %in% colnames(data_eval)]
 
-  for (col in toxicity_cols) {
+  for (col in unique(c(toxicity_cols, warning_cols))) {
     data_eval[[col]] <- gBanFuns$extract_admet_numeric(data_eval[[col]])
   }
 
@@ -1620,8 +2330,52 @@ gBanFuns$evaluate_admet_toxicity <- function(data,
     }
   )
 
+  data_eval$n_warning_risk <- 0L
+  data_eval$max_warning_risk <- NA_real_
+
+  if (length(warning_cols)) {
+    mat_warning <- as.matrix(data_eval[, warning_cols, drop = FALSE])
+    mat_warning_flag <- mat_warning >= warning_cutoff
+    mat_warning_flag[is.na(mat_warning_flag)] <- FALSE
+    data_eval$n_warning_risk <- rowSums(mat_warning_flag)
+    data_eval$max_warning_risk <- apply(
+      mat_warning,
+      1L,
+      function(x) {
+        if (all(is.na(x))) {
+          return(NA_real_)
+        }
+
+        max(x, na.rm = TRUE)
+      }
+    )
+  }
+
   data_eval$pass_admet_toxicity <- data_eval$n_toxicity_risk <=
     max_toxicity_flags
+
+  if (is.finite(max_warning_flags)) {
+    data_eval$pass_admet_toxicity <- data_eval$pass_admet_toxicity &
+      data_eval$n_warning_risk <= max_warning_flags
+  }
+
+  data_eval$major_risk_endpoints <- apply(
+    mat_flag,
+    1L,
+    function(x) {
+      cols <- toxicity_cols[which(x)]
+      if (!length(cols)) {
+        return("None")
+      }
+      paste(cols, collapse = "; ")
+    }
+  )
+
+  data_eval$admet_decision <- ifelse(
+    data_eval$pass_admet_toxicity,
+    "Retained",
+    "Excluded by core safety risk"
+  )
 
   data_eval
 }
@@ -1661,23 +2415,39 @@ gBanFuns$summarize_admet_toxicity_filter <- function(data_eval,
 }
 
 gBanFuns$resolve_admet_report_cols <- function(data,
-  toxicity_cols
+  toxicity_cols,
+  warning_cols = character(0L),
+  admet_tool = "admetlab",
+  route = "systemic"
 )
 {
   cols_aux <- c(
     "raw_smiles",
+    "admet_decision",
     "pass_admet_toxicity",
     "n_toxicity_risk",
     "max_toxicity_risk",
+    "n_warning_risk",
+    "max_warning_risk",
+    "major_risk_endpoints",
     toxicity_cols,
+    warning_cols,
+    "MW",
+    "TPSA",
+    "SlogP",
+    "logS",
+    "QED",
+    "DILI",
+    "Nephrotoxicity",
+    "hERG",
+    "hERG_1uM",
+    "hERG_10uM",
+    "hERG_30uM",
     "caco2",
     "hia",
     "PPB",
-    "hERG",
-    "hERG-10um",
     "ROA",
     "LD50_oral",
-    "QED",
     "Synth",
     "Lipinski"
   )
@@ -2671,6 +3441,42 @@ inBatches_get_compounds_weight.rcdk <- function(smiles_list,
 }
 
 
+gBanFuns$make_final_gene_feature <- function(x, smiles)
+{
+  smiles <- unique(as.character(smiles))
+  smiles <- smiles[!is.na(smiles) & smiles != ""]
+
+  if (!length(smiles)) {
+    return(NULL)
+  }
+
+  data_gene <- NULL
+
+  if (!is.null(x$res_graphBan)) {
+    data_gene <- as.data.frame(x$res_graphBan, stringsAsFactors = FALSE)
+  } else if (!is.null(x$res_graphBan_pair)) {
+    data_gene <- as.data.frame(x$res_graphBan_pair, stringsAsFactors = FALSE)
+  }
+
+  if (is.null(data_gene) || !all(c("SMILES", "hgnc_symbol") %in% colnames(data_gene))) {
+    return(NULL)
+  }
+
+  data_gene <- data_gene[data_gene$SMILES %in% smiles, , drop = FALSE]
+  gene <- unique(as.character(data_gene$hgnc_symbol))
+  gene <- gene[!is.na(gene) & gene != ""]
+
+  if (!length(gene)) {
+    return(NULL)
+  }
+
+  as_feature(
+    gene,
+    "最终候选化合物对应靶点基因",
+    nature = "genes"
+  )
+}
+
 gBanFuns$read_pubchem_json <- function(url)
 {
   res <- tryCatch(
@@ -3229,9 +4035,7 @@ gBanFuns$get_pubchem_selected_synonyms <- function(data_lookup,
 }
 
 gBanFuns$make_final_candidate_transposed_table <- function(data,
-  name_col = "Synonym",
-  id_col = "CID"
-)
+  name_col = "Synonym", id_col = "CID", max_candidates_per_block = 6L)
 {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
 
@@ -3239,24 +4043,74 @@ gBanFuns$make_final_candidate_transposed_table <- function(data,
     return(tibble::as_tibble(data.frame(stringsAsFactors = FALSE)))
   }
 
+  max_candidates_per_block <- as.integer(max_candidates_per_block[1L])
+  if (is.na(max_candidates_per_block) || max_candidates_per_block < 1L) {
+    max_candidates_per_block <- 6L
+  }
+
   if (!name_col %in% colnames(data)) {
     name_col <- colnames(data)[1L]
   }
 
-  cols_drop <- intersect(c(name_col, id_col, "SMILES", "Canonical SMILES"), colnames(data))
-  cols_keep <- setdiff(colnames(data), cols_drop)
+  data <- data.frame(lapply(data, function(v) {
+    if (is.numeric(v)) {
+      return(as.character(signif(v, 3L)))
+    }
+    as.character(v)
+  }), stringsAsFactors = FALSE)
 
-  if (!length(cols_keep)) {
-    cols_keep <- setdiff(colnames(data), name_col)
+  preferred_cols <- c(
+    name_col,
+    id_col,
+    "Safety_decision",
+    "Hard_risk_n",
+    "Warning_risk_n",
+    "Major_risk_endpoints",
+    "MW",
+    "LogP",
+    "TPSA",
+    "Lipinski_pass"
+  )
+  preferred_cols <- unique(preferred_cols[preferred_cols %in% colnames(data)])
+
+  if (!length(preferred_cols)) {
+    preferred_cols <- setdiff(colnames(data), c("SMILES", "Canonical SMILES"))
   }
 
-  data_mat <- data[, cols_keep, drop = FALSE]
-  data_mat <- data.frame(lapply(data_mat, as.character), stringsAsFactors = FALSE)
-  tdata <- as.data.frame(t(data_mat), stringsAsFactors = FALSE)
-  colnames(tdata) <- paste0("C", seq_len(nrow(data)))
-  tdata <- tibble::as_tibble(tdata, rownames = "Index")
+  candidate_id <- paste0("C", seq_len(nrow(data)))
+  blocks <- split(seq_len(nrow(data)), ceiling(seq_len(nrow(data)) / max_candidates_per_block))
 
-  tdata
+  data_blocks <- lapply(seq_along(blocks), function(i) {
+    idx <- blocks[[i]]
+    data_one <- data[idx, preferred_cols, drop = FALSE]
+    data_one <- data.frame(lapply(data_one, function(v) {
+      v <- as.character(v)
+      v[is.na(v)] <- ""
+      v
+    }), stringsAsFactors = FALSE)
+
+    rows <- c("Candidate_ID", preferred_cols)
+    data_t <- data.frame(
+      Group = paste0("Group_", i),
+      Index = rows,
+      stringsAsFactors = FALSE
+    )
+
+    for (j in seq_len(max_candidates_per_block)) {
+      col_j <- paste0("Candidate_", j)
+      if (j <= length(idx)) {
+        value_j <- c(candidate_id[idx[j]], as.character(unlist(data_one[j, preferred_cols], use.names = FALSE)))
+      } else {
+        value_j <- rep("", length(rows))
+      }
+      data_t[[col_j]] <- value_j
+    }
+
+    data_t
+  })
+
+  data_out <- dplyr::bind_rows(data_blocks)
+  tibble::as_tibble(data_out)
 }
 
 gBanFuns$make_candidate_column_notes <- function(data,
@@ -3286,6 +4140,208 @@ gBanFuns$make_candidate_column_notes <- function(data,
   }
 
   paste(notes, collapse = "\n")
+}
+
+
+gBanFuns$get_custom_compound_metadata <- function(x)
+{
+  data_custom <- tryCatch(x$custom_input_compound_db, error = function(e) NULL)
+
+  if (is.null(data_custom)) {
+    data_custom <- tryCatch(x$custom_compound_db, error = function(e) NULL)
+  }
+
+  if (is.null(data_custom)) {
+    data_custom <- tryCatch(x@params$custom_compound_db, error = function(e) NULL)
+  }
+
+  if (is.null(data_custom)) {
+    return(NULL)
+  }
+
+  as.data.frame(data_custom, stringsAsFactors = FALSE)
+}
+
+gBanFuns$make_custom_compound_annotation <- function(x, smiles, compound = NULL)
+{
+  smiles <- as.character(smiles)
+  smiles <- smiles[!is.na(smiles) & smiles != ""]
+
+  if (is.null(compound)) {
+    compound <- paste0("Candidate_", seq_along(smiles))
+  }
+  compound <- as.character(compound)
+  if (length(compound) != length(smiles)) {
+    compound <- rep(NA_character_, length(smiles))
+  }
+
+  data_base <- data.frame(
+    SMILES = smiles,
+    Compound = compound,
+    stringsAsFactors = FALSE
+  )
+
+  data_custom <- gBanFuns$get_custom_compound_metadata(x)
+  if (is.null(data_custom) || !nrow(data_custom)) {
+    data_base$CID <- NA_character_
+    data_base$Synonym <- data_base$Compound
+    data_base$PubChem_strategy <- "no_custom_annotation"
+    data_base$PubChem_n_cid <- 0L
+    data_base$PubChem_all_cids <- NA_character_
+    data_base$MolecularFormula <- NA_character_
+    data_base$MolecularWeight_PubChem <- NA_real_
+    data_base$CanonicalSMILES_PubChem <- data_base$SMILES
+    data_base$IsomericSMILES_PubChem <- data_base$SMILES
+    data_base$InChIKey <- NA_character_
+    data_base$IUPACName <- NA_character_
+    data_base$Title <- data_base$Compound
+    data_base$Annotation_source <- NA_character_
+    data_base$Custom_annotation <- FALSE
+    data_base$PubChem_match <- FALSE
+    return(data_base)
+  }
+
+  find_col <- function(data, candidates) {
+    cols <- colnames(data)
+    cols_key <- tolower(gsub("[ ._-]+", "", cols))
+    cand_key <- tolower(gsub("[ ._-]+", "", candidates))
+    idx <- match(cand_key, cols_key)
+    idx <- idx[!is.na(idx)]
+    if (!length(idx)) {
+      return(NA_character_)
+    }
+    cols[idx[1L]]
+  }
+
+  pick_col <- function(data, col, default = NA_character_) {
+    if (is.na(col) || !col %in% colnames(data)) {
+      return(rep(default, nrow(data)))
+    }
+    as.character(data[[col]])
+  }
+
+  col_smiles <- find_col(data_custom, c("smiles", "SMILES", "canonical_smiles", "isomeric_smiles"))
+  if (is.na(col_smiles)) {
+    data_base$CID <- NA_character_
+    data_base$Synonym <- data_base$Compound
+    data_base$PubChem_strategy <- "custom_annotation_without_smiles"
+    data_base$PubChem_n_cid <- 0L
+    data_base$PubChem_all_cids <- NA_character_
+    data_base$MolecularFormula <- NA_character_
+    data_base$MolecularWeight_PubChem <- NA_real_
+    data_base$CanonicalSMILES_PubChem <- data_base$SMILES
+    data_base$IsomericSMILES_PubChem <- data_base$SMILES
+    data_base$InChIKey <- NA_character_
+    data_base$IUPACName <- NA_character_
+    data_base$Title <- data_base$Compound
+    data_base$Annotation_source <- NA_character_
+    data_base$Custom_annotation <- FALSE
+    data_base$PubChem_match <- FALSE
+    return(data_base)
+  }
+
+  col_name <- find_col(data_custom, c("compound_name", "Compound name", "Compound", "name", "Synonym"))
+  col_cid <- find_col(data_custom, c("pubchem_cid", "PubChem CID", "PubChem_CID", "CID", "cid"))
+  col_inchikey <- find_col(data_custom, c("inchikey", "InChIKey", "InChI Key"))
+  col_formula <- find_col(data_custom, c("molecular_formula", "MolecularFormula", "Formula"))
+  col_weight <- find_col(data_custom, c("molecular_weight", "MolecularWeight", "MW"))
+  col_herb <- find_col(data_custom, c("herb", "Herb", "query_herb", "herb_cn_name"))
+  col_source <- find_col(data_custom, c("evidence_sources", "Evidence sources", "source_list", "source"))
+  col_db_name <- find_col(data_custom, c("db_custom_name", "database", "source_database"))
+
+  data_std <- data.frame(
+    SMILES = trimws(as.character(data_custom[[col_smiles]])),
+    Synonym_custom = pick_col(data_custom, col_name),
+    CID_custom = pick_col(data_custom, col_cid),
+    InChIKey_custom = pick_col(data_custom, col_inchikey),
+    MolecularFormula_custom = pick_col(data_custom, col_formula),
+    MolecularWeight_custom = suppressWarnings(as.numeric(pick_col(data_custom, col_weight))),
+    herb = pick_col(data_custom, col_herb),
+    evidence_sources = pick_col(data_custom, col_source),
+    Annotation_source_custom = pick_col(data_custom, col_db_name, "Custom compound database"),
+    stringsAsFactors = FALSE
+  )
+  data_std <- data_std[!is.na(data_std$SMILES) & data_std$SMILES != "", , drop = FALSE]
+
+  if (!nrow(data_std)) {
+    data_base$CID <- NA_character_
+    data_base$Synonym <- data_base$Compound
+    data_base$PubChem_strategy <- "no_custom_annotation"
+    data_base$PubChem_n_cid <- 0L
+    data_base$PubChem_all_cids <- NA_character_
+    data_base$MolecularFormula <- NA_character_
+    data_base$MolecularWeight_PubChem <- NA_real_
+    data_base$CanonicalSMILES_PubChem <- data_base$SMILES
+    data_base$IsomericSMILES_PubChem <- data_base$SMILES
+    data_base$InChIKey <- NA_character_
+    data_base$IUPACName <- NA_character_
+    data_base$Title <- data_base$Compound
+    data_base$Annotation_source <- NA_character_
+    data_base$Custom_annotation <- FALSE
+    data_base$PubChem_match <- FALSE
+    return(data_base)
+  }
+
+  collapse_unique <- function(v) {
+    v <- as.character(v)
+    v <- unique(v[!is.na(v) & v != ""])
+    if (!length(v)) {
+      return(NA_character_)
+    }
+    paste(v, collapse = "; ")
+  }
+
+  data_split <- split(data_std, data_std$SMILES)
+  data_sum <- do.call(rbind, lapply(names(data_split), function(smiles_i) {
+    data_one <- data_split[[smiles_i]]
+    data.frame(
+      SMILES = smiles_i,
+      Synonym_custom = collapse_unique(data_one$Synonym_custom),
+      CID_custom = collapse_unique(gBanFuns$normalize_pubchem_cid(data_one$CID_custom)),
+      InChIKey_custom = collapse_unique(data_one$InChIKey_custom),
+      MolecularFormula_custom = collapse_unique(data_one$MolecularFormula_custom),
+      MolecularWeight_custom = suppressWarnings(as.numeric(collapse_unique(data_one$MolecularWeight_custom))),
+      herb = collapse_unique(data_one$herb),
+      evidence_sources = collapse_unique(data_one$evidence_sources),
+      Annotation_source_custom = collapse_unique(data_one$Annotation_source_custom),
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  data_out <- merge(data_base, data_sum, by = "SMILES", all.x = TRUE)
+  data_out$CID <- gBanFuns$normalize_pubchem_cid(data_out$CID_custom)
+  data_out$Synonym <- ifelse(
+    !is.na(data_out$Synonym_custom) & data_out$Synonym_custom != "",
+    data_out$Synonym_custom,
+    data_out$Compound
+  )
+  data_out$InChIKey <- data_out$InChIKey_custom
+  data_out$MolecularFormula <- data_out$MolecularFormula_custom
+  data_out$MolecularWeight_PubChem <- data_out$MolecularWeight_custom
+  data_out$CanonicalSMILES_PubChem <- data_out$SMILES
+  data_out$IsomericSMILES_PubChem <- data_out$SMILES
+  data_out$IUPACName <- NA_character_
+  data_out$Title <- data_out$Synonym
+  data_out$PubChem_match <- !is.na(data_out$CID) & data_out$CID != ""
+  data_out$PubChem_strategy <- ifelse(
+    data_out$PubChem_match,
+    "custom_database_cid",
+    "custom_database_annotation"
+  )
+  data_out$PubChem_n_cid <- ifelse(data_out$PubChem_match, 1L, 0L)
+  data_out$PubChem_all_cids <- data_out$CID
+  data_out$Annotation_source <- data_out$Annotation_source_custom
+  data_out$Custom_annotation <- !is.na(data_out$Synonym_custom) |
+    (!is.na(data_out$CID) & data_out$CID != "")
+
+  data_out$Synonym_custom <- NULL
+  data_out$CID_custom <- NULL
+  data_out$InChIKey_custom <- NULL
+  data_out$MolecularFormula_custom <- NULL
+  data_out$MolecularWeight_custom <- NULL
+  data_out$Annotation_source_custom <- NULL
+
+  data_out
 }
 
 gBanFuns$merge_final_candidate_tables <- function(data_pubchem,
@@ -3318,8 +4374,7 @@ gBanFuns$merge_final_candidate_tables <- function(data_pubchem,
 }
 
 gBanFuns$make_final_candidate_report_table <- function(data,
-  include_smiles = FALSE
-)
+  include_smiles = FALSE)
 {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
 
@@ -3333,24 +4388,39 @@ gBanFuns$make_final_candidate_report_table <- function(data,
     "Not matched"
   )
 
-  cols <- c(
+  cols_core <- c(
     "SMILES",
     "Synonym",
     "CID",
-    "PubChem_status",
+    "Safety_decision",
+    "Hard_risk_n",
+    "Warning_risk_n",
+    "Major_risk_endpoints"
+  )
+
+  cols_swiss <- c(
     "MW",
-    "HBA",
-    "HBD",
     "LogP",
     "TPSA",
     "Lipinski_pass",
     "Bioavailability_Score",
-    "Synthetic_Accessibility",
+    "Synthetic_Accessibility"
+  )
+
+  cols_fallback <- c(
     "Risk_count",
     "Max_risk"
   )
 
+  cols <- unique(c(cols_core, cols_swiss, cols_fallback))
   cols <- cols[cols %in% colnames(data)]
+
+  if ("PubChem_status" %in% colnames(data)) {
+    status_unique <- unique(as.character(data$PubChem_status[!is.na(data$PubChem_status)]))
+    if (length(status_unique) > 1L) {
+      cols <- unique(c(cols, "PubChem_status"))
+    }
+  }
 
   if (!isTRUE(include_smiles)) {
     cols <- setdiff(cols, "SMILES")

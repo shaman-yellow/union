@@ -38,6 +38,7 @@
     iobr = "job_iobr",
     gn = "job_genecard",
     mti = "job_metaInte",
+    scp = "job_scPathAct",
     mdiff = "job_metaboDiff"
   )
   if (any(duplicated(names(prefix)))) {
